@@ -423,10 +423,20 @@ function renderHistory() {
 
 const historyPanel    = document.getElementById("panel-history");
 const historyBackdrop = document.getElementById("panel-backdrop");
-const openHistory  = () => { historyPanel.classList.add("open"); historyBackdrop.classList.add("open"); };
-const closeHistory = () => { historyPanel.classList.remove("open"); historyBackdrop.classList.remove("open"); };
+const btnHistory      = document.getElementById("btn-history");
 
-document.getElementById("btn-history").addEventListener("click", openHistory);
+const openHistory = () => {
+  historyPanel.classList.add("open");
+  historyBackdrop.classList.add("open");
+  btnHistory.classList.add("active");
+};
+const closeHistory = () => {
+  historyPanel.classList.remove("open");
+  historyBackdrop.classList.remove("open");
+  btnHistory.classList.remove("active");
+};
+
+btnHistory.addEventListener("click", openHistory);
 document.getElementById("btn-history-close").addEventListener("click", closeHistory);
 historyBackdrop.addEventListener("click", closeHistory);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeHistory(); });

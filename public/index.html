@@ -17,12 +17,6 @@
       <span>Spooler</span>
     </div>
     <div class="header-actions">
-      <button id="btn-history" class="btn btn-secondary" title="Filament history">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>
-        </svg>
-        History
-      </button>
       <button id="btn-discover" class="btn btn-secondary" title="Auto-discover printers on network">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
@@ -37,6 +31,25 @@
       </button>
     </div>
   </header>
+
+  <div class="app-body">
+
+  <nav class="sidenav">
+    <button id="btn-history" class="sidenav-item" title="Filament history">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+      </svg>
+      <span>History</span>
+    </button>
+    <a href="http://localhost:8090/docs" target="_blank" class="sidenav-item" title="Reel – Filament inventory">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/>
+        <line x1="12" y1="2" x2="12" y2="8"/><line x1="12" y1="16" x2="12" y2="22"/>
+        <line x1="2" y1="12" x2="8" y2="12"/><line x1="16" y1="12" x2="22" y2="12"/>
+      </svg>
+      <span>Reel</span>
+    </a>
+  </nav>
 
   <main id="main">
     <div id="empty-state" class="empty-state">
@@ -94,6 +107,8 @@
     </div>
   </div>
   <div id="panel-backdrop" class="panel-backdrop"></div>
+
+  </div><!-- /.app-body -->
 
   <!-- Toast notifications -->
   <div id="toast-area"></div>
