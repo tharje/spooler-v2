@@ -832,16 +832,18 @@ document.getElementById("btn-spool-modal-save").addEventListener("click", () => 
   const editId   = document.getElementById("spool-edit-id").value;
   const totalG   = parseFloat(document.getElementById("spool-total-g").value) || 1000;
   const remainG  = parseFloat(document.getElementById("spool-remaining-g").value);
+  const material  = document.getElementById("spool-material").value;
+  const colorName = document.getElementById("spool-color-name").value.trim();
+  const nameRaw   = document.getElementById("spool-name").value.trim();
   const payload  = {
-    name:           document.getElementById("spool-name").value.trim(),
+    name:           nameRaw || [material, colorName].filter(Boolean).join(" ") || "Ny spole",
     brand:          document.getElementById("spool-brand").value.trim(),
-    material:       document.getElementById("spool-material").value,
-    color_name:     document.getElementById("spool-color-name").value.trim(),
+    material,
+    color_name:     colorName,
     color_hex:      document.getElementById("spool-color-hex").value,
     total_weight_g: totalG,
     remaining_g:    isNaN(remainG) ? totalG : remainG,
   };
-  if (!payload.name) { toast("Enter a name for the spool", true); return; }
   if (editId) {
     send({ action: "update_spool", spool_id: editId, ...payload });
   } else {
