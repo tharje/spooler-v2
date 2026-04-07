@@ -1,6 +1,200 @@
 /* Spooler – frontend app.js */
 "use strict";
 
+// ─── Elegoo Filament Catalog ───────────────────────────────────────────────────
+const ELEGOO_CATALOG = [
+  // PLA Standard
+  { material: "PLA",            color: "Black",          hex: "#1a1a1a" },
+  { material: "PLA",            color: "White",          hex: "#f0f0f0" },
+  { material: "PLA",            color: "Grey",           hex: "#888888" },
+  { material: "PLA",            color: "Space Grey",     hex: "#6b7280" },
+  { material: "PLA",            color: "Red",            hex: "#dc2626" },
+  { material: "PLA",            color: "Dark Blue",      hex: "#1e3a8a" },
+  { material: "PLA",            color: "Sky Blue",       hex: "#38bdf8" },
+  { material: "PLA",            color: "Yellow",         hex: "#eab308" },
+  { material: "PLA",            color: "Orange",         hex: "#f97316" },
+  { material: "PLA",            color: "Pink",           hex: "#f472b6" },
+  { material: "PLA",            color: "Purple",         hex: "#7c3aed" },
+  { material: "PLA",            color: "Neon Green",     hex: "#4ade80" },
+  { material: "PLA",            color: "Sea Green",      hex: "#059669" },
+  { material: "PLA",            color: "Translucent",    hex: "#cffafe" },
+  { material: "PLA",            color: "Brown",          hex: "#7c4f2a" },
+  { material: "PLA",            color: "Beige",          hex: "#d4b896" },
+  { material: "PLA",            color: "Copper",         hex: "#b87333" },
+  // PLA+
+  { material: "PLA+",           color: "Black",          hex: "#1a1a1a" },
+  { material: "PLA+",           color: "White",          hex: "#f0f0f0" },
+  { material: "PLA+",           color: "Grey",           hex: "#888888" },
+  { material: "PLA+",           color: "Space Grey",     hex: "#6b7280" },
+  { material: "PLA+",           color: "Red",            hex: "#dc2626" },
+  { material: "PLA+",           color: "Dark Blue",      hex: "#1e3a8a" },
+  { material: "PLA+",           color: "Sky Blue",       hex: "#38bdf8" },
+  { material: "PLA+",           color: "Yellow",         hex: "#eab308" },
+  { material: "PLA+",           color: "Orange",         hex: "#f97316" },
+  { material: "PLA+",           color: "Neon Green",     hex: "#4ade80" },
+  { material: "PLA+",           color: "Sea Green",      hex: "#059669" },
+  { material: "PLA+",           color: "Purple",         hex: "#7c3aed" },
+  { material: "PLA+",           color: "Translucent Pink", hex: "#f9a8d4" },
+  { material: "PLA+",           color: "Brown",          hex: "#7c4f2a" },
+  { material: "PLA+",           color: "Beige",          hex: "#d4b896" },
+  // PLA Rapid
+  { material: "PLA Rapid",      color: "Black",          hex: "#1a1a1a" },
+  { material: "PLA Rapid",      color: "White",          hex: "#f0f0f0" },
+  { material: "PLA Rapid",      color: "Grey",           hex: "#888888" },
+  { material: "PLA Rapid",      color: "Blue",           hex: "#2563eb" },
+  { material: "PLA Rapid",      color: "Green",          hex: "#16a34a" },
+  { material: "PLA Rapid",      color: "Red",            hex: "#dc2626" },
+  { material: "PLA Rapid",      color: "Orange",         hex: "#f97316" },
+  { material: "PLA Rapid",      color: "Yellow",         hex: "#eab308" },
+  { material: "PLA Rapid",      color: "Silver",         hex: "#c0c0c0" },
+  { material: "PLA Rapid",      color: "Brown",          hex: "#7c4f2a" },
+  { material: "PLA Rapid",      color: "Beige",          hex: "#d4b896" },
+  // PLA Silk
+  { material: "PLA Silk",       color: "Gold",           hex: "#d4af37" },
+  { material: "PLA Silk",       color: "White",          hex: "#f5f0e8" },
+  { material: "PLA Silk",       color: "Coral Pink",     hex: "#f4826a" },
+  { material: "PLA Silk",       color: "Mint Green",     hex: "#6ee7b7" },
+  { material: "PLA Silk",       color: "Holly Green",    hex: "#166534" },
+  { material: "PLA Silk",       color: "Blue Magenta",   hex: "#7c3aed" },
+  { material: "PLA Silk",       color: "Green Red",      hex: "#16a34a" },
+  { material: "PLA Silk",       color: "Black Red",      hex: "#7f1d1d" },
+  { material: "PLA Silk",       color: "Black Purple",   hex: "#3b0764" },
+  { material: "PLA Silk",       color: "Blue Green",     hex: "#0e7490" },
+  { material: "PLA Silk",       color: "Blue Purple Black", hex: "#4c1d95" },
+  { material: "PLA Silk",       color: "Blue Green Orange", hex: "#0891b2" },
+  { material: "PLA Silk",       color: "Yellow Purple",  hex: "#a16207" },
+  // PLA Matte
+  { material: "PLA Matte",      color: "Black",          hex: "#1c1c1c" },
+  { material: "PLA Matte",      color: "White",          hex: "#f0ede8" },
+  { material: "PLA Matte",      color: "Navy Blue",      hex: "#1e3a5f" },
+  { material: "PLA Matte",      color: "Ruby Red",       hex: "#9b111e" },
+  { material: "PLA Matte",      color: "Teal Green",     hex: "#0d9488" },
+  { material: "PLA Matte",      color: "Sunshine Yellow",hex: "#fbbf24" },
+  { material: "PLA Matte",      color: "Slate Grey",     hex: "#708090" },
+  { material: "PLA Matte",      color: "Lavender Purple",hex: "#a78bfa" },
+  { material: "PLA Matte",      color: "Sakura Pink",    hex: "#f4a7b9" },
+  { material: "PLA Matte",      color: "Ice Blue",       hex: "#bae6fd" },
+  { material: "PLA Matte",      color: "Beige",          hex: "#d4b896" },
+  { material: "PLA Matte",      color: "Mint Green",     hex: "#6ee7b7" },
+  { material: "PLA Matte",      color: "Earth Brown",    hex: "#8b5e3c" },
+  { material: "PLA Matte",      color: "Orange",         hex: "#f97316" },
+  // PLA Glow
+  { material: "PLA Glow",       color: "Blue",           hex: "#3b82f6" },
+  { material: "PLA Glow",       color: "Green",          hex: "#22c55e" },
+  { material: "PLA Glow",       color: "Yellow",         hex: "#fde047" },
+  { material: "PLA Glow",       color: "Orange",         hex: "#fb923c" },
+  { material: "PLA Glow",       color: "Pink",           hex: "#f472b6" },
+  // PLA Sparkle
+  { material: "PLA Sparkle",    color: "Black",          hex: "#1a1a1a" },
+  { material: "PLA Sparkle",    color: "Gold",           hex: "#d4af37" },
+  { material: "PLA Sparkle",    color: "Green",          hex: "#16a34a" },
+  { material: "PLA Sparkle",    color: "Red",            hex: "#dc2626" },
+  { material: "PLA Sparkle",    color: "Dark Grey",      hex: "#4b5563" },
+  { material: "PLA Sparkle",    color: "Turquoise",      hex: "#06b6d4" },
+  { material: "PLA Sparkle",    color: "Purplish Grey",  hex: "#7c7d9d" },
+  // PLA Galaxy
+  { material: "PLA Galaxy",     color: "Black",          hex: "#0f0f1a" },
+  { material: "PLA Galaxy",     color: "Purple",         hex: "#4c1d95" },
+  { material: "PLA Galaxy",     color: "Peacock Blue",   hex: "#005f73" },
+  // PLA Marble
+  { material: "PLA Marble",     color: "White",          hex: "#e8e8e8" },
+  { material: "PLA Marble",     color: "Brick Red",      hex: "#8b3a3a" },
+  { material: "PLA Marble",     color: "Cement Grey",    hex: "#a3a3a3" },
+  // PLA Wood
+  { material: "PLA Wood",       color: "Light Brown",    hex: "#c19a6b" },
+  { material: "PLA Wood",       color: "Walnut",         hex: "#5c3317" },
+  { material: "PLA Wood",       color: "Rosewood",       hex: "#65000b" },
+  { material: "PLA Wood",       color: "Tan Birch",      hex: "#deb887" },
+  { material: "PLA Wood",       color: "Medium Brown",   hex: "#8b6340" },
+  // PLA-CF
+  { material: "PLA-CF",         color: "Black",          hex: "#0d0d0d" },
+  // PETG
+  { material: "PETG",           color: "Black",          hex: "#1a1a1a" },
+  { material: "PETG",           color: "White",          hex: "#f0f0f0" },
+  { material: "PETG",           color: "Blue",           hex: "#2563eb" },
+  { material: "PETG",           color: "Red",            hex: "#dc2626" },
+  { material: "PETG",           color: "Green",          hex: "#16a34a" },
+  { material: "PETG",           color: "Yellow",         hex: "#eab308" },
+  { material: "PETG",           color: "Grey",           hex: "#888888" },
+  { material: "PETG",           color: "Orange",         hex: "#f97316" },
+  { material: "PETG",           color: "Brown",          hex: "#7c4f2a" },
+  { material: "PETG",           color: "Beige",          hex: "#d4b896" },
+  { material: "PETG",           color: "Space Grey",     hex: "#6b7280" },
+  // PETG Pro
+  { material: "PETG Pro",       color: "Black",          hex: "#1a1a1a" },
+  { material: "PETG Pro",       color: "White",          hex: "#f0f0f0" },
+  { material: "PETG Pro",       color: "Blue",           hex: "#2563eb" },
+  { material: "PETG Pro",       color: "Grey",           hex: "#888888" },
+  { material: "PETG Pro",       color: "Silver",         hex: "#c0c0c0" },
+  { material: "PETG Pro",       color: "Pink",           hex: "#f472b6" },
+  { material: "PETG Pro",       color: "Red",            hex: "#dc2626" },
+  { material: "PETG Pro",       color: "Olive Green",    hex: "#4d7c0f" },
+  { material: "PETG Pro",       color: "Light Blue",     hex: "#93c5fd" },
+  { material: "PETG Pro",       color: "Green",          hex: "#16a34a" },
+  { material: "PETG Pro",       color: "Yellow",         hex: "#eab308" },
+  { material: "PETG Pro",       color: "Burgundy Red",   hex: "#7f1d1d" },
+  { material: "PETG Pro",       color: "Purple",         hex: "#7c3aed" },
+  // PETG Translucent
+  { material: "PETG Translucent", color: "Blue",         hex: "#93c5fd" },
+  { material: "PETG Translucent", color: "Green",        hex: "#86efac" },
+  { material: "PETG Translucent", color: "Orange",       hex: "#fdba74" },
+  { material: "PETG Translucent", color: "Purple",       hex: "#c4b5fd" },
+  { material: "PETG Translucent", color: "Grey",         hex: "#d1d5db" },
+  { material: "PETG Translucent", color: "Olive Green",  hex: "#bef264" },
+  { material: "PETG Translucent", color: "Amber",        hex: "#f59e0b" },
+  { material: "PETG Translucent", color: "Pink",         hex: "#f9a8d4" },
+  // PETG-CF
+  { material: "PETG-CF",        color: "Black",          hex: "#0d0d0d" },
+  { material: "PETG-CF",        color: "Grey",           hex: "#555555" },
+  { material: "PETG-CF",        color: "Green",          hex: "#14532d" },
+  { material: "PETG-CF",        color: "Red",            hex: "#7f1d1d" },
+  { material: "PETG-CF",        color: "Purple",         hex: "#3b0764" },
+  { material: "PETG-CF",        color: "Blue",           hex: "#1e3a8a" },
+  // PETG-GF
+  { material: "PETG-GF",        color: "Black",          hex: "#1a1a1a" },
+  { material: "PETG-GF",        color: "Grey",           hex: "#808080" },
+  { material: "PETG-GF",        color: "White",          hex: "#f0f0f0" },
+  // ABS
+  { material: "ABS",            color: "Black",          hex: "#1a1a1a" },
+  { material: "ABS",            color: "White",          hex: "#f0f0f0" },
+  { material: "ABS",            color: "Red",            hex: "#dc2626" },
+  { material: "ABS",            color: "Grey",           hex: "#888888" },
+  { material: "ABS",            color: "Blue",           hex: "#2563eb" },
+  { material: "ABS",            color: "Orange",         hex: "#f97316" },
+  { material: "ABS",            color: "Yellow",         hex: "#eab308" },
+  { material: "ABS",            color: "Green",          hex: "#16a34a" },
+  { material: "ABS",            color: "Purple",         hex: "#7c3aed" },
+  { material: "ABS",            color: "Pink",           hex: "#f472b6" },
+  { material: "ABS",            color: "Cyan",           hex: "#06b6d4" },
+  { material: "ABS",            color: "Olive Green",    hex: "#4d7c0f" },
+  { material: "ABS",            color: "Sky Blue",       hex: "#38bdf8" },
+  { material: "ABS",            color: "Navy Blue",      hex: "#1e3a5f" },
+  // ASA
+  { material: "ASA",            color: "Black",          hex: "#1a1a1a" },
+  { material: "ASA",            color: "White",          hex: "#f0f0f0" },
+  { material: "ASA",            color: "Blue",           hex: "#2563eb" },
+  { material: "ASA",            color: "Green",          hex: "#16a34a" },
+  { material: "ASA",            color: "Grey",           hex: "#888888" },
+  { material: "ASA",            color: "Red",            hex: "#dc2626" },
+  // TPU
+  { material: "TPU 95A",        color: "Black",          hex: "#1a1a1a" },
+  { material: "TPU 95A",        color: "White",          hex: "#f0f0f0" },
+  { material: "TPU 95A",        color: "Translucent",    hex: "#e0f2fe" },
+  { material: "TPU 95A",        color: "Red",            hex: "#dc2626" },
+  { material: "TPU 95A",        color: "Blue",           hex: "#2563eb" },
+  { material: "TPU 95A",        color: "Green",          hex: "#16a34a" },
+  { material: "TPU 95A",        color: "Grey",           hex: "#888888" },
+  // PC
+  { material: "PC",             color: "Black",          hex: "#1a1a1a" },
+  { material: "PC",             color: "White",          hex: "#f0f0f0" },
+  { material: "PC",             color: "Transparent",    hex: "#e0f2fe" },
+  // PC-FR
+  { material: "PC-FR",          color: "Black",          hex: "#1a1a1a" },
+  { material: "PC-FR",          color: "White",          hex: "#f0f0f0" },
+  // PAHT-CF
+  { material: "PAHT-CF",        color: "Black",          hex: "#0d0d0d" },
+];
+
 const WS_URL = `ws://${location.hostname}:8765`;
 const RECONNECT_DELAY = 3000;
 
@@ -549,7 +743,54 @@ function renderSpoolPanel() {
 // ─── Add / Edit Spool Modal ────────────────────────────────────────────────────
 const spoolModal = document.getElementById("modal-spool");
 const openSpoolModal  = () => spoolModal.classList.add("open");
-const closeSpoolModal = () => spoolModal.classList.remove("open");
+
+// ─── Catalog autocomplete ──────────────────────────────────────────────────────
+const catalogSearch   = document.getElementById("catalog-search");
+const catalogDropdown = document.getElementById("catalog-dropdown");
+
+catalogSearch.addEventListener("input", () => {
+  const q = catalogSearch.value.trim().toLowerCase();
+  catalogDropdown.innerHTML = "";
+  if (!q) { catalogDropdown.classList.remove("open"); return; }
+
+  const matches = ELEGOO_CATALOG.filter(e =>
+    (e.material + " " + e.color).toLowerCase().includes(q)
+  ).slice(0, 12);
+
+  if (!matches.length) { catalogDropdown.classList.remove("open"); return; }
+
+  matches.forEach(e => {
+    const item = document.createElement("div");
+    item.className = "catalog-item";
+    item.innerHTML = `
+      <span class="catalog-swatch" style="background:${escAttr(e.hex)}"></span>
+      <span class="catalog-label"><strong>${escHtml(e.material)}</strong> ${escHtml(e.color)}</span>
+    `;
+    item.addEventListener("mousedown", (ev) => {
+      ev.preventDefault();
+      fillFromCatalog(e);
+    });
+    catalogDropdown.appendChild(item);
+  });
+  catalogDropdown.classList.add("open");
+});
+
+catalogSearch.addEventListener("blur", () => {
+  setTimeout(() => catalogDropdown.classList.remove("open"), 150);
+});
+
+function fillFromCatalog(entry) {
+  document.getElementById("spool-name").value      = `Elegoo ${entry.material} ${entry.color}`;
+  document.getElementById("spool-brand").value     = "Elegoo";
+  document.getElementById("spool-color-name").value = entry.color;
+  document.getElementById("spool-color-hex").value = entry.hex;
+  // Set material select, fall back to closest match
+  const sel = document.getElementById("spool-material");
+  const opt = [...sel.options].find(o => o.value === entry.material);
+  if (opt) sel.value = entry.material;
+  catalogSearch.value = "";
+  catalogDropdown.classList.remove("open");
+}
 
 document.getElementById("btn-spool-new").addEventListener("click", () => {
   document.getElementById("modal-spool-title").textContent = "Add Spool";
@@ -579,6 +820,11 @@ function openEditSpool(id) {
   openSpoolModal();
 }
 
+const closeSpoolModal = () => {
+  spoolModal.classList.remove("open");
+  catalogSearch.value = "";
+  catalogDropdown.classList.remove("open");
+};
 document.getElementById("btn-spool-modal-cancel").addEventListener("click", closeSpoolModal);
 spoolModal.addEventListener("click", (e) => { if (e.target === spoolModal) closeSpoolModal(); });
 
