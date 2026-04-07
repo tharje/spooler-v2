@@ -464,18 +464,36 @@ function renderHistory() {
 
 const historyPanel    = document.getElementById("panel-history");
 const historyBackdrop = document.getElementById("panel-backdrop");
-const openHistory  = () => { historyPanel.classList.add("open"); historyBackdrop.classList.add("open"); };
-const closeHistory = () => { historyPanel.classList.remove("open"); historyBackdrop.classList.remove("open"); };
+const openHistory  = () => {
+  closeSpools();
+  historyPanel.classList.add("open");
+  historyBackdrop.classList.add("open");
+  document.getElementById("btn-history").classList.add("active");
+};
+const closeHistory = () => {
+  historyPanel.classList.remove("open");
+  historyBackdrop.classList.remove("open");
+  document.getElementById("btn-history").classList.remove("active");
+};
 
 document.getElementById("btn-history").addEventListener("click", openHistory);
 document.getElementById("btn-history-close").addEventListener("click", closeHistory);
-historyBackdrop.addEventListener("click", closeHistory);
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeHistory(); });
+historyBackdrop.addEventListener("click", () => { closeHistory(); closeSpools(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeHistory(); closeSpools(); } });
 
 // ─── Spools panel ─────────────────────────────────────────────────────────────
 const spoolsPanel    = document.getElementById("panel-spools");
-const openSpools  = () => { spoolsPanel.classList.add("open"); historyBackdrop.classList.add("open"); };
-const closeSpools = () => { spoolsPanel.classList.remove("open"); historyBackdrop.classList.remove("open"); };
+const openSpools  = () => {
+  closeHistory();
+  spoolsPanel.classList.add("open");
+  historyBackdrop.classList.add("open");
+  document.getElementById("btn-spools").classList.add("active");
+};
+const closeSpools = () => {
+  spoolsPanel.classList.remove("open");
+  historyBackdrop.classList.remove("open");
+  document.getElementById("btn-spools").classList.remove("active");
+};
 
 document.getElementById("btn-spools").addEventListener("click", openSpools);
 document.getElementById("btn-spools-close").addEventListener("click", closeSpools);
