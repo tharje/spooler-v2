@@ -9,9 +9,10 @@ Local web GUI for **Elegoo Centauri Carbon** FDM 3D printers. Control and monito
 - **Temperature monitoring** – nozzle, bed and chamber with live values
 - **Print progress** – layer count, percentage, elapsed and remaining time
 - **Filament tracking** – live mm/g per print and cumulative history log
-- **Controls** – pause, resume, stop, light on/off
+- **Controls** – pause, resume, stop, light toggle
 - **Auto-discovery** – UDP broadcast finds printers on the local network
 - **Persistence** – printers and print history saved between restarts
+- **Sidebar navigation** – History panel and link to [Reel](#reel) filament inventory
 
 ## Requirements
 
@@ -24,11 +25,11 @@ Local web GUI for **Elegoo Centauri Carbon** FDM 3D printers. Control and monito
 git clone https://github.com/tharje/spooler-v2.git
 cd spooler-v2
 ./setup.sh
+. venv/bin/activate && python3 server.py
 ```
 
-Then open **http://localhost:8080** in your browser.
-
-To access from other devices on your network use the machine's IP, e.g. `http://192.168.1.x:8080`.
+Open **http://localhost:8080** in your browser.  
+Access from other devices on your network: `http://<machine-ip>:8080`
 
 ## Adding printers
 
@@ -39,13 +40,13 @@ Printer configs are saved in `printers.json` and reconnected automatically on ne
 
 ## Filament history
 
-All completed and cancelled prints are logged to `history.json` with:
-- Filename
-- Filament used (mm and grams, calculated for 1.75 mm PLA at 1.24 g/cm³)
-- Print time
-- Completion status
+All completed and cancelled prints are logged to `history.json` with filename, filament used (mm and grams), print time, and completion status. Open the **History** panel from the sidebar.
 
-Open the **History** panel from the top bar to view totals and per-print breakdown.
+Filament weight is calculated for 1.75 mm filament at 1.24 g/cm³ (PLA default).
+
+## Reel
+
+Spooler integrates with **[Reel](https://github.com/tharje/reel)** – a companion service for managing your filament spool inventory. Start Reel on the same machine and access it via the sidebar button.
 
 ## Protocol
 
