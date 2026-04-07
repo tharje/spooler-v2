@@ -267,6 +267,9 @@ class PrinterConnection:
             url = payload.get("VideoUrl") or payload.get("Url")
             if url:
                 self.camera_url = url if url.startswith("http") else f"http://{url}"
+        elif cmd == CMD_LIGHT:
+            print(f"[Printer {self.name}] Light response: {payload}")
+            await self.send_cmd(CMD_STATUS, {})
 
         await self._broadcast_state()
 
@@ -310,7 +313,8 @@ class PrinterConnection:
             return False
         msg = make_msg(cmd, data, self.mainboard_id)
         try:
-            await self.ws.send(json.dumps(msg))
+            raw = json.dumps(msg)
+            await self.ws.send(raw)
             return True
         except Exception as e:
             print(f"[Printer {self.name}] Send error: {e}")
@@ -434,8 +438,8 @@ async def handle_browser_message(ws, raw):
         "resume": (CMD_RESUME, {}),
         "stop":   (CMD_STOP,   {}),
         "status": (CMD_STATUS, {}),
-        "light_on":  (CMD_LIGHT, {"SecondLight": 1}),
-        "light_off": (CMD_LIGHT, {"SecondLight": 0}),
+        "light_on":  (CMD_LIGHT, {"LightStatus": {"SecondLight": True,  "RgbLight": [0, 0, 0]}}),
+        "light_off": (CMD_LIGHT, {"LightStatus": {"SecondLight": False, "RgbLight": [0, 0, 0]}}),
         "camera_on": (CMD_CAMERA, {"Enable": True}),
     }
 
@@ -455,6 +459,9 @@ async def handle_browser_message(ws, raw):
         ok = await printer.send_cmd(cmd, data)
         if not ok:
             await ws.send(json.dumps({"type": "error", "message": "Printer not connected"}))
+        elif action in ("light_on", "light_off"):
+            await asyncio.sleep(0.5)
+            await printer.send_cmd(CMD_STATUS, {})
 
 
 # ─── HTTP File Upload Proxy ────────────────────────────────────────────────────

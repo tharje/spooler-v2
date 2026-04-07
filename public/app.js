@@ -192,6 +192,7 @@ function renderPrinter(printer) {
   const remaining = printer.status?.PrintInfo?.RemainTime ?? 0;
   const filamentMm = printer.filament_mm ?? 0;
   const filamentG  = printer.filament_g  ?? 0;
+  const lightOn    = printer.status?.LightStatus?.SecondLight === 1;
 
   const cameraUrl = printer.camera_url;
 
@@ -291,24 +292,13 @@ function renderPrinter(printer) {
         </button>
       ` : ""}
       <div class="controls-spacer"></div>
-      <button class="btn btn-secondary btn-sm" onclick="printerAction('${escAttr(printer.id)}','light_on')" title="Light on" ${!connected ? "disabled" : ""}>
+      <button class="btn btn-sm ${lightOn ? "btn-primary" : "btn-secondary"}"
+              onclick="printerAction('${escAttr(printer.id)}','${lightOn ? "light_off" : "light_on"}')"
+              title=""
+              ${!connected ? "disabled" : ""}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="5"/>
           <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-        </svg>
-      </button>
-      <button class="btn btn-secondary btn-sm" onclick="printerAction('${escAttr(printer.id)}','light_off')" title="Light off" ${!connected ? "disabled" : ""}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="2" y1="2" x2="22" y2="22"/>
-          <path d="M9 9a3 3 0 0 0 5.12 2.12M10.72 5.08A6 6 0 0 1 18.99 12c0 1.72-.7 3.29-1.82 4.44"/>
-          <path d="M6.71 6.71A6 6 0 0 0 5 12c0 2.74 1.85 5.06 4.36 5.77"/>
-          <path d="M2 15h2M2 9h2M12 21v-2"/>
-        </svg>
-      </button>
-      <button class="btn btn-secondary btn-sm" onclick="printerAction('${escAttr(printer.id)}','camera_on')" title="Refresh camera" ${!connected ? "disabled" : ""}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M23 7l-7 5 7 5V7z"/>
-          <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
         </svg>
       </button>
     </div>
