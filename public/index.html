@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Spooler – Elegoo Centauri Carbon</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+        <path d="M2 17l10 5 10-5"/>
+        <path d="M2 12l10 5 10-5"/>
+      </svg>
+      <span>Spooler</span>
+    </div>
+    <div class="header-actions">
+      <button id="btn-history" class="btn btn-secondary" title="Filament history">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>
+        </svg>
+        History
+      </button>
+      <button id="btn-discover" class="btn btn-secondary" title="Auto-discover printers on network">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        Discover
+      </button>
+      <button id="btn-add" class="btn btn-primary" title="Add printer manually">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        Add Printer
+      </button>
+    </div>
+  </header>
+
+  <main id="main">
+    <div id="empty-state" class="empty-state">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+        <rect x="2" y="3" width="20" height="14" rx="2"/>
+        <path d="M8 21h8M12 17v4"/>
+        <path d="M7 8h2M7 11h5"/>
+      </svg>
+      <h2>No printers connected</h2>
+      <p>Click <strong>Discover</strong> to find printers on your network,<br/>or <strong>Add Printer</strong> to enter an IP address manually.</p>
+    </div>
+    <div id="printer-grid" class="printer-grid" style="display:none"></div>
+  </main>
+
+  <!-- Add Printer Modal -->
+  <div id="modal-add" class="modal">
+    <div class="modal-box">
+      <h3>Add Printer</h3>
+      <label>
+        Printer Name
+        <input id="input-name" type="text" placeholder="Centauri Carbon 1" />
+      </label>
+      <label>
+        IP Address
+        <input id="input-ip" type="text" placeholder="192.168.1.100" />
+      </label>
+      <div class="modal-actions">
+        <button id="btn-modal-cancel" class="btn btn-secondary">Cancel</button>
+        <button id="btn-modal-confirm" class="btn btn-primary">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- History panel -->
+  <div id="panel-history" class="side-panel">
+    <div class="side-panel-header">
+      <h3>Filament History</h3>
+      <div class="history-totals" id="history-totals"></div>
+      <button id="btn-history-close" class="btn btn-secondary btn-sm">Close</button>
+    </div>
+    <div class="side-panel-body">
+      <table class="history-table" id="history-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Printer</th>
+            <th>File</th>
+            <th>Filament</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody id="history-tbody"></tbody>
+      </table>
+      <p id="history-empty" style="display:none;text-align:center;color:var(--text-muted);padding:40px">No prints logged yet.</p>
+    </div>
+  </div>
+  <div id="panel-backdrop" class="panel-backdrop"></div>
+
+  <!-- Toast notifications -->
+  <div id="toast-area"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
