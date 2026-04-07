@@ -130,14 +130,13 @@
     <div class="modal-box modal-box-wide">
       <h3 id="modal-spool-title">Add Spool</h3>
       <input type="hidden" id="spool-edit-id" />
-      <div class="catalog-search-wrap">
-        <label>
-          Search Elegoo catalog
-          <input id="catalog-search" type="text" placeholder="e.g. PLA Silk Gold, PETG Black…" autocomplete="off" />
-        </label>
-        <div id="catalog-dropdown" class="catalog-dropdown"></div>
-      </div>
-      <div class="modal-divider"><span>or fill in manually</span></div>
+      <button id="btn-browse-catalog" class="btn btn-secondary" type="button" style="width:100%">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        Velg fra Elegoo-katalog
+      </button>
+      <div class="modal-divider"><span>eller fyll inn manuelt</span></div>
       <label>
         Name
         <input id="spool-name" type="text" placeholder="Auto-generates from material + color" />
@@ -208,6 +207,18 @@
       <div class="modal-actions">
         <button id="btn-spool-modal-cancel" class="btn btn-secondary">Cancel</button>
         <button id="btn-spool-modal-save" class="btn btn-primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Elegoo Catalog Picker Modal -->
+  <div id="modal-catalog" class="modal">
+    <div class="modal-box modal-box-wide">
+      <h3>Elegoo-katalog</h3>
+      <input id="catalog-filter" type="text" placeholder="Søk materiale eller farge…" autocomplete="off" style="margin-bottom:4px" />
+      <div id="catalog-list" class="catalog-list"></div>
+      <div class="modal-actions">
+        <button id="btn-catalog-close" class="btn btn-secondary">Avbryt</button>
       </div>
     </div>
   </div>

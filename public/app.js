@@ -744,52 +744,60 @@ function renderSpoolPanel() {
 const spoolModal = document.getElementById("modal-spool");
 const openSpoolModal  = () => spoolModal.classList.add("open");
 
-// ─── Catalog autocomplete ──────────────────────────────────────────────────────
-const catalogSearch   = document.getElementById("catalog-search");
-const catalogDropdown = document.getElementById("catalog-dropdown");
+// ─── Elegoo Catalog Picker ─────────────────────────────────────────────────────
+const catalogModal  = document.getElementById("modal-catalog");
+const catalogFilter = document.getElementById("catalog-filter");
+const catalogList   = document.getElementById("catalog-list");
 
-catalogSearch.addEventListener("input", () => {
-  const q = catalogSearch.value.trim().toLowerCase();
-  catalogDropdown.innerHTML = "";
-  if (!q) { catalogDropdown.classList.remove("open"); return; }
+function renderCatalogList(q) {
+  const needle = (q || "").trim().toLowerCase();
+  const items  = needle
+    ? ELEGOO_CATALOG.filter(e => (e.material + " " + e.color).toLowerCase().includes(needle))
+    : ELEGOO_CATALOG;
 
-  const matches = ELEGOO_CATALOG.filter(e =>
-    (e.material + " " + e.color).toLowerCase().includes(q)
-  ).slice(0, 12);
-
-  if (!matches.length) { catalogDropdown.classList.remove("open"); return; }
-
-  matches.forEach(e => {
-    const item = document.createElement("div");
-    item.className = "catalog-item";
-    item.innerHTML = `
-      <span class="catalog-swatch" style="background:${escAttr(e.hex)}"></span>
-      <span class="catalog-label"><strong>${escHtml(e.material)}</strong> ${escHtml(e.color)}</span>
+  catalogList.innerHTML = "";
+  items.forEach(e => {
+    const row = document.createElement("div");
+    row.className = "picker-row";
+    row.innerHTML = `
+      <span class="spool-dot" style="background:${escAttr(e.hex)}"></span>
+      <div class="picker-row-body">
+        <div class="picker-row-name">${escHtml(e.material)} ${escHtml(e.color)}</div>
+      </div>
     `;
-    item.addEventListener("mousedown", (ev) => {
-      ev.preventDefault();
+    row.addEventListener("click", () => {
       fillFromCatalog(e);
+      catalogModal.classList.remove("open");
+      catalogFilter.value = "";
     });
-    catalogDropdown.appendChild(item);
+    catalogList.appendChild(row);
   });
-  catalogDropdown.classList.add("open");
+}
+
+catalogFilter.addEventListener("input", () => renderCatalogList(catalogFilter.value));
+
+document.getElementById("btn-browse-catalog").addEventListener("click", () => {
+  catalogFilter.value = "";
+  renderCatalogList("");
+  catalogModal.classList.add("open");
+  setTimeout(() => catalogFilter.focus(), 50);
 });
 
-catalogSearch.addEventListener("blur", () => {
-  setTimeout(() => catalogDropdown.classList.remove("open"), 150);
+document.getElementById("btn-catalog-close").addEventListener("click", () => {
+  catalogModal.classList.remove("open");
+});
+catalogModal.addEventListener("click", (e) => {
+  if (e.target === catalogModal) catalogModal.classList.remove("open");
 });
 
 function fillFromCatalog(entry) {
-  document.getElementById("spool-name").value      = `Elegoo ${entry.material} ${entry.color}`;
-  document.getElementById("spool-brand").value     = "Elegoo";
+  document.getElementById("spool-name").value       = `Elegoo ${entry.material} ${entry.color}`;
+  document.getElementById("spool-brand").value      = "Elegoo";
   document.getElementById("spool-color-name").value = entry.color;
-  document.getElementById("spool-color-hex").value = entry.hex;
-  // Set material select, fall back to closest match
+  document.getElementById("spool-color-hex").value  = entry.hex;
   const sel = document.getElementById("spool-material");
   const opt = [...sel.options].find(o => o.value === entry.material);
   if (opt) sel.value = entry.material;
-  catalogSearch.value = "";
-  catalogDropdown.classList.remove("open");
 }
 
 document.getElementById("btn-spool-new").addEventListener("click", () => {
@@ -820,11 +828,7 @@ function openEditSpool(id) {
   openSpoolModal();
 }
 
-const closeSpoolModal = () => {
-  spoolModal.classList.remove("open");
-  catalogSearch.value = "";
-  catalogDropdown.classList.remove("open");
-};
+const closeSpoolModal = () => spoolModal.classList.remove("open");
 document.getElementById("btn-spool-modal-cancel").addEventListener("click", closeSpoolModal);
 spoolModal.addEventListener("click", (e) => { if (e.target === spoolModal) closeSpoolModal(); });
 
