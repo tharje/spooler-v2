@@ -7,6 +7,8 @@ const RECONNECT_DELAY = 3000;
 let ws = null;
 let printers = {}; // id → printer data
 let history  = []; // print history log
+let spools   = {}; // id → spool data
+let spoolPickerPrinterId = null;
 
 // ─── WebSocket connection ──────────────────────────────────────────────────────
 function connect() {
@@ -15,6 +17,7 @@ function connect() {
   ws.onopen = () => {
     console.log("[WS] Connected");
     send({ action: "list_printers" });
+    send({ action: "list_spools" });
     loadHistory();
   };
 
@@ -64,6 +67,22 @@ function handleMessage(msg) {
       history.unshift(msg.entry);
       renderHistory();
       toast(`Print logged: ${msg.entry.filament_g}g used`);
+      break;
+    case "spools_list":
+      spools = {};
+      msg.spools.forEach(s => spools[s.id] = s);
+      renderSpoolPanel();
+      Object.values(printers).forEach(renderPrinter);
+      break;
+    case "spool_update":
+      spools[msg.spool.id] = msg.spool;
+      renderSpoolPanel();
+      Object.values(printers).forEach(renderPrinter);
+      break;
+    case "spool_removed":
+      delete spools[msg.spool_id];
+      renderSpoolPanel();
+      Object.values(printers).forEach(renderPrinter);
       break;
   }
 }
@@ -181,6 +200,8 @@ function renderPrinter(printer) {
   const paused   = isPaused(printer);
   const connected = printer.connected;
 
+  const assignedSpool = Object.values(spools).find(s => s.assigned_to === printer.id) ?? null;
+
   const nozzle     = printer.status?.TempOfNozzle    ?? printer.status?.NozzleTemp    ?? 0;
   const nozzleTgt  = printer.status?.TempTargetNozzle?? printer.status?.NozzleTempTarget ?? 0;
   const bed        = printer.status?.TempOfHotbed     ?? printer.status?.BedTemp       ?? 0;
@@ -267,6 +288,26 @@ function renderPrinter(printer) {
         <div class="temp-value ${tempColor(chamber)}">${chamber ? chamber.toFixed(0) : "--"}<span style="font-size:12px;font-weight:400">°C</span></div>
         <div class="temp-target">Target: ${chamberTgt ? chamberTgt.toFixed(0) + "°C" : "--"}</div>
       </div>
+    </div>
+
+    <!-- Spool -->
+    <div class="card-spool" onclick="openSpoolPicker('${escAttr(printer.id)}')">
+      ${assignedSpool ? (() => {
+        const pct = assignedSpool.total_weight_g > 0
+          ? Math.round((assignedSpool.remaining_g / assignedSpool.total_weight_g) * 100)
+          : 0;
+        const low = assignedSpool.remaining_g < 100;
+        return `
+          <span class="spool-dot" style="background:${escAttr(assignedSpool.color_hex)}"></span>
+          <div class="spool-info">
+            <div class="spool-name ${low ? "spool-low" : ""}">${escHtml(assignedSpool.name || assignedSpool.material)}</div>
+            <div class="spool-bar-wrap">
+              <div class="spool-bar-fill ${low ? "low" : ""}" style="width:${pct}%"></div>
+            </div>
+          </div>
+          <span class="spool-remaining ${low ? "spool-low" : ""}">${assignedSpool.remaining_g.toFixed(0)} g</span>
+        `;
+      })() : `<span class="spool-assign-hint">+ Assign spool</span>`}
     </div>
 
     <!-- Controls -->
@@ -430,6 +471,176 @@ document.getElementById("btn-history").addEventListener("click", openHistory);
 document.getElementById("btn-history-close").addEventListener("click", closeHistory);
 historyBackdrop.addEventListener("click", closeHistory);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeHistory(); });
+
+// ─── Spools panel ─────────────────────────────────────────────────────────────
+const spoolsPanel    = document.getElementById("panel-spools");
+const openSpools  = () => { spoolsPanel.classList.add("open"); historyBackdrop.classList.add("open"); };
+const closeSpools = () => { spoolsPanel.classList.remove("open"); historyBackdrop.classList.remove("open"); };
+
+document.getElementById("btn-spools").addEventListener("click", openSpools);
+document.getElementById("btn-spools-close").addEventListener("click", closeSpools);
+
+function renderSpoolPanel() {
+  const list  = document.getElementById("spools-list");
+  const empty = document.getElementById("spools-empty");
+  const all   = Object.values(spools);
+
+  if (!all.length) {
+    list.innerHTML = "";
+    list.appendChild(empty);
+    empty.style.display = "";
+    return;
+  }
+  empty.style.display = "none";
+
+  const assignedPrinter = (spool) => {
+    if (!spool.assigned_to) return null;
+    return printers[spool.assigned_to] ?? null;
+  };
+
+  list.innerHTML = all.map(s => {
+    const pct = s.total_weight_g > 0 ? Math.round((s.remaining_g / s.total_weight_g) * 100) : 0;
+    const low = s.remaining_g < 100;
+    const printer = assignedPrinter(s);
+    return `
+      <div class="spool-row">
+        <div class="spool-row-color" style="background:${escAttr(s.color_hex)}"></div>
+        <div class="spool-row-body">
+          <div class="spool-row-header">
+            <span class="spool-row-name">${escHtml(s.name || s.material)}</span>
+            <span class="spool-row-meta">${escHtml(s.brand ? s.brand + " · " : "")}${escHtml(s.material)}</span>
+          </div>
+          <div class="spool-bar-wrap spool-bar-large">
+            <div class="spool-bar-fill ${low ? "low" : ""}" style="width:${pct}%"></div>
+          </div>
+          <div class="spool-row-stats">
+            <span class="${low ? "spool-low" : ""}">${s.remaining_g.toFixed(0)} g remaining</span>
+            <span style="color:var(--text-muted)">/ ${s.total_weight_g.toFixed(0)} g total</span>
+            ${printer ? `<span class="spool-assigned-tag">${escHtml(printer.name)}</span>` : ""}
+          </div>
+        </div>
+        <div class="spool-row-actions">
+          <button class="btn btn-secondary btn-sm" onclick="openEditSpool('${escAttr(s.id)}')">Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteSpool('${escAttr(s.id)}')">Delete</button>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+// ─── Add / Edit Spool Modal ────────────────────────────────────────────────────
+const spoolModal = document.getElementById("modal-spool");
+const openSpoolModal  = () => spoolModal.classList.add("open");
+const closeSpoolModal = () => spoolModal.classList.remove("open");
+
+document.getElementById("btn-spool-new").addEventListener("click", () => {
+  document.getElementById("modal-spool-title").textContent = "Add Spool";
+  document.getElementById("spool-edit-id").value = "";
+  document.getElementById("spool-name").value = "";
+  document.getElementById("spool-brand").value = "";
+  document.getElementById("spool-material").value = "PLA";
+  document.getElementById("spool-color-name").value = "";
+  document.getElementById("spool-color-hex").value = "#888888";
+  document.getElementById("spool-total-g").value = "1000";
+  document.getElementById("spool-remaining-g").value = "1000";
+  openSpoolModal();
+});
+
+function openEditSpool(id) {
+  const s = spools[id];
+  if (!s) return;
+  document.getElementById("modal-spool-title").textContent = "Edit Spool";
+  document.getElementById("spool-edit-id").value = s.id;
+  document.getElementById("spool-name").value = s.name;
+  document.getElementById("spool-brand").value = s.brand;
+  document.getElementById("spool-material").value = s.material;
+  document.getElementById("spool-color-name").value = s.color_name;
+  document.getElementById("spool-color-hex").value = s.color_hex;
+  document.getElementById("spool-total-g").value = s.total_weight_g;
+  document.getElementById("spool-remaining-g").value = s.remaining_g;
+  openSpoolModal();
+}
+
+document.getElementById("btn-spool-modal-cancel").addEventListener("click", closeSpoolModal);
+spoolModal.addEventListener("click", (e) => { if (e.target === spoolModal) closeSpoolModal(); });
+
+document.getElementById("btn-spool-modal-save").addEventListener("click", () => {
+  const editId   = document.getElementById("spool-edit-id").value;
+  const totalG   = parseFloat(document.getElementById("spool-total-g").value) || 1000;
+  const remainG  = parseFloat(document.getElementById("spool-remaining-g").value);
+  const payload  = {
+    name:           document.getElementById("spool-name").value.trim(),
+    brand:          document.getElementById("spool-brand").value.trim(),
+    material:       document.getElementById("spool-material").value,
+    color_name:     document.getElementById("spool-color-name").value.trim(),
+    color_hex:      document.getElementById("spool-color-hex").value,
+    total_weight_g: totalG,
+    remaining_g:    isNaN(remainG) ? totalG : remainG,
+  };
+  if (!payload.name) { toast("Enter a name for the spool", true); return; }
+  if (editId) {
+    send({ action: "update_spool", spool_id: editId, ...payload });
+  } else {
+    send({ action: "add_spool", ...payload });
+  }
+  closeSpoolModal();
+});
+
+function deleteSpool(id) {
+  if (confirm("Delete this spool?")) {
+    send({ action: "delete_spool", spool_id: id });
+  }
+}
+
+// ─── Spool Picker (assign to printer) ─────────────────────────────────────────
+const spoolPickerModal = document.getElementById("modal-spool-picker");
+
+function openSpoolPicker(printerId) {
+  spoolPickerPrinterId = printerId;
+  const list = document.getElementById("spool-picker-list");
+  const all  = Object.values(spools);
+
+  const noneRow = document.createElement("div");
+  noneRow.className = "picker-row";
+  noneRow.textContent = "— No spool —";
+  noneRow.onclick = () => { send({ action: "assign_spool", printer_id: printerId, spool_id: null }); spoolPickerModal.classList.remove("open"); };
+  list.innerHTML = "";
+  list.appendChild(noneRow);
+
+  if (!all.length) {
+    const hint = document.createElement("p");
+    hint.style.cssText = "color:var(--text-muted);font-size:13px;padding:12px 0";
+    hint.textContent = "No spools added yet. Use the Spools panel to add one.";
+    list.appendChild(hint);
+  }
+
+  all.forEach(s => {
+    const pct = s.total_weight_g > 0 ? Math.round((s.remaining_g / s.total_weight_g) * 100) : 0;
+    const active = s.assigned_to === printerId;
+    const row = document.createElement("div");
+    row.className = "picker-row" + (active ? " active" : "");
+    row.innerHTML = `
+      <span class="spool-dot" style="background:${escAttr(s.color_hex)}"></span>
+      <div class="picker-row-body">
+        <div class="picker-row-name">${escHtml(s.name || s.material)}</div>
+        <div class="picker-row-sub">${escHtml(s.material)}${s.brand ? " · " + escHtml(s.brand) : ""} · ${s.remaining_g.toFixed(0)} g (${pct}%)</div>
+      </div>
+      ${active ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:16px;height:16px;color:var(--green);flex-shrink:0"><polyline points="20 6 9 17 4 12"/></svg>` : ""}
+    `;
+    row.onclick = () => {
+      send({ action: "assign_spool", printer_id: printerId, spool_id: s.id });
+      spoolPickerModal.classList.remove("open");
+    };
+    list.appendChild(row);
+  });
+
+  spoolPickerModal.classList.add("open");
+}
+
+document.getElementById("btn-picker-cancel").addEventListener("click", () => {
+  spoolPickerModal.classList.remove("open");
+});
+spoolPickerModal.addEventListener("click", (e) => { if (e.target === spoolPickerModal) spoolPickerModal.classList.remove("open"); });
 
 // ─── Boot ──────────────────────────────────────────────────────────────────────
 connect();

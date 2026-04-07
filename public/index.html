@@ -17,6 +17,14 @@
       <span>Spooler</span>
     </div>
     <div class="header-actions">
+      <button id="btn-spools" class="btn btn-secondary" title="Filament spools">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/>
+          <line x1="12" y1="2" x2="12" y2="8"/><line x1="12" y1="16" x2="12" y2="22"/>
+          <line x1="2" y1="12" x2="8" y2="12"/><line x1="16" y1="12" x2="22" y2="12"/>
+        </svg>
+        Spools
+      </button>
       <button id="btn-history" class="btn btn-secondary" title="Filament history">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>
@@ -70,6 +78,21 @@
     </div>
   </div>
 
+  <!-- Spools panel -->
+  <div id="panel-spools" class="side-panel">
+    <div class="side-panel-header">
+      <h3>Filament Spools</h3>
+      <button id="btn-spool-new" class="btn btn-primary btn-sm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        Add Spool
+      </button>
+      <button id="btn-spools-close" class="btn btn-secondary btn-sm">Close</button>
+    </div>
+    <div class="side-panel-body" id="spools-list">
+      <p id="spools-empty" style="display:none;text-align:center;color:var(--text-muted);padding:40px">No spools added yet.</p>
+    </div>
+  </div>
+
   <!-- History panel -->
   <div id="panel-history" class="side-panel">
     <div class="side-panel-header">
@@ -94,6 +117,67 @@
     </div>
   </div>
   <div id="panel-backdrop" class="panel-backdrop"></div>
+
+  <!-- Add/Edit Spool Modal -->
+  <div id="modal-spool" class="modal">
+    <div class="modal-box modal-box-wide">
+      <h3 id="modal-spool-title">Add Spool</h3>
+      <input type="hidden" id="spool-edit-id" />
+      <label>
+        Name
+        <input id="spool-name" type="text" placeholder="e.g. eSun PLA+ White" />
+      </label>
+      <div class="modal-row">
+        <label>
+          Brand
+          <input id="spool-brand" type="text" placeholder="eSun" />
+        </label>
+        <label>
+          Material
+          <select id="spool-material">
+            <option>PLA</option><option>PLA+</option><option>PETG</option>
+            <option>ABS</option><option>ASA</option><option>TPU</option>
+            <option>Nylon</option><option>PC</option><option>Other</option>
+          </select>
+        </label>
+      </div>
+      <div class="modal-row">
+        <label>
+          Color name
+          <input id="spool-color-name" type="text" placeholder="White" />
+        </label>
+        <label>
+          Color
+          <input id="spool-color-hex" type="color" value="#ffffff" />
+        </label>
+      </div>
+      <div class="modal-row">
+        <label>
+          Total weight (g)
+          <input id="spool-total-g" type="number" min="0" step="1" value="1000" />
+        </label>
+        <label>
+          Remaining (g)
+          <input id="spool-remaining-g" type="number" min="0" step="1" value="1000" />
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button id="btn-spool-modal-cancel" class="btn btn-secondary">Cancel</button>
+        <button id="btn-spool-modal-save" class="btn btn-primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Spool Picker Modal (assign to printer) -->
+  <div id="modal-spool-picker" class="modal">
+    <div class="modal-box">
+      <h3>Assign Spool</h3>
+      <div id="spool-picker-list" class="spool-picker-list"></div>
+      <div class="modal-actions">
+        <button id="btn-picker-cancel" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Toast notifications -->
   <div id="toast-area"></div>

@@ -40,6 +40,7 @@ HTTP_PORT = 8080
 
 PRINTERS_FILE = Path(__file__).parent / "printers.json"
 HISTORY_FILE  = Path(__file__).parent / "history.json"
+SPOOLS_FILE   = Path(__file__).parent / "spools.json"
 
 # Filament density g/cm³ for 1.75 mm diameter filament (default PLA)
 FILAMENT_DENSITY = 1.24
@@ -54,6 +55,8 @@ def filament_mm_to_grams(mm):
 printers = {}
 # Connected browser clients
 browser_clients = set()
+# Filament spool inventory: { id: spool_dict }
+spools = {}
 
 # ─── Persistence ───────────────────────────────────────────────────────────────
 
@@ -81,6 +84,18 @@ def append_history(entry):
     history = load_history()
     history.append(entry)
     HISTORY_FILE.write_text(json.dumps(history, indent=2))
+
+def load_spools():
+    if not SPOOLS_FILE.exists():
+        return {}
+    try:
+        data = json.loads(SPOOLS_FILE.read_text())
+        return {s["id"]: s for s in data}
+    except Exception:
+        return {}
+
+def save_spools():
+    SPOOLS_FILE.write_text(json.dumps(list(spools.values()), indent=2))
 
 # ─── PrintInfo hex-field decoder ───────────────────────────────────────────────
 
@@ -305,6 +320,13 @@ class PrinterConnection:
                 label = "Completed" if completed else "Cancelled"
                 print(f"[History] {label}: {filename} – {filament_mm:.0f}mm / {filament_mm_to_grams(filament_mm)}g")
                 await broadcast_to_browsers({"type": "history_entry", "entry": entry})
+                # Auto-deduct from the spool assigned to this printer
+                for spool in spools.values():
+                    if spool.get("assigned_to") == self.id:
+                        spool["remaining_g"] = max(0.0, round(spool["remaining_g"] - filament_mm_to_grams(filament_mm), 1))
+                        save_spools()
+                        await broadcast_to_browsers({"type": "spool_update", "spool": spool})
+                        break
 
         self._last_print_status = cur_status
 
@@ -429,6 +451,64 @@ async def handle_browser_message(ws, raw):
         await broadcast_to_browsers({"type": "printer_removed", "printer_id": printer_id})
         return
 
+    if action == "list_spools":
+        await ws.send(json.dumps({"type": "spools_list", "spools": list(spools.values())}))
+        return
+
+    if action == "add_spool":
+        sid = str(uuid.uuid4()).replace("-", "")[:12]
+        spool = {
+            "id": sid,
+            "name": str(msg.get("name", "")).strip(),
+            "brand": str(msg.get("brand", "")).strip(),
+            "material": str(msg.get("material", "PLA")).strip(),
+            "color_name": str(msg.get("color_name", "")).strip(),
+            "color_hex": str(msg.get("color_hex", "#888888")),
+            "total_weight_g": float(msg.get("total_weight_g", 1000)),
+            "remaining_g": float(msg.get("remaining_g", msg.get("total_weight_g", 1000))),
+            "assigned_to": None,
+        }
+        spools[sid] = spool
+        save_spools()
+        await broadcast_to_browsers({"type": "spool_update", "spool": spool})
+        return
+
+    if action == "update_spool":
+        sid = msg.get("spool_id")
+        spool = spools.get(sid)
+        if not spool:
+            await ws.send(json.dumps({"type": "error", "message": "Spool not found"}))
+            return
+        for k in ("name", "brand", "material", "color_name", "color_hex"):
+            if k in msg:
+                spool[k] = str(msg[k]).strip()
+        for k in ("total_weight_g", "remaining_g"):
+            if k in msg:
+                spool[k] = max(0.0, float(msg[k]))
+        save_spools()
+        await broadcast_to_browsers({"type": "spool_update", "spool": spool})
+        return
+
+    if action == "delete_spool":
+        sid = msg.get("spool_id")
+        if spools.pop(sid, None):
+            save_spools()
+            await broadcast_to_browsers({"type": "spool_removed", "spool_id": sid})
+        return
+
+    if action == "assign_spool":
+        pid = msg.get("printer_id")
+        sid = msg.get("spool_id")  # None = unassign
+        for s in list(spools.values()):
+            if s.get("assigned_to") == pid:
+                s["assigned_to"] = None
+                await broadcast_to_browsers({"type": "spool_update", "spool": s})
+        if sid and sid in spools:
+            spools[sid]["assigned_to"] = pid
+            await broadcast_to_browsers({"type": "spool_update", "spool": spools[sid]})
+        save_spools()
+        return
+
     if not printer:
         await ws.send(json.dumps({"type": "error", "message": "Printer not found"}))
         return
@@ -480,6 +560,8 @@ class SPHandler(SimpleHTTPRequestHandler):
             self._json([p.to_dict() for p in printers.values()])
         elif self.path == "/api/history":
             self._json(load_history())
+        elif self.path == "/api/spools":
+            self._json(list(spools.values()))
         else:
             super().do_GET()
 
@@ -532,7 +614,8 @@ async def main():
         print("  python3 -m venv venv && . venv/bin/activate && pip install websockets")
         sys.exit(1)
 
-    # Load saved printers
+    # Load saved spools and printers
+    spools.update(load_spools())
     for entry in load_printers():
         pid, ip, name = entry["id"], entry["ip"], entry["name"]
         pc = PrinterConnection(pid, ip, name)
