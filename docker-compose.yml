@@ -1,0 +1,33 @@
+# Spooler + Reel – run both services with a single command:
+#   docker compose up -d
+#
+# network_mode: host is required on Linux so Spooler can:
+#   - send UDP broadcast on port 3000 (printer discovery)
+#   - open WebSocket to printers on port 3030
+
+services:
+
+  reel:
+    build:
+      context: ../Reel
+    network_mode: host
+    environment:
+      DATA_DIR: /data
+    volumes:
+      - reel_data:/data
+    restart: unless-stopped
+
+  spooler:
+    build: .
+    network_mode: host
+    environment:
+      DATA_DIR: /data
+    volumes:
+      - spooler_data:/data
+    depends_on:
+      - reel
+    restart: unless-stopped
+
+volumes:
+  reel_data:
+  spooler_data:

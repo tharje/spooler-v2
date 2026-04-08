@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#16181f"/>
+  <g transform="translate(256,256)" fill="none" stroke="#ff6b2b" stroke-width="14" stroke-linecap="round">
+    <circle r="180"/>
+    <circle r="72"/>
+    <line x1="0" y1="-180" x2="0" y2="-72"/>
+    <line x1="0"  y1="72"  x2="0"  y2="180"/>
+    <line x1="-180" y1="0" x2="-72" y2="0"/>
+    <line x1="72"   y1="0" x2="180" y2="0"/>
+  </g>
+</svg>

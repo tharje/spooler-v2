@@ -38,8 +38,10 @@ DISCOVERY_PORT = 3000
 WS_SERVER_PORT = 8765
 HTTP_PORT = 8080
 
-PRINTERS_FILE    = Path(__file__).parent / "printers.json"
-HISTORY_FILE     = Path(__file__).parent / "history.json"
+DATA_DIR         = Path(os.getenv("DATA_DIR", Path(__file__).parent))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+PRINTERS_FILE    = DATA_DIR / "printers.json"
+HISTORY_FILE     = DATA_DIR / "history.json"
 REEL_URL         = "http://localhost:8090"
 SPOOLMAN_DB_URL  = "https://donkie.github.io/SpoolmanDB/filaments.json"
 SPOOLMAN_DB_TTL  = 3600  # re-fetch at most once per hour
