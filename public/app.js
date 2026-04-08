@@ -1,7 +1,7 @@
 /* Spooler – frontend app.js */
 "use strict";
 
-const WS_URL  = `ws://${location.hostname}:8765`;
+const WS_URL  = `${location.protocol === "https:" ? "wss" : "ws"}://${location.hostname}:8765`;
 const REEL_URL = "/api/reel";
 const RECONNECT_DELAY = 3000;
 
