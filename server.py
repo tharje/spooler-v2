@@ -118,7 +118,23 @@ def reel_deduct(printer_id: str, amount_g: float):
         )
         with urllib.request.urlopen(req, timeout=3) as resp:
             result = json.loads(resp.read())
-        print(f"[Reel] {amount_g}g deducted from '{result['name']}' → {result['remaining_g']}g left")
+        remaining = result["remaining_g"]
+        total     = result["total_weight_g"]
+        print(f"[Reel] {amount_g}g deducted from '{result['name']}' → {remaining}g left")
+
+        # Notify browser if spool is empty or critically low (< 10 %)
+        loop = asyncio.get_event_loop()
+        if remaining == 0:
+            msg = {"type": "spool_empty",
+                   "spool": result, "printer_id": printer_id}
+        elif total > 0 and (remaining / total) < 0.1:
+            msg = {"type": "spool_low",
+                   "spool": result, "printer_id": printer_id}
+        else:
+            msg = None
+
+        if msg:
+            asyncio.run_coroutine_threadsafe(broadcast_to_browsers(msg), loop)
     except Exception as e:
         print(f"[Reel] Deduct skipped ({e})")
 

@@ -70,6 +70,16 @@ function handleMessage(msg) {
       renderHistory();
       toast(`Print logged: ${msg.entry.filament_g}g used`);
       break;
+    case "spool_empty":
+      spools = spools.map(s => s.id === msg.spool.id ? msg.spool : s);
+      Object.values(printers).forEach(p => renderPrinter(p));
+      toast(`⚠ Spool empty: ${msg.spool.name} — assign a new spool`, true);
+      break;
+    case "spool_low":
+      spools = spools.map(s => s.id === msg.spool.id ? msg.spool : s);
+      Object.values(printers).forEach(p => renderPrinter(p));
+      toast(`Spool low: ${msg.spool.name} — ${msg.spool.remaining_g}g remaining`);
+      break;
   }
 }
 
@@ -258,14 +268,17 @@ function renderPrinter(printer) {
     <!-- Spool -->
     ${(() => {
       const s = spools.find(sp => sp.assigned_to === printer.id);
-      const pct = s ? Math.round(s.remaining_g / s.total_weight_g * 100) : 0;
-      return `<div class="card-spool">
+      const pct = s && s.total_weight_g > 0 ? Math.round(s.remaining_g / s.total_weight_g * 100) : 0;
+      const isEmpty = s && s.remaining_g === 0;
+      const isLow   = s && !isEmpty && s.total_weight_g > 0 && pct < 10;
+      const barColor = isEmpty ? "var(--red)" : isLow ? "var(--yellow)" : null;
+      return `<div class="card-spool${isEmpty ? " spool-empty" : isLow ? " spool-low" : ""}">
         ${s ? `
           <div class="spool-dot" style="background:${escAttr(s.color_hex)}"></div>
           <div class="spool-card-info">
-            <div class="spool-card-name">${escHtml(s.name)}</div>
+            <div class="spool-card-name">${escHtml(s.name)}${isEmpty ? ' <span class="spool-tag empty">Empty</span>' : isLow ? ' <span class="spool-tag low">Low</span>' : ""}</div>
             <div class="spool-bar-wrap">
-              <div class="spool-bar-fill" style="width:${pct}%"></div>
+              <div class="spool-bar-fill" style="width:${pct}%${barColor ? ";background:" + barColor : ""}"></div>
             </div>
             <div class="spool-card-remaining">${s.remaining_g}g / ${s.total_weight_g}g</div>
           </div>

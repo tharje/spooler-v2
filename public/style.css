@@ -577,6 +577,23 @@ main {
 .spool-none { font-size: 13px; color: var(--text-muted); flex: 1; }
 .spool-assign-btn { margin-left: auto; flex-shrink: 0; }
 
+.card-spool.spool-empty { background: rgba(239,68,68,.06); }
+.card-spool.spool-low   { background: rgba(234,179,8,.06); }
+
+.spool-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+.spool-tag.empty { background: rgba(239,68,68,.2); color: var(--red); }
+.spool-tag.low   { background: rgba(234,179,8,.2);  color: var(--yellow); }
+
 /* ─── Spools side panel ───────────────────────────────────────────────────── */
 .spool-row {
   display: flex;
