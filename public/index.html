@@ -137,20 +137,21 @@
     </div>
   </div>
 
-  <!-- Barcode scanner modal -->
+  <!-- Barcode scanner modal (live video – kun brukt på localhost/HTTPS) -->
   <div id="modal-scanner" class="modal">
     <div class="modal-box modal-box-wide">
       <h3>Scan EAN-kode</h3>
-      <div class="scanner-viewport">
-        <video id="scanner-video" autoplay playsinline muted></video>
-        <div class="scanner-frame"></div>
-      </div>
+      <div id="scanner-region"></div>
       <p class="scanner-hint">Hold strekkoden stille i rammen</p>
       <div class="modal-actions">
         <button id="btn-scanner-cancel" class="btn btn-secondary">Avbryt</button>
       </div>
     </div>
   </div>
+
+  <!-- Hidden inputs for file-based barcode capture (HTTP fallback) -->
+  <input type="file" id="barcode-file-input" accept="image/*" capture="environment" style="display:none" />
+  <div id="barcode-scan-canvas" style="display:none"></div>
 
   <!-- Add Spool modal -->
   <div id="modal-add-spool" class="modal">
@@ -237,6 +238,7 @@
   <!-- Toast notifications -->
   <div id="toast-area"></div>
 
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

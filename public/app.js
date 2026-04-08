@@ -678,8 +678,6 @@ document.getElementById("btn-add-spool-confirm").addEventListener("click", async
 });
 
 // ─── EAN lookup + barcode scanner ─────────────────────────────────────────────
-let scannerStream   = null;
-let scannerInterval = null;
 
 async function lookupEan(ean) {
   if (!ean) return;
@@ -738,40 +736,52 @@ document.getElementById("spool-input-ean").addEventListener("input", (e) => {
 });
 
 // Camera scanner
+let _liveScanner = null;
+
 async function openScanner() {
-  if (!("BarcodeDetector" in window)) {
-    toast("Barcode-scanner støttes ikke i denne nettleseren (bruk Chrome)", true);
-    return;
-  }
-  try {
-    scannerStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
-    });
-    const video = document.getElementById("scanner-video");
-    video.srcObject = scannerStream;
+  if (window.isSecureContext) {
+    // HTTPS / localhost → live video scanner
     document.getElementById("modal-scanner").classList.add("open");
-    const detector = new BarcodeDetector({ formats: ["ean_13","ean_8","upc_a","upc_e","code_128"] });
-    scannerInterval = setInterval(async () => {
-      if (!video.readyState || video.readyState < 2) return;
-      try {
-        const codes = await detector.detect(video);
-        if (codes.length) {
-          closeScanner();
-          lookupEan(codes[0].rawValue);
-        }
-      } catch (_) {}
-    }, 250);
-  } catch (e) {
-    toast("Kamera ikke tilgjengelig: " + e.message, true);
+    try {
+      _liveScanner = new Html5Qrcode("scanner-region", { verbose: false });
+      await _liveScanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 280, height: 100 } },
+        (text) => { closeScanner(); lookupEan(text); },
+        () => {}
+      );
+    } catch (e) {
+      closeScanner();
+      toast("Kamera ikke tilgjengelig: " + e.message, true);
+    }
+  } else {
+    // HTTP on local network → take photo, decode from image
+    document.getElementById("barcode-file-input").click();
   }
 }
 
 function closeScanner() {
-  clearInterval(scannerInterval);
-  scannerInterval = null;
-  if (scannerStream) { scannerStream.getTracks().forEach(t => t.stop()); scannerStream = null; }
+  if (_liveScanner) {
+    _liveScanner.stop().catch(() => {});
+    _liveScanner.clear();
+    _liveScanner = null;
+  }
   document.getElementById("modal-scanner").classList.remove("open");
 }
+
+// File input: decode image from camera photo
+document.getElementById("barcode-file-input").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  try {
+    const reader = new Html5Qrcode("barcode-scan-canvas", { verbose: false });
+    const text = await reader.scanFile(file, false);
+    lookupEan(text);
+  } catch {
+    toast("Ingen strekkode funnet i bildet – prøv igjen", true);
+  }
+});
 
 document.getElementById("btn-scan-ean").addEventListener("click", openScanner);
 document.getElementById("btn-scanner-cancel").addEventListener("click", closeScanner);
