@@ -640,7 +640,7 @@ document.getElementById("btn-add-spool-confirm").addEventListener("click", async
   const hex      = document.getElementById("spool-input-hex").value || "#888888";
   const weight   = parseFloat(document.getElementById("spool-input-weight").value) || 1000;
 
-  if (!material) { toast("Velg material", true); return; }
+  if (!material) { toast("Select a material", true); return; }
 
   const displayName = [brand, material, color].filter(Boolean).join(" ");
 
@@ -684,7 +684,7 @@ async function lookupEan(ean) {
   document.getElementById("spool-input-ean").value = ean;
   try {
     const r = await fetch(`/api/lookup-ean?ean=${encodeURIComponent(ean)}`);
-    if (r.status === 404) { toast(`EAN ${ean} ikke funnet i database`, true); return; }
+    if (r.status === 404) { toast(`EAN ${ean} not found in database`, true); return; }
     if (!r.ok) throw new Error(await r.text());
     const d = await r.json();
 
@@ -716,9 +716,9 @@ async function lookupEan(ean) {
     document.getElementById("spool-input-hex").value    = hex;
     document.getElementById("spool-input-weight").value = weight;
 
-    toast(`Funnet: ${d.name || [brand, material, color].filter(Boolean).join(" ")}`);
+    toast(`Found: ${d.name || [brand, material, color].filter(Boolean).join(" ")}`);
   } catch (e) {
-    toast("Søk feilet: " + e.message, true);
+    toast("Lookup failed: " + e.message, true);
   }
 }
 
@@ -752,7 +752,7 @@ async function openScanner() {
       );
     } catch (e) {
       closeScanner();
-      toast("Kamera ikke tilgjengelig: " + e.message, true);
+      toast("Camera unavailable: " + e.message, true);
     }
   } else {
     // HTTP on local network → take photo, decode from image
@@ -779,7 +779,7 @@ document.getElementById("barcode-file-input").addEventListener("change", async (
     const text = await reader.scanFile(file, false);
     lookupEan(text);
   } catch {
-    toast("Ingen strekkode funnet i bildet – prøv igjen", true);
+    toast("No barcode found in image – try again", true);
   }
 });
 
