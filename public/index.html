@@ -141,9 +141,60 @@
   <div id="modal-add-spool" class="modal">
     <div class="modal-box">
       <h3>Add Spool</h3>
-      <label>Name<input id="spool-input-name" type="text" placeholder="Elegoo PLA+ White" /></label>
-      <label>Brand<input id="spool-input-brand" type="text" placeholder="Elegoo" /></label>
-      <label>Material<input id="spool-input-material" type="text" placeholder="PLA" /></label>
+      <label>Brand
+        <select id="spool-input-brand">
+          <option value="">– Select brand –</option>
+          <option>Elegoo</option>
+          <option>Bambu Lab</option>
+          <option>Polymaker</option>
+          <option>eSUN</option>
+          <option>Prusament</option>
+          <option>Hatchbox</option>
+          <option>Creality</option>
+          <option>Sunlu</option>
+          <option>Overture</option>
+          <option>3DJake</option>
+          <option>Fiberlogy</option>
+          <option>Fillamentum</option>
+          <option>Das Filament</option>
+          <option value="__other__">Other…</option>
+        </select>
+        <input id="spool-input-brand-other" type="text" placeholder="Brand name" style="display:none;margin-top:6px" />
+      </label>
+      <label>Material
+        <select id="spool-input-material">
+          <option value="">– Select material –</option>
+          <optgroup label="Common">
+            <option>PLA</option>
+            <option>PLA+</option>
+            <option>PETG</option>
+            <option>ABS</option>
+            <option>ASA</option>
+          </optgroup>
+          <optgroup label="Flexible">
+            <option>TPU 95A</option>
+            <option>TPU 85A</option>
+            <option>TPE</option>
+          </optgroup>
+          <optgroup label="Engineering">
+            <option>Nylon (PA12)</option>
+            <option>PC</option>
+            <option>PC-ABS</option>
+            <option>HIPS</option>
+            <option>PVA</option>
+          </optgroup>
+          <optgroup label="Specialty">
+            <option>PLA Silk</option>
+            <option>PLA Matte</option>
+            <option>PLA Wood</option>
+            <option>PLA Marble</option>
+            <option>PETG Carbon</option>
+            <option>ABS Carbon</option>
+          </optgroup>
+          <option value="__other__">Other…</option>
+        </select>
+        <input id="spool-input-material-other" type="text" placeholder="Material name" style="display:none;margin-top:6px" />
+      </label>
       <label>Color<input id="spool-input-color" type="text" placeholder="White" /></label>
       <label>Color (hex)<input id="spool-input-hex" type="color" value="#888888" /></label>
       <label>Total weight (g)<input id="spool-input-weight" type="number" placeholder="1000" min="1" /></label>

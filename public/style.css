@@ -390,6 +390,21 @@ main {
   transition: border-color .15s;
 }
 .modal-box input:focus { border-color: var(--accent); }
+.modal-box select {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 9px 12px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color .15s;
+  width: 100%;
+  cursor: pointer;
+}
+.modal-box select:focus { border-color: var(--accent); }
+.modal-box select option,
+.modal-box select optgroup { background: var(--surface2); color: var(--text); }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
 
 /* ─── Toast ───────────────────────────────────────────────────────────────── */

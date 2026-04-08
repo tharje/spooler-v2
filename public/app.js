@@ -607,6 +607,22 @@ historyBackdrop.addEventListener("click", () => { closeHistory(); closeSpools();
 // Add Spool modal
 const addSpoolModal = document.getElementById("modal-add-spool");
 
+// "Other…" toggle for brand and material dropdowns
+document.getElementById("spool-input-brand").addEventListener("change", (e) => {
+  document.getElementById("spool-input-brand-other").style.display =
+    e.target.value === "__other__" ? "" : "none";
+});
+document.getElementById("spool-input-material").addEventListener("change", (e) => {
+  document.getElementById("spool-input-material-other").style.display =
+    e.target.value === "__other__" ? "" : "none";
+});
+
+function getSpoolSelectValue(selectId, otherId) {
+  const sel = document.getElementById(selectId).value;
+  if (sel === "__other__") return document.getElementById(otherId).value.trim();
+  return sel;
+}
+
 document.getElementById("btn-add-spool").addEventListener("click", () => {
   addSpoolModal.classList.add("open");
 });
@@ -618,14 +634,15 @@ addSpoolModal.addEventListener("click", (e) => {
 });
 
 document.getElementById("btn-add-spool-confirm").addEventListener("click", async () => {
-  const name     = document.getElementById("spool-input-name").value.trim();
-  const brand    = document.getElementById("spool-input-brand").value.trim();
-  const material = document.getElementById("spool-input-material").value.trim() || "PLA";
+  const brand    = getSpoolSelectValue("spool-input-brand", "spool-input-brand-other");
+  const material = getSpoolSelectValue("spool-input-material", "spool-input-material-other") || "PLA";
   const color    = document.getElementById("spool-input-color").value.trim();
   const hex      = document.getElementById("spool-input-hex").value || "#888888";
   const weight   = parseFloat(document.getElementById("spool-input-weight").value) || 1000;
 
-  const displayName = name || [material, color].filter(Boolean).join(" ") || "Spool";
+  if (!material) { toast("Velg material", true); return; }
+
+  const displayName = [brand, material, color].filter(Boolean).join(" ");
 
   try {
     const r = await fetch(`${REEL_URL}/spools`, {
@@ -642,12 +659,16 @@ document.getElementById("btn-add-spool-confirm").addEventListener("click", async
     });
     if (!r.ok) throw new Error(await r.text());
     addSpoolModal.classList.remove("open");
-    // Clear inputs
-    ["spool-input-name","spool-input-brand","spool-input-material",
-     "spool-input-color","spool-input-weight"].forEach(id => {
-      document.getElementById(id).value = "";
-    });
+    // Reset form
+    document.getElementById("spool-input-brand").value = "";
+    document.getElementById("spool-input-material").value = "";
+    document.getElementById("spool-input-brand-other").style.display = "none";
+    document.getElementById("spool-input-brand-other").value = "";
+    document.getElementById("spool-input-material-other").style.display = "none";
+    document.getElementById("spool-input-material-other").value = "";
+    document.getElementById("spool-input-color").value = "";
     document.getElementById("spool-input-hex").value = "#888888";
+    document.getElementById("spool-input-weight").value = "";
     await fetchSpools();
     toast("Spool added");
   } catch (e) {
