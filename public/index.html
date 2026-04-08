@@ -41,14 +41,14 @@
       </svg>
       <span>History</span>
     </button>
-    <a href="http://localhost:8090/docs" target="_blank" class="sidenav-item" title="Reel – Filament inventory">
+    <button id="btn-spools" class="sidenav-item" title="Filament spools (Reel)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/>
         <line x1="12" y1="2" x2="12" y2="8"/><line x1="12" y1="16" x2="12" y2="22"/>
         <line x1="2" y1="12" x2="8" y2="12"/><line x1="16" y1="12" x2="22" y2="12"/>
       </svg>
-      <span>Reel</span>
-    </a>
+      <span>Spools</span>
+    </button>
   </nav>
 
   <main id="main">
@@ -106,7 +106,53 @@
       <p id="history-empty" style="display:none;text-align:center;color:var(--text-muted);padding:40px">No prints logged yet.</p>
     </div>
   </div>
+  <!-- Spools panel -->
+  <div id="panel-spools" class="side-panel">
+    <div class="side-panel-header">
+      <h3>Filament Spools</h3>
+      <button id="btn-add-spool" class="btn btn-primary btn-sm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        Add Spool
+      </button>
+      <button id="btn-spools-close" class="btn btn-secondary btn-sm">Close</button>
+    </div>
+    <div class="side-panel-body">
+      <div id="spools-list"></div>
+      <p id="spools-empty" style="display:none;text-align:center;color:var(--text-muted);padding:40px">No spools yet. Click <strong>Add Spool</strong> to get started.</p>
+    </div>
+  </div>
+
   <div id="panel-backdrop" class="panel-backdrop"></div>
+
+  <!-- Spool picker modal -->
+  <div id="modal-spool-picker" class="modal">
+    <div class="modal-box modal-box-wide">
+      <h3 id="spool-picker-title">Assign Spool</h3>
+      <div id="spool-picker-list" class="spool-picker-list"></div>
+      <div class="modal-actions">
+        <button id="btn-spool-picker-cancel" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Spool modal -->
+  <div id="modal-add-spool" class="modal">
+    <div class="modal-box">
+      <h3>Add Spool</h3>
+      <label>Name<input id="spool-input-name" type="text" placeholder="Elegoo PLA+ White" /></label>
+      <label>Brand<input id="spool-input-brand" type="text" placeholder="Elegoo" /></label>
+      <label>Material<input id="spool-input-material" type="text" placeholder="PLA" /></label>
+      <label>Color<input id="spool-input-color" type="text" placeholder="White" /></label>
+      <label>Color (hex)<input id="spool-input-hex" type="color" value="#888888" /></label>
+      <label>Total weight (g)<input id="spool-input-weight" type="number" placeholder="1000" min="1" /></label>
+      <div class="modal-actions">
+        <button id="btn-add-spool-cancel" class="btn btn-secondary">Cancel</button>
+        <button id="btn-add-spool-confirm" class="btn btn-primary">Add</button>
+      </div>
+    </div>
+  </div>
 
   </div><!-- /.app-body -->
 

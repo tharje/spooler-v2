@@ -40,6 +40,7 @@ HTTP_PORT = 8080
 
 PRINTERS_FILE = Path(__file__).parent / "printers.json"
 HISTORY_FILE  = Path(__file__).parent / "history.json"
+REEL_URL      = "http://localhost:8090"
 
 # Filament density g/cm³ for 1.75 mm diameter filament (default PLA)
 FILAMENT_DENSITY = 1.24
@@ -76,6 +77,28 @@ def load_history():
         return json.loads(HISTORY_FILE.read_text())
     except Exception:
         return []
+
+def reel_deduct(printer_id: str, amount_g: float):
+    """Deduct used filament from the spool assigned to this printer in Reel."""
+    try:
+        url = f"{REEL_URL}/spools?assigned_to={urllib.parse.quote(printer_id)}"
+        with urllib.request.urlopen(url, timeout=3) as resp:
+            data = json.loads(resp.read())
+        if not data:
+            return
+        spool_id = data[0]["id"]
+        body = json.dumps({"amount_g": round(amount_g, 1)}).encode()
+        req = urllib.request.Request(
+            f"{REEL_URL}/spools/{spool_id}/use",
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            result = json.loads(resp.read())
+        print(f"[Reel] {amount_g}g deducted from '{result['name']}' → {result['remaining_g']}g left")
+    except Exception as e:
+        print(f"[Reel] Deduct skipped ({e})")
 
 def append_history(entry):
     history = load_history()
@@ -305,6 +328,9 @@ class PrinterConnection:
                 label = "Completed" if completed else "Cancelled"
                 print(f"[History] {label}: {filename} – {filament_mm:.0f}mm / {filament_mm_to_grams(filament_mm)}g")
                 await broadcast_to_browsers({"type": "history_entry", "entry": entry})
+                if filament_mm > 0:
+                    loop = asyncio.get_event_loop()
+                    loop.run_in_executor(None, reel_deduct, self.id, filament_mm_to_grams(filament_mm))
 
         self._last_print_status = cur_status
 
@@ -480,11 +506,58 @@ class SPHandler(SimpleHTTPRequestHandler):
             self._json([p.to_dict() for p in printers.values()])
         elif self.path == "/api/history":
             self._json(load_history())
+        elif self.path.startswith("/api/reel"):
+            self._proxy_reel("GET", self.path[len("/api/reel"):], None)
         else:
             super().do_GET()
 
+    def do_PATCH(self):
+        if self.path.startswith("/api/reel"):
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length) if length else None
+            self._proxy_reel("PATCH", self.path[len("/api/reel"):], body)
+        else:
+            self._json({"error": "Not found"}, 404)
+
+    def _proxy_reel(self, method, path, body):
+        try:
+            req = urllib.request.Request(
+                f"{REEL_URL}{path or '/'}",
+                data=body,
+                headers={"Content-Type": "application/json"} if body else {},
+                method=method,
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = resp.read()
+                status = resp.status
+            if not data:
+                self.send_response(status)
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+            else:
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(data)
+        except urllib.error.HTTPError as e:
+            self._json({"error": str(e)}, e.code)
+        except Exception as e:
+            self._json({"error": f"Reel unreachable: {e}"}, 502)
+
+    def do_DELETE(self):
+        if self.path.startswith("/api/reel"):
+            self._proxy_reel("DELETE", self.path[len("/api/reel"):], None)
+        else:
+            self._json({"error": "Not found"}, 404)
+
     def do_POST(self):
-        if self.path.startswith("/api/upload/"):
+        if self.path.startswith("/api/reel"):
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length) if length else None
+            self._proxy_reel("POST", self.path[len("/api/reel"):], body)
+        elif self.path.startswith("/api/upload/"):
             printer_id = urllib.parse.unquote(self.path[len("/api/upload/"):])
             printer = printers.get(printer_id)
             if not printer:
@@ -507,6 +580,13 @@ class SPHandler(SimpleHTTPRequestHandler):
                 self._json({"error": str(e)}, 500)
         else:
             self._json({"error": "Not found"}, 404)
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
 
     def _json(self, data, code=200):
         body = json.dumps(data).encode()

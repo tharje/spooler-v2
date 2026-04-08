@@ -1,12 +1,16 @@
 /* Spooler – frontend app.js */
 "use strict";
 
-const WS_URL = `ws://${location.hostname}:8765`;
+const WS_URL  = `ws://${location.hostname}:8765`;
+const REEL_URL = "/api/reel";
 const RECONNECT_DELAY = 3000;
 
-let ws = null;
+let ws       = null;
 let printers = {}; // id → printer data
 let history  = []; // print history log
+let spools   = []; // spool inventory from Reel
+
+let currentPickerPrinterId = null;
 
 // ─── WebSocket connection ──────────────────────────────────────────────────────
 function connect() {
@@ -16,6 +20,7 @@ function connect() {
     console.log("[WS] Connected");
     send({ action: "list_printers" });
     loadHistory();
+    fetchSpools();
   };
 
   ws.onmessage = (ev) => {
@@ -250,6 +255,28 @@ function renderPrinter(printer) {
     </div>
     ` : ""}
 
+    <!-- Spool -->
+    ${(() => {
+      const s = spools.find(sp => sp.assigned_to === printer.id);
+      const pct = s ? Math.round(s.remaining_g / s.total_weight_g * 100) : 0;
+      return `<div class="card-spool">
+        ${s ? `
+          <div class="spool-dot" style="background:${escAttr(s.color_hex)}"></div>
+          <div class="spool-card-info">
+            <div class="spool-card-name">${escHtml(s.name)}</div>
+            <div class="spool-bar-wrap">
+              <div class="spool-bar-fill" style="width:${pct}%"></div>
+            </div>
+            <div class="spool-card-remaining">${s.remaining_g}g / ${s.total_weight_g}g</div>
+          </div>
+        ` : `<span class="spool-none">No spool assigned</span>`}
+        <button class="btn btn-sm btn-secondary spool-assign-btn"
+                onclick="openSpoolPicker('${escAttr(printer.id)}')">
+          ${s ? "Change" : "Assign"}
+        </button>
+      </div>`;
+    })()}
+
     <!-- Temperatures -->
     <div class="card-temps">
       <div class="temp-block">
@@ -438,8 +465,204 @@ const closeHistory = () => {
 
 btnHistory.addEventListener("click", openHistory);
 document.getElementById("btn-history-close").addEventListener("click", closeHistory);
-historyBackdrop.addEventListener("click", closeHistory);
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeHistory(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeHistory(); closeSpools(); } });
+
+// ─── Reel / Spools ────────────────────────────────────────────────────────────
+async function fetchSpools() {
+  try {
+    const r = await fetch(`${REEL_URL}/spools`);
+    if (!r.ok) return;
+    spools = await r.json();
+    Object.values(printers).forEach(p => renderPrinter(p));
+    renderSpoolPanel();
+  } catch (_) { /* Reel not running */ }
+}
+
+function renderSpoolPanel() {
+  const list  = document.getElementById("spools-list");
+  const empty = document.getElementById("spools-empty");
+  if (!spools.length) {
+    list.innerHTML = "";
+    empty.style.display = "";
+    return;
+  }
+  empty.style.display = "none";
+  list.innerHTML = spools.map(s => {
+    const pct = Math.round(s.remaining_g / s.total_weight_g * 100);
+    const printerName = s.assigned_to
+      ? (printers[s.assigned_to]?.name || s.assigned_to)
+      : null;
+    return `<div class="spool-row">
+      <div class="spool-dot large" style="background:${escAttr(s.color_hex)}"></div>
+      <div class="spool-row-info">
+        <div class="spool-row-name">${escHtml(s.name)}</div>
+        <div class="spool-row-meta">${escHtml(s.material)}${s.brand ? " · " + escHtml(s.brand) : ""}${printerName ? " · " + escHtml(printerName) : ""}</div>
+        <div class="spool-bar-wrap">
+          <div class="spool-bar-fill" style="width:${pct}%"></div>
+        </div>
+        <div class="spool-row-remaining">${s.remaining_g}g / ${s.total_weight_g}g (${pct}%)</div>
+      </div>
+      <button class="btn btn-sm btn-secondary" onclick="deleteSpool('${escAttr(s.id)}')">Remove</button>
+    </div>`;
+  }).join("");
+}
+
+function openSpoolPicker(printerId) {
+  currentPickerPrinterId = printerId;
+  const printer = printers[printerId];
+  document.getElementById("spool-picker-title").textContent =
+    `Assign Spool – ${printer?.name || printerId}`;
+  renderPickerList(printerId);
+  document.getElementById("modal-spool-picker").classList.add("open");
+}
+
+function renderPickerList(printerId) {
+  const list = document.getElementById("spool-picker-list");
+  const currentSpool = spools.find(s => s.assigned_to === printerId);
+  // Show unassigned spools + the one currently on this printer
+  const available = spools.filter(s => !s.assigned_to || s.assigned_to === printerId);
+  const noneSelected = !currentSpool;
+  list.innerHTML = `
+    <div class="spool-pick-item${noneSelected ? " selected" : ""}" onclick="assignSpool('${escAttr(printerId)}', null)">
+      <div class="spool-dot" style="background:var(--border)"></div>
+      <div class="spool-pick-info">
+        <div class="spool-pick-name">None – unassign</div>
+      </div>
+      ${noneSelected ? '<span class="spool-check">✓</span>' : ""}
+    </div>
+    ${available.map(s => {
+      const sel = s.assigned_to === printerId;
+      const pct = Math.round(s.remaining_g / s.total_weight_g * 100);
+      return `<div class="spool-pick-item${sel ? " selected" : ""}" onclick="assignSpool('${escAttr(printerId)}', '${escAttr(s.id)}')">
+        <div class="spool-dot" style="background:${escAttr(s.color_hex)}"></div>
+        <div class="spool-pick-info">
+          <div class="spool-pick-name">${escHtml(s.name)}</div>
+          <div class="spool-pick-meta">${escHtml(s.material)}${s.color_name ? " · " + escHtml(s.color_name) : ""} · ${s.remaining_g}g (${pct}%)</div>
+        </div>
+        ${sel ? '<span class="spool-check">✓</span>' : ""}
+      </div>`;
+    }).join("")}
+  `;
+}
+
+async function assignSpool(printerId, spoolId) {
+  try {
+    // Unassign existing spool on this printer if it's different
+    const cur = spools.find(s => s.assigned_to === printerId);
+    if (cur && cur.id !== spoolId) {
+      await fetch(`${REEL_URL}/spools/${cur.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assigned_to: null }),
+      });
+    }
+    if (spoolId) {
+      await fetch(`${REEL_URL}/spools/${spoolId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assigned_to: printerId }),
+      });
+    }
+    document.getElementById("modal-spool-picker").classList.remove("open");
+    await fetchSpools();
+    toast(spoolId ? "Spool assigned" : "Spool unassigned");
+  } catch (e) {
+    toast("Failed to assign spool", true);
+  }
+}
+
+async function deleteSpool(spoolId) {
+  if (!confirm("Remove this spool?")) return;
+  try {
+    await fetch(`${REEL_URL}/spools/${spoolId}`, { method: "DELETE" });
+    await fetchSpools();
+    toast("Spool removed");
+  } catch (e) {
+    toast("Failed to remove spool", true);
+  }
+}
+
+// Spools side panel
+const spoolsPanel = document.getElementById("panel-spools");
+const btnSpools   = document.getElementById("btn-spools");
+
+const openSpools = () => {
+  spoolsPanel.classList.add("open");
+  historyBackdrop.classList.add("open");
+  btnSpools.classList.add("active");
+  fetchSpools();
+};
+const closeSpools = () => {
+  spoolsPanel.classList.remove("open");
+  historyBackdrop.classList.remove("open");
+  btnSpools.classList.remove("active");
+};
+
+btnSpools.addEventListener("click", openSpools);
+document.getElementById("btn-spools-close").addEventListener("click", closeSpools);
+
+// Close all panels on backdrop click
+historyBackdrop.addEventListener("click", () => { closeHistory(); closeSpools(); });
+
+// Add Spool modal
+const addSpoolModal = document.getElementById("modal-add-spool");
+
+document.getElementById("btn-add-spool").addEventListener("click", () => {
+  addSpoolModal.classList.add("open");
+});
+document.getElementById("btn-add-spool-cancel").addEventListener("click", () => {
+  addSpoolModal.classList.remove("open");
+});
+addSpoolModal.addEventListener("click", (e) => {
+  if (e.target === addSpoolModal) addSpoolModal.classList.remove("open");
+});
+
+document.getElementById("btn-add-spool-confirm").addEventListener("click", async () => {
+  const name     = document.getElementById("spool-input-name").value.trim();
+  const brand    = document.getElementById("spool-input-brand").value.trim();
+  const material = document.getElementById("spool-input-material").value.trim() || "PLA";
+  const color    = document.getElementById("spool-input-color").value.trim();
+  const hex      = document.getElementById("spool-input-hex").value || "#888888";
+  const weight   = parseFloat(document.getElementById("spool-input-weight").value) || 1000;
+
+  const displayName = name || [material, color].filter(Boolean).join(" ") || "Spool";
+
+  try {
+    const r = await fetch(`${REEL_URL}/spools`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: displayName,
+        brand,
+        material,
+        color_name: color,
+        color_hex: hex,
+        total_weight_g: weight,
+      }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    addSpoolModal.classList.remove("open");
+    // Clear inputs
+    ["spool-input-name","spool-input-brand","spool-input-material",
+     "spool-input-color","spool-input-weight"].forEach(id => {
+      document.getElementById(id).value = "";
+    });
+    document.getElementById("spool-input-hex").value = "#888888";
+    await fetchSpools();
+    toast("Spool added");
+  } catch (e) {
+    toast("Failed to add spool: " + e.message, true);
+  }
+});
+
+// Spool picker cancel
+document.getElementById("btn-spool-picker-cancel").addEventListener("click", () => {
+  document.getElementById("modal-spool-picker").classList.remove("open");
+});
+document.getElementById("modal-spool-picker").addEventListener("click", (e) => {
+  if (e.target === document.getElementById("modal-spool-picker"))
+    document.getElementById("modal-spool-picker").classList.remove("open");
+});
 
 // ─── Boot ──────────────────────────────────────────────────────────────────────
 connect();
