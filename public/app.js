@@ -19,6 +19,44 @@ function spoolPct(s)        { const t = spoolTotal(s); return t > 0 ? Math.round
 function spoolAssignedTo(s) { return s.location || null; }
 
 let currentPickerPrinterId = null;
+let _materialDensityMap = {}; // material name → density g/cm³
+
+// ─── Filament metadata (brands + materials from SpoolmanDB) ───────────────────
+async function loadFilamentMeta() {
+  try {
+    const r = await fetch("/api/filament-meta");
+    if (!r.ok) return;
+    const { brands, materials } = await r.json();
+
+    _materialDensityMap = {};
+    materials.forEach(m => { _materialDensityMap[m.name] = m.density; });
+
+    const bSel = document.getElementById("spool-input-brand");
+    const mSel = document.getElementById("spool-input-material");
+
+    // Rebuild brand dropdown
+    bSel.innerHTML = '<option value="">– Select brand –</option>';
+    brands.forEach(b => {
+      const o = document.createElement("option");
+      o.value = o.textContent = b;
+      bSel.appendChild(o);
+    });
+    const bOther = document.createElement("option");
+    bOther.value = "__other__"; bOther.textContent = "Other…";
+    bSel.appendChild(bOther);
+
+    // Rebuild material dropdown
+    mSel.innerHTML = '<option value="">– Select material –</option>';
+    materials.forEach(m => {
+      const o = document.createElement("option");
+      o.value = o.textContent = m.name;
+      mSel.appendChild(o);
+    });
+    const mOther = document.createElement("option");
+    mOther.value = "__other__"; mOther.textContent = "Other…";
+    mSel.appendChild(mOther);
+  } catch (_) {}
+}
 
 // ─── WebSocket connection ──────────────────────────────────────────────────────
 function connect() {
@@ -637,6 +675,9 @@ document.getElementById("spool-input-brand").addEventListener("change", (e) => {
 document.getElementById("spool-input-material").addEventListener("change", (e) => {
   document.getElementById("spool-input-material-other").style.display =
     e.target.value === "__other__" ? "" : "none";
+  // Auto-fill density when a known material is selected
+  const density = _materialDensityMap[e.target.value];
+  if (density) document.getElementById("spool-input-density").value = density;
 });
 
 function getSpoolSelectValue(selectId, otherId) {
@@ -646,6 +687,7 @@ function getSpoolSelectValue(selectId, otherId) {
 }
 
 document.getElementById("btn-add-spool").addEventListener("click", () => {
+  loadFilamentMeta();
   addSpoolModal.classList.add("open");
 });
 document.getElementById("btn-add-spool-cancel").addEventListener("click", () => {

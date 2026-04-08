@@ -601,6 +601,17 @@ class SPHandler(SimpleHTTPRequestHandler):
                     self._json(item)
                     return
             self._json({"error": "Not found"}, 404)
+        elif self.path == "/api/filament-meta":
+            db = get_spoolman_db()
+            brands = sorted({item.get("manufacturer", "") for item in db if item.get("manufacturer")})
+            mat_map = {}
+            for item in db:
+                mat = item.get("material") or ""
+                den = item.get("density")
+                if mat and mat not in mat_map and den:
+                    mat_map[mat] = den
+            materials = [{"name": m, "density": mat_map[m]} for m in sorted(mat_map)]
+            self._json({"brands": brands, "materials": materials})
         elif self.path.startswith("/api/spoolman"):
             self._proxy_spoolman("GET", self.path[len("/api/spoolman"):], None)
         else:
