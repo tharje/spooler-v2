@@ -137,10 +137,37 @@
     </div>
   </div>
 
+  <!-- Barcode scanner modal -->
+  <div id="modal-scanner" class="modal">
+    <div class="modal-box modal-box-wide">
+      <h3>Scan EAN-kode</h3>
+      <div class="scanner-viewport">
+        <video id="scanner-video" autoplay playsinline muted></video>
+        <div class="scanner-frame"></div>
+      </div>
+      <p class="scanner-hint">Hold strekkoden stille i rammen</p>
+      <div class="modal-actions">
+        <button id="btn-scanner-cancel" class="btn btn-secondary">Avbryt</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Add Spool modal -->
   <div id="modal-add-spool" class="modal">
     <div class="modal-box">
       <h3>Add Spool</h3>
+      <div class="ean-row">
+        <label style="flex:1">EAN-kode
+          <input id="spool-input-ean" type="text" placeholder="Scan eller skriv inn EAN" inputmode="numeric" />
+        </label>
+        <button id="btn-scan-ean" class="btn btn-secondary btn-sm" title="Scan med kamera" style="align-self:flex-end">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 9V5a2 2 0 0 1 2-2h4M3 15v4a2 2 0 0 0 2 2h4M21 9V5a2 2 0 0 0-2-2h-4M21 15v4a2 2 0 0 1-2 2h-4"/>
+            <line x1="8" y1="12" x2="8" y2="12"/><line x1="12" y1="12" x2="16" y2="12"/>
+          </svg>
+          Scan
+        </button>
+      </div>
       <label>Brand
         <select id="spool-input-brand">
           <option value="">– Select brand –</option>

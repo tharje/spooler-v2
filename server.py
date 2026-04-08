@@ -38,9 +38,14 @@ DISCOVERY_PORT = 3000
 WS_SERVER_PORT = 8765
 HTTP_PORT = 8080
 
-PRINTERS_FILE = Path(__file__).parent / "printers.json"
-HISTORY_FILE  = Path(__file__).parent / "history.json"
-REEL_URL      = "http://localhost:8090"
+PRINTERS_FILE    = Path(__file__).parent / "printers.json"
+HISTORY_FILE     = Path(__file__).parent / "history.json"
+REEL_URL         = "http://localhost:8090"
+SPOOLMAN_DB_URL  = "https://donkie.github.io/SpoolmanDB/filaments.json"
+SPOOLMAN_DB_TTL  = 3600  # re-fetch at most once per hour
+
+_spoolman_db          = None
+_spoolman_db_fetched  = 0.0
 
 # Filament density g/cm³ for 1.75 mm diameter filament (default PLA)
 FILAMENT_DENSITY = 1.24
@@ -77,6 +82,21 @@ def load_history():
         return json.loads(HISTORY_FILE.read_text())
     except Exception:
         return []
+
+def get_spoolman_db():
+    global _spoolman_db, _spoolman_db_fetched
+    if _spoolman_db is not None and time.time() - _spoolman_db_fetched < SPOOLMAN_DB_TTL:
+        return _spoolman_db
+    try:
+        with urllib.request.urlopen(SPOOLMAN_DB_URL, timeout=10) as resp:
+            _spoolman_db = json.loads(resp.read())
+            _spoolman_db_fetched = time.time()
+            print(f"[SpoolmanDB] Loaded {len(_spoolman_db)} filaments")
+    except Exception as e:
+        print(f"[SpoolmanDB] Fetch failed: {e}")
+        if _spoolman_db is None:
+            _spoolman_db = []
+    return _spoolman_db
 
 def reel_deduct(printer_id: str, amount_g: float):
     """Deduct used filament from the spool assigned to this printer in Reel."""
@@ -506,6 +526,20 @@ class SPHandler(SimpleHTTPRequestHandler):
             self._json([p.to_dict() for p in printers.values()])
         elif self.path == "/api/history":
             self._json(load_history())
+        elif self.path.startswith("/api/lookup-ean"):
+            qs     = urllib.parse.urlparse(self.path).query
+            params = urllib.parse.parse_qs(qs)
+            ean    = params.get("ean", [""])[0].strip()
+            if not ean:
+                self._json({"error": "ean required"}, 400)
+                return
+            db = get_spoolman_db()
+            for item in db:
+                codes = item.get("ean") or []
+                if ean in codes:
+                    self._json(item)
+                    return
+            self._json({"error": "Not found"}, 404)
         elif self.path.startswith("/api/reel"):
             self._proxy_reel("GET", self.path[len("/api/reel"):], None)
         else:

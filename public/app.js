@@ -660,6 +660,7 @@ document.getElementById("btn-add-spool-confirm").addEventListener("click", async
     if (!r.ok) throw new Error(await r.text());
     addSpoolModal.classList.remove("open");
     // Reset form
+    document.getElementById("spool-input-ean").value = "";
     document.getElementById("spool-input-brand").value = "";
     document.getElementById("spool-input-material").value = "";
     document.getElementById("spool-input-brand-other").style.display = "none";
@@ -674,6 +675,108 @@ document.getElementById("btn-add-spool-confirm").addEventListener("click", async
   } catch (e) {
     toast("Failed to add spool: " + e.message, true);
   }
+});
+
+// ─── EAN lookup + barcode scanner ─────────────────────────────────────────────
+let scannerStream   = null;
+let scannerInterval = null;
+
+async function lookupEan(ean) {
+  if (!ean) return;
+  document.getElementById("spool-input-ean").value = ean;
+  try {
+    const r = await fetch(`/api/lookup-ean?ean=${encodeURIComponent(ean)}`);
+    if (r.status === 404) { toast(`EAN ${ean} ikke funnet i database`, true); return; }
+    if (!r.ok) throw new Error(await r.text());
+    const d = await r.json();
+
+    const brand    = d.manufacturer || "";
+    const material = d.material     || "";
+    const color    = d.color_name   || "";
+    const hex      = d.color_hex ? "#" + d.color_hex.replace(/^#/, "") : "#888888";
+    const weight   = d.weight ?? 1000;
+
+    // Brand dropdown
+    const bSel = document.getElementById("spool-input-brand");
+    const bOther = document.getElementById("spool-input-brand-other");
+    if ([...bSel.options].some(o => o.value === brand)) {
+      bSel.value = brand; bOther.style.display = "none";
+    } else if (brand) {
+      bSel.value = "__other__"; bOther.value = brand; bOther.style.display = "";
+    }
+
+    // Material dropdown
+    const mSel = document.getElementById("spool-input-material");
+    const mOther = document.getElementById("spool-input-material-other");
+    if ([...mSel.options].some(o => o.value === material)) {
+      mSel.value = material; mOther.style.display = "none";
+    } else if (material) {
+      mSel.value = "__other__"; mOther.value = material; mOther.style.display = "";
+    }
+
+    document.getElementById("spool-input-color").value  = color;
+    document.getElementById("spool-input-hex").value    = hex;
+    document.getElementById("spool-input-weight").value = weight;
+
+    toast(`Funnet: ${d.name || [brand, material, color].filter(Boolean).join(" ")}`);
+  } catch (e) {
+    toast("Søk feilet: " + e.message, true);
+  }
+}
+
+// EAN field: lookup on Enter
+document.getElementById("spool-input-ean").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") lookupEan(e.target.value.trim());
+});
+// Lookup on paste after short delay (scanner keyboards send paste then Enter)
+document.getElementById("spool-input-ean").addEventListener("input", (e) => {
+  const v = e.target.value.trim();
+  if (v.length >= 8 && /^\d+$/.test(v)) {
+    clearTimeout(e.target._eanTimer);
+    e.target._eanTimer = setTimeout(() => lookupEan(v), 300);
+  }
+});
+
+// Camera scanner
+async function openScanner() {
+  if (!("BarcodeDetector" in window)) {
+    toast("Barcode-scanner støttes ikke i denne nettleseren (bruk Chrome)", true);
+    return;
+  }
+  try {
+    scannerStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    const video = document.getElementById("scanner-video");
+    video.srcObject = scannerStream;
+    document.getElementById("modal-scanner").classList.add("open");
+    const detector = new BarcodeDetector({ formats: ["ean_13","ean_8","upc_a","upc_e","code_128"] });
+    scannerInterval = setInterval(async () => {
+      if (!video.readyState || video.readyState < 2) return;
+      try {
+        const codes = await detector.detect(video);
+        if (codes.length) {
+          closeScanner();
+          lookupEan(codes[0].rawValue);
+        }
+      } catch (_) {}
+    }, 250);
+  } catch (e) {
+    toast("Kamera ikke tilgjengelig: " + e.message, true);
+  }
+}
+
+function closeScanner() {
+  clearInterval(scannerInterval);
+  scannerInterval = null;
+  if (scannerStream) { scannerStream.getTracks().forEach(t => t.stop()); scannerStream = null; }
+  document.getElementById("modal-scanner").classList.remove("open");
+}
+
+document.getElementById("btn-scan-ean").addEventListener("click", openScanner);
+document.getElementById("btn-scanner-cancel").addEventListener("click", closeScanner);
+document.getElementById("modal-scanner").addEventListener("click", (e) => {
+  if (e.target === document.getElementById("modal-scanner")) closeScanner();
 });
 
 // Spool picker cancel
