@@ -14,6 +14,8 @@ import threading
 import urllib.request
 import urllib.parse
 import os
+import ssl
+import subprocess
 import sys
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
@@ -36,13 +38,42 @@ except ImportError:
 PRINTER_PORT = 3030
 DISCOVERY_PORT = 3000
 WS_SERVER_PORT = 8765
-HTTP_PORT = 8080
+HTTP_PORT  = 8080
+HTTPS_PORT = 8443
 
 DATA_DIR         = Path(os.getenv("DATA_DIR", Path(__file__).parent))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 PRINTERS_FILE    = DATA_DIR / "printers.json"
 HISTORY_FILE     = DATA_DIR / "history.json"
 REEL_URL         = "http://localhost:8090"
+CERT_FILE        = DATA_DIR / "cert.pem"
+KEY_FILE         = DATA_DIR / "key.pem"
+
+def ensure_ssl_cert():
+    """Generate a self-signed cert if one doesn't exist yet."""
+    if CERT_FILE.exists() and KEY_FILE.exists():
+        return True
+    try:
+        # Get local IP for the SAN so the cert covers the real address
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        local_ip = "127.0.0.1"
+    try:
+        subprocess.run([
+            "openssl", "req", "-x509", "-newkey", "rsa:2048",
+            "-keyout", str(KEY_FILE), "-out", str(CERT_FILE),
+            "-days", "3650", "-nodes",
+            "-subj", f"/CN=spooler.local",
+            "-addext", f"subjectAltName=IP:{local_ip},IP:127.0.0.1,DNS:localhost",
+        ], check=True, capture_output=True)
+        print(f"[SSL] Certificate generated (IP: {local_ip})")
+        return True
+    except Exception as e:
+        print(f"[SSL] Could not generate certificate: {e}")
+        return False
 SPOOLMAN_DB_URL  = "https://donkie.github.io/SpoolmanDB/filaments.json"
 SPOOLMAN_DB_TTL  = 3600  # re-fetch at most once per hour
 
@@ -540,6 +571,16 @@ class SPHandler(SimpleHTTPRequestHandler):
         pass  # silence access log
 
     def do_GET(self):
+        if self.path == "/cert.pem":
+            # Let users download and install the self-signed cert on their device
+            data = CERT_FILE.read_bytes() if CERT_FILE.exists() else b""
+            self.send_response(200)
+            self.send_header("Content-Type", "application/x-pem-file")
+            self.send_header("Content-Disposition", 'attachment; filename="spooler-cert.pem"')
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if self.path == "/api/printers":
             self._json([p.to_dict() for p in printers.values()])
         elif self.path == "/api/history":
@@ -655,6 +696,16 @@ def run_http(port):
     print(f"[HTTP] Serving on http://0.0.0.0:{port}")
     server.serve_forever()
 
+def run_https(port):
+    if not ensure_ssl_cert():
+        return
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.load_cert_chain(str(CERT_FILE), str(KEY_FILE))
+    server = HTTPServer(("0.0.0.0", port), SPHandler)
+    server.socket = ctx.wrap_socket(server.socket, server_side=True)
+    print(f"[HTTPS] Serving on https://0.0.0.0:{port}")
+    server.serve_forever()
+
 
 # ─── Main ──────────────────────────────────────────────────────────────────────
 
@@ -673,16 +724,19 @@ async def main():
     if printers:
         print(f"[Config] Loaded {len(printers)} saved printer(s)")
 
-    # Start HTTP server in background thread
+    # Start HTTP + HTTPS servers in background threads
     http_thread = threading.Thread(target=run_http, args=(HTTP_PORT,), daemon=True)
     http_thread.start()
+    https_thread = threading.Thread(target=run_https, args=(HTTPS_PORT,), daemon=True)
+    https_thread.start()
 
     # Start browser WS server
     print(f"[WS]   Browser WebSocket on ws://0.0.0.0:{WS_SERVER_PORT}")
     async with ws_serve(browser_handler, "0.0.0.0", WS_SERVER_PORT):
         print("\n" + "─" * 50)
         print(f"  Spooler is running!")
-        print(f"  Open: http://localhost:{HTTP_PORT}")
+        print(f"  HTTP:  http://localhost:{HTTP_PORT}")
+        print(f"  HTTPS: https://localhost:{HTTPS_PORT}  ← use this for PWA")
         print("─" * 50 + "\n")
         await asyncio.Future()  # run forever
 
