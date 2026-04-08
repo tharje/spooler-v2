@@ -547,22 +547,44 @@ function renderSpoolPanel() {
   }
   empty.style.display = "none";
   list.innerHTML = spools.map(s => {
-    const pct = spoolPct(s);
+    const pct        = spoolPct(s);
+    const remaining  = spoolRemaining(s);
+    const total      = spoolTotal(s);
+    const color      = spoolColorHex(s);
+    const material   = s.filament?.material || "?";
+    const vendor     = s.filament?.vendor?.name || "";
+    const colorName  = s.filament?.name || "";
     const assignedTo = spoolAssignedTo(s);
     const printerName = assignedTo ? (printers[assignedTo]?.name || assignedTo) : null;
-    const material = s.filament?.material || "";
-    const brand    = s.filament?.vendor?.name || "";
-    return `<div class="spool-row">
-      <div class="spool-dot large" style="background:${escAttr(spoolColorHex(s))}"></div>
-      <div class="spool-row-info">
-        <div class="spool-row-name">${escHtml(spoolName(s))}</div>
-        <div class="spool-row-meta">${escHtml(material)}${brand ? " · " + escHtml(brand) : ""}${printerName ? " · " + escHtml(printerName) : ""}</div>
-        <div class="spool-bar-wrap">
-          <div class="spool-bar-fill" style="width:${pct}%"></div>
+    const isEmpty    = remaining === 0;
+    const isLow      = !isEmpty && total > 0 && pct < 10;
+    const barColor   = isEmpty ? "var(--red)" : isLow ? "var(--yellow)" : null;
+
+    return `<div class="spool-card${isEmpty ? " spool-empty" : isLow ? " spool-low" : ""}">
+      <div class="spool-card-swatch" style="background:${escAttr(color)}"></div>
+      <div class="spool-card-body">
+        <div class="spool-card-top">
+          <div class="spool-card-vendor">${escHtml(vendor || "Unknown brand")}</div>
+          <span class="spool-material-badge">${escHtml(material)}</span>
         </div>
-        <div class="spool-row-remaining">${spoolRemaining(s)}g / ${spoolTotal(s)}g (${pct}%)</div>
+        <div class="spool-card-colorname">${escHtml(colorName || "—")}</div>
+        <div class="spool-weight-row">
+          <span>${remaining}g / ${total}g</span>
+          <span class="spool-weight-pct">${pct}%${isEmpty ? ' <span class="spool-tag empty">Empty</span>' : isLow ? ' <span class="spool-tag low">Low</span>' : ""}</span>
+        </div>
+        <div class="spool-bar-wrap">
+          <div class="spool-bar-fill" style="width:${pct}%${barColor ? ";background:" + barColor : ""}"></div>
+        </div>
+        <div class="spool-card-footer">
+          ${printerName ? `<span class="spool-printer-badge">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+            </svg>
+            ${escHtml(printerName)}
+          </span>` : "<span></span>"}
+          <button class="btn btn-sm btn-secondary" onclick="deleteSpool('${escAttr(s.id)}')">Remove</button>
+        </div>
       </div>
-      <button class="btn btn-sm btn-secondary" onclick="deleteSpool('${escAttr(s.id)}')">Remove</button>
     </div>`;
   }).join("");
 }

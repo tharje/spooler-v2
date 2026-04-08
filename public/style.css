@@ -458,7 +458,7 @@ main {
 .side-panel {
   position: fixed;
   top: 0; right: 0;
-  width: min(680px, 100vw);
+  width: min(760px, 100vw);
   height: 100vh;
   background: var(--surface);
   border-left: 1px solid var(--border);
@@ -595,20 +595,111 @@ main {
 .spool-tag.low   { background: rgba(234,179,8,.2);  color: var(--yellow); }
 
 /* ─── Spools side panel ───────────────────────────────────────────────────── */
-.spool-row {
+#spools-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+
+.spool-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  transition: border-color .2s;
+}
+.spool-card:hover { border-color: #3a3d50; }
+.spool-card.spool-empty { border-color: rgba(239,68,68,.35); background: rgba(239,68,68,.04); }
+.spool-card.spool-low   { border-color: rgba(234,179,8,.35);  background: rgba(234,179,8,.04); }
+
+.spool-card-swatch {
+  width: 40px;
+  flex-shrink: 0;
+}
+
+.spool-card-body {
+  flex: 1;
+  padding: 12px 14px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.spool-card-top {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 14px 20px;
-  border-bottom: 1px solid var(--border);
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 1px;
 }
-.spool-row:last-child { border-bottom: none; }
-.spool-row:hover { background: var(--surface2); }
 
-.spool-row-info { flex: 1; min-width: 0; }
-.spool-row-name { font-size: 14px; font-weight: 600; }
-.spool-row-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
-.spool-row-remaining { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+.spool-card-vendor {
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spool-material-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(59,130,246,.15);
+  color: var(--blue);
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+}
+
+.spool-card-colorname {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spool-weight-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.spool-weight-pct { font-weight: 700; color: var(--text); }
+
+.spool-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  gap: 6px;
+  min-height: 24px;
+}
+
+.spool-printer-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--surface);
+  padding: 2px 8px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 150px;
+}
+.spool-printer-badge svg { width: 10px; height: 10px; flex-shrink: 0; }
 
 /* ─── Spool picker modal ──────────────────────────────────────────────────── */
 .modal-box-wide { width: min(500px, 92vw); }
