@@ -845,4 +845,5 @@ document.getElementById("modal-spool-picker").addEventListener("click", (e) => {
 });
 
 // ─── Boot ──────────────────────────────────────────────────────────────────────
+document.getElementById("btn-spoolman-ui").href = `http://${location.hostname}:7912`;
 connect();
