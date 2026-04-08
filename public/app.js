@@ -685,7 +685,7 @@ document.getElementById("btn-add-spool-confirm").addEventListener("click", async
     }
 
     // Step 2: create filament
-    const filamentBody = { material, weight, color_hex: hex };
+    const filamentBody = { material, weight, color_hex: hex, density: 1.24, diameter: 1.75 };
     if (color) filamentBody.name = color;
     if (vendorId) filamentBody.vendor_id = vendorId;
     const fr = await fetch(`${SPOOLMAN_URL}/filament`, {
