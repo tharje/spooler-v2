@@ -2,13 +2,21 @@
 "use strict";
 
 const WS_URL  = `${location.protocol === "https:" ? "wss" : "ws"}://${location.hostname}:8765`;
-const REEL_URL = "/api/reel";
+const SPOOLMAN_URL = "/api/spoolman/api/v1";
 const RECONNECT_DELAY = 3000;
 
 let ws       = null;
 let printers = {}; // id → printer data
 let history  = []; // print history log
-let spools   = []; // spool inventory from Reel
+let spools   = []; // spool inventory from Spoolman
+
+// ─── Spoolman field helpers ────────────────────────────────────────────────────
+function spoolName(s)       { return [s.filament?.vendor?.name, s.filament?.material, s.filament?.name].filter(Boolean).join(" ") || `Spool ${s.id}`; }
+function spoolColorHex(s)   { const h = s.filament?.color_hex || "888888"; return h.startsWith("#") ? h : "#" + h; }
+function spoolRemaining(s)  { return Math.round(s.remaining_weight ?? 0); }
+function spoolTotal(s)      { return Math.round(s.initial_weight ?? 1000); }
+function spoolPct(s)        { const t = spoolTotal(s); return t > 0 ? Math.round(spoolRemaining(s) / t * 100) : 0; }
+function spoolAssignedTo(s) { return s.location || null; }
 
 let currentPickerPrinterId = null;
 
@@ -73,12 +81,12 @@ function handleMessage(msg) {
     case "spool_empty":
       spools = spools.map(s => s.id === msg.spool.id ? msg.spool : s);
       Object.values(printers).forEach(p => renderPrinter(p));
-      toast(`⚠ Spool empty: ${msg.spool.name} — assign a new spool`, true);
+      toast(`⚠ Spool empty: ${spoolName(msg.spool)} — assign a new spool`, true);
       break;
     case "spool_low":
       spools = spools.map(s => s.id === msg.spool.id ? msg.spool : s);
       Object.values(printers).forEach(p => renderPrinter(p));
-      toast(`Spool low: ${msg.spool.name} — ${msg.spool.remaining_g}g remaining`);
+      toast(`Spool low: ${spoolName(msg.spool)} — ${spoolRemaining(msg.spool)}g remaining`);
       break;
   }
 }
@@ -267,20 +275,20 @@ function renderPrinter(printer) {
 
     <!-- Spool -->
     ${(() => {
-      const s = spools.find(sp => sp.assigned_to === printer.id);
-      const pct = s && s.total_weight_g > 0 ? Math.round(s.remaining_g / s.total_weight_g * 100) : 0;
-      const isEmpty = s && s.remaining_g === 0;
-      const isLow   = s && !isEmpty && s.total_weight_g > 0 && pct < 10;
+      const s = spools.find(sp => spoolAssignedTo(sp) === printer.id);
+      const pct = s ? spoolPct(s) : 0;
+      const isEmpty = s && spoolRemaining(s) === 0;
+      const isLow   = s && !isEmpty && spoolTotal(s) > 0 && pct < 10;
       const barColor = isEmpty ? "var(--red)" : isLow ? "var(--yellow)" : null;
       return `<div class="card-spool${isEmpty ? " spool-empty" : isLow ? " spool-low" : ""}">
         ${s ? `
-          <div class="spool-dot" style="background:${escAttr(s.color_hex)}"></div>
+          <div class="spool-dot" style="background:${escAttr(spoolColorHex(s))}"></div>
           <div class="spool-card-info">
-            <div class="spool-card-name">${escHtml(s.name)}${isEmpty ? ' <span class="spool-tag empty">Empty</span>' : isLow ? ' <span class="spool-tag low">Low</span>' : ""}</div>
+            <div class="spool-card-name">${escHtml(spoolName(s))}${isEmpty ? ' <span class="spool-tag empty">Empty</span>' : isLow ? ' <span class="spool-tag low">Low</span>' : ""}</div>
             <div class="spool-bar-wrap">
               <div class="spool-bar-fill" style="width:${pct}%${barColor ? ";background:" + barColor : ""}"></div>
             </div>
-            <div class="spool-card-remaining">${s.remaining_g}g / ${s.total_weight_g}g</div>
+            <div class="spool-card-remaining">${spoolRemaining(s)}g / ${spoolTotal(s)}g</div>
           </div>
         ` : `<span class="spool-none">No spool assigned</span>`}
         <button class="btn btn-sm btn-secondary spool-assign-btn"
@@ -480,15 +488,15 @@ btnHistory.addEventListener("click", openHistory);
 document.getElementById("btn-history-close").addEventListener("click", closeHistory);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeHistory(); closeSpools(); } });
 
-// ─── Reel / Spools ────────────────────────────────────────────────────────────
+// ─── Spoolman / Spools ────────────────────────────────────────────────────────
 async function fetchSpools() {
   try {
-    const r = await fetch(`${REEL_URL}/spools`);
+    const r = await fetch(`${SPOOLMAN_URL}/spool`);
     if (!r.ok) return;
     spools = await r.json();
     Object.values(printers).forEach(p => renderPrinter(p));
     renderSpoolPanel();
-  } catch (_) { /* Reel not running */ }
+  } catch (_) { /* Spoolman not running */ }
 }
 
 function renderSpoolPanel() {
@@ -501,19 +509,20 @@ function renderSpoolPanel() {
   }
   empty.style.display = "none";
   list.innerHTML = spools.map(s => {
-    const pct = Math.round(s.remaining_g / s.total_weight_g * 100);
-    const printerName = s.assigned_to
-      ? (printers[s.assigned_to]?.name || s.assigned_to)
-      : null;
+    const pct = spoolPct(s);
+    const assignedTo = spoolAssignedTo(s);
+    const printerName = assignedTo ? (printers[assignedTo]?.name || assignedTo) : null;
+    const material = s.filament?.material || "";
+    const brand    = s.filament?.vendor?.name || "";
     return `<div class="spool-row">
-      <div class="spool-dot large" style="background:${escAttr(s.color_hex)}"></div>
+      <div class="spool-dot large" style="background:${escAttr(spoolColorHex(s))}"></div>
       <div class="spool-row-info">
-        <div class="spool-row-name">${escHtml(s.name)}</div>
-        <div class="spool-row-meta">${escHtml(s.material)}${s.brand ? " · " + escHtml(s.brand) : ""}${printerName ? " · " + escHtml(printerName) : ""}</div>
+        <div class="spool-row-name">${escHtml(spoolName(s))}</div>
+        <div class="spool-row-meta">${escHtml(material)}${brand ? " · " + escHtml(brand) : ""}${printerName ? " · " + escHtml(printerName) : ""}</div>
         <div class="spool-bar-wrap">
           <div class="spool-bar-fill" style="width:${pct}%"></div>
         </div>
-        <div class="spool-row-remaining">${s.remaining_g}g / ${s.total_weight_g}g (${pct}%)</div>
+        <div class="spool-row-remaining">${spoolRemaining(s)}g / ${spoolTotal(s)}g (${pct}%)</div>
       </div>
       <button class="btn btn-sm btn-secondary" onclick="deleteSpool('${escAttr(s.id)}')">Remove</button>
     </div>`;
@@ -531,9 +540,9 @@ function openSpoolPicker(printerId) {
 
 function renderPickerList(printerId) {
   const list = document.getElementById("spool-picker-list");
-  const currentSpool = spools.find(s => s.assigned_to === printerId);
+  const currentSpool = spools.find(s => spoolAssignedTo(s) === printerId);
   // Show unassigned spools + the one currently on this printer
-  const available = spools.filter(s => !s.assigned_to || s.assigned_to === printerId);
+  const available = spools.filter(s => !spoolAssignedTo(s) || spoolAssignedTo(s) === printerId);
   const noneSelected = !currentSpool;
   list.innerHTML = `
     <div class="spool-pick-item${noneSelected ? " selected" : ""}" onclick="assignSpool('${escAttr(printerId)}', null)">
@@ -544,13 +553,13 @@ function renderPickerList(printerId) {
       ${noneSelected ? '<span class="spool-check">✓</span>' : ""}
     </div>
     ${available.map(s => {
-      const sel = s.assigned_to === printerId;
-      const pct = Math.round(s.remaining_g / s.total_weight_g * 100);
+      const sel = spoolAssignedTo(s) === printerId;
+      const pct = spoolPct(s);
       return `<div class="spool-pick-item${sel ? " selected" : ""}" onclick="assignSpool('${escAttr(printerId)}', '${escAttr(s.id)}')">
-        <div class="spool-dot" style="background:${escAttr(s.color_hex)}"></div>
+        <div class="spool-dot" style="background:${escAttr(spoolColorHex(s))}"></div>
         <div class="spool-pick-info">
-          <div class="spool-pick-name">${escHtml(s.name)}</div>
-          <div class="spool-pick-meta">${escHtml(s.material)}${s.color_name ? " · " + escHtml(s.color_name) : ""} · ${s.remaining_g}g (${pct}%)</div>
+          <div class="spool-pick-name">${escHtml(spoolName(s))}</div>
+          <div class="spool-pick-meta">${escHtml(s.filament?.material || "")} · ${spoolRemaining(s)}g (${pct}%)</div>
         </div>
         ${sel ? '<span class="spool-check">✓</span>' : ""}
       </div>`;
@@ -561,19 +570,19 @@ function renderPickerList(printerId) {
 async function assignSpool(printerId, spoolId) {
   try {
     // Unassign existing spool on this printer if it's different
-    const cur = spools.find(s => s.assigned_to === printerId);
+    const cur = spools.find(s => spoolAssignedTo(s) === printerId);
     if (cur && cur.id !== spoolId) {
-      await fetch(`${REEL_URL}/spools/${cur.id}`, {
+      await fetch(`${SPOOLMAN_URL}/spool/${cur.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assigned_to: null }),
+        body: JSON.stringify({ location: "" }),
       });
     }
     if (spoolId) {
-      await fetch(`${REEL_URL}/spools/${spoolId}`, {
+      await fetch(`${SPOOLMAN_URL}/spool/${spoolId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assigned_to: printerId }),
+        body: JSON.stringify({ location: printerId }),
       });
     }
     document.getElementById("modal-spool-picker").classList.remove("open");
@@ -587,7 +596,7 @@ async function assignSpool(printerId, spoolId) {
 async function deleteSpool(spoolId) {
   if (!confirm("Remove this spool?")) return;
   try {
-    await fetch(`${REEL_URL}/spools/${spoolId}`, { method: "DELETE" });
+    await fetch(`${SPOOLMAN_URL}/spool/${spoolId}`, { method: "DELETE" });
     await fetchSpools();
     toast("Spool removed");
   } catch (e) {
@@ -650,27 +659,51 @@ document.getElementById("btn-add-spool-confirm").addEventListener("click", async
   const brand    = getSpoolSelectValue("spool-input-brand", "spool-input-brand-other");
   const material = getSpoolSelectValue("spool-input-material", "spool-input-material-other") || "PLA";
   const color    = document.getElementById("spool-input-color").value.trim();
-  const hex      = document.getElementById("spool-input-hex").value || "#888888";
+  const hex      = (document.getElementById("spool-input-hex").value || "#888888").replace(/^#/, "");
   const weight   = parseFloat(document.getElementById("spool-input-weight").value) || 1000;
 
   if (!material) { toast("Select a material", true); return; }
 
-  const displayName = [brand, material, color].filter(Boolean).join(" ");
-
   try {
-    const r = await fetch(`${REEL_URL}/spools`, {
+    // Step 1: find or create vendor
+    let vendorId = null;
+    if (brand) {
+      const vr = await fetch(`${SPOOLMAN_URL}/vendor?name=${encodeURIComponent(brand)}`);
+      if (!vr.ok) throw new Error("Failed to fetch vendors");
+      const vendors = await vr.json();
+      if (vendors.length > 0) {
+        vendorId = vendors[0].id;
+      } else {
+        const cv = await fetch(`${SPOOLMAN_URL}/vendor`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: brand }),
+        });
+        if (!cv.ok) throw new Error(await cv.text());
+        vendorId = (await cv.json()).id;
+      }
+    }
+
+    // Step 2: create filament
+    const filamentBody = { material, weight, color_hex: hex };
+    if (color) filamentBody.name = color;
+    if (vendorId) filamentBody.vendor_id = vendorId;
+    const fr = await fetch(`${SPOOLMAN_URL}/filament`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: displayName,
-        brand,
-        material,
-        color_name: color,
-        color_hex: hex,
-        total_weight_g: weight,
-      }),
+      body: JSON.stringify(filamentBody),
     });
-    if (!r.ok) throw new Error(await r.text());
+    if (!fr.ok) throw new Error(await fr.text());
+    const filament = await fr.json();
+
+    // Step 3: create spool
+    const sr = await fetch(`${SPOOLMAN_URL}/spool`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filament_id: filament.id, initial_weight: weight }),
+    });
+    if (!sr.ok) throw new Error(await sr.text());
+
     addSpoolModal.classList.remove("open");
     // Reset form
     document.getElementById("spool-input-ean").value = "";

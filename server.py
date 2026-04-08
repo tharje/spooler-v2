@@ -45,7 +45,7 @@ DATA_DIR         = Path(os.getenv("DATA_DIR", Path(__file__).parent))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 PRINTERS_FILE    = DATA_DIR / "printers.json"
 HISTORY_FILE     = DATA_DIR / "history.json"
-REEL_URL         = "http://localhost:8090"
+SPOOLMAN_URL     = "http://localhost:7912"
 CERT_FILE        = DATA_DIR / "cert.pem"
 KEY_FILE         = DATA_DIR / "key.pem"
 
@@ -131,27 +131,29 @@ def get_spoolman_db():
             _spoolman_db = []
     return _spoolman_db
 
-def reel_deduct(printer_id: str, amount_g: float):
-    """Deduct used filament from the spool assigned to this printer in Reel."""
+def spoolman_deduct(printer_id: str, amount_g: float):
+    """Deduct used filament from the spool assigned to this printer in Spoolman."""
     try:
-        url = f"{REEL_URL}/spools?assigned_to={urllib.parse.quote(printer_id)}"
+        url = f"{SPOOLMAN_URL}/api/v1/spool?location={urllib.parse.quote(printer_id)}"
         with urllib.request.urlopen(url, timeout=3) as resp:
             data = json.loads(resp.read())
         if not data:
             return
-        spool_id = data[0]["id"]
-        body = json.dumps({"amount_g": round(amount_g, 1)}).encode()
+        spool = data[0]
+        spool_id = spool["id"]
+        body = json.dumps({"use_weight": round(amount_g, 1)}).encode()
         req = urllib.request.Request(
-            f"{REEL_URL}/spools/{spool_id}/use",
+            f"{SPOOLMAN_URL}/api/v1/spool/{spool_id}/use",
             data=body,
             headers={"Content-Type": "application/json"},
-            method="POST",
+            method="PUT",
         )
         with urllib.request.urlopen(req, timeout=3) as resp:
             result = json.loads(resp.read())
-        remaining = result["remaining_g"]
-        total     = result["total_weight_g"]
-        print(f"[Reel] {amount_g}g deducted from '{result['name']}' → {remaining}g left")
+        remaining = result.get("remaining_weight", 0)
+        total     = result.get("initial_weight", 0)
+        name      = result.get("filament", {}).get("name") or f"Spool {spool_id}"
+        print(f"[Spoolman] {amount_g}g deducted from '{name}' → {remaining}g left")
 
         # Notify browser if spool is empty or critically low (< 10 %)
         loop = asyncio.get_event_loop()
@@ -167,7 +169,7 @@ def reel_deduct(printer_id: str, amount_g: float):
         if msg:
             asyncio.run_coroutine_threadsafe(broadcast_to_browsers(msg), loop)
     except Exception as e:
-        print(f"[Reel] Deduct skipped ({e})")
+        print(f"[Spoolman] Deduct skipped ({e})")
 
 def append_history(entry):
     history = load_history()
@@ -399,7 +401,7 @@ class PrinterConnection:
                 await broadcast_to_browsers({"type": "history_entry", "entry": entry})
                 if filament_mm > 0:
                     loop = asyncio.get_event_loop()
-                    loop.run_in_executor(None, reel_deduct, self.id, filament_mm_to_grams(filament_mm))
+                    loop.run_in_executor(None, spoolman_deduct, self.id, filament_mm_to_grams(filament_mm))
 
         self._last_print_status = cur_status
 
@@ -599,23 +601,23 @@ class SPHandler(SimpleHTTPRequestHandler):
                     self._json(item)
                     return
             self._json({"error": "Not found"}, 404)
-        elif self.path.startswith("/api/reel"):
-            self._proxy_reel("GET", self.path[len("/api/reel"):], None)
+        elif self.path.startswith("/api/spoolman"):
+            self._proxy_spoolman("GET", self.path[len("/api/spoolman"):], None)
         else:
             super().do_GET()
 
     def do_PATCH(self):
-        if self.path.startswith("/api/reel"):
+        if self.path.startswith("/api/spoolman"):
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length) if length else None
-            self._proxy_reel("PATCH", self.path[len("/api/reel"):], body)
+            self._proxy_spoolman("PATCH", self.path[len("/api/spoolman"):], body)
         else:
             self._json({"error": "Not found"}, 404)
 
-    def _proxy_reel(self, method, path, body):
+    def _proxy_spoolman(self, method, path, body):
         try:
             req = urllib.request.Request(
-                f"{REEL_URL}{path or '/'}",
+                f"{SPOOLMAN_URL}{path or '/'}",
                 data=body,
                 headers={"Content-Type": "application/json"} if body else {},
                 method=method,
@@ -637,19 +639,19 @@ class SPHandler(SimpleHTTPRequestHandler):
         except urllib.error.HTTPError as e:
             self._json({"error": str(e)}, e.code)
         except Exception as e:
-            self._json({"error": f"Reel unreachable: {e}"}, 502)
+            self._json({"error": f"Spoolman unreachable: {e}"}, 502)
 
     def do_DELETE(self):
-        if self.path.startswith("/api/reel"):
-            self._proxy_reel("DELETE", self.path[len("/api/reel"):], None)
+        if self.path.startswith("/api/spoolman"):
+            self._proxy_spoolman("DELETE", self.path[len("/api/spoolman"):], None)
         else:
             self._json({"error": "Not found"}, 404)
 
     def do_POST(self):
-        if self.path.startswith("/api/reel"):
+        if self.path.startswith("/api/spoolman"):
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length) if length else None
-            self._proxy_reel("POST", self.path[len("/api/reel"):], body)
+            self._proxy_spoolman("POST", self.path[len("/api/spoolman"):], body)
         elif self.path.startswith("/api/upload/"):
             printer_id = urllib.parse.unquote(self.path[len("/api/upload/"):])
             printer = printers.get(printer_id)

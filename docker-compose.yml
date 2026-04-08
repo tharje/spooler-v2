@@ -1,4 +1,4 @@
-# Spooler + Reel – run both services with a single command:
+# Spooler + Spoolman – run both services with a single command:
 #   docker compose up -d
 #
 # network_mode: host is required on Linux so Spooler can:
@@ -7,14 +7,13 @@
 
 services:
 
-  reel:
-    build:
-      context: ../Reel
+  spoolman:
+    image: ghcr.io/donkie/spoolman:latest
     network_mode: host
     environment:
-      DATA_DIR: /data
+      SPOOLMAN_PORT: "7912"
     volumes:
-      - reel_data:/data
+      - spoolman_data:/home/app/.local/share/spoolman
     restart: unless-stopped
 
   spooler:
@@ -25,9 +24,9 @@ services:
     volumes:
       - spooler_data:/data
     depends_on:
-      - reel
+      - spoolman
     restart: unless-stopped
 
 volumes:
-  reel_data:
+  spoolman_data:
   spooler_data:
