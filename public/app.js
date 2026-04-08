@@ -661,6 +661,8 @@ document.getElementById("btn-add-spool-confirm").addEventListener("click", async
   const color    = document.getElementById("spool-input-color").value.trim();
   const hex      = (document.getElementById("spool-input-hex").value || "#888888").replace(/^#/, "");
   const weight   = parseFloat(document.getElementById("spool-input-weight").value) || 1000;
+  const diameter = parseFloat(document.getElementById("spool-input-diameter").value) || 1.75;
+  const density  = parseFloat(document.getElementById("spool-input-density").value) || 1.24;
 
   if (!material) { toast("Select a material", true); return; }
 
@@ -685,7 +687,7 @@ document.getElementById("btn-add-spool-confirm").addEventListener("click", async
     }
 
     // Step 2: create filament
-    const filamentBody = { material, weight, color_hex: hex, density: 1.24, diameter: 1.75 };
+    const filamentBody = { material, weight, color_hex: hex, density, diameter };
     if (color) filamentBody.name = color;
     if (vendorId) filamentBody.vendor_id = vendorId;
     const fr = await fetch(`${SPOOLMAN_URL}/filament`, {
@@ -716,6 +718,8 @@ document.getElementById("btn-add-spool-confirm").addEventListener("click", async
     document.getElementById("spool-input-color").value = "";
     document.getElementById("spool-input-hex").value = "#888888";
     document.getElementById("spool-input-weight").value = "";
+    document.getElementById("spool-input-diameter").value = "1.75";
+    document.getElementById("spool-input-density").value = "1.24";
     await fetchSpools();
     toast("Spool added");
   } catch (e) {

@@ -651,6 +651,11 @@ main {
   align-items: flex-end;
   gap: 8px;
 }
+.form-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
 
 .scanner-viewport {
   position: relative;
