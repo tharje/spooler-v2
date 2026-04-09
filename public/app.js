@@ -714,9 +714,13 @@ document.getElementById("btn-import-filaments").addEventListener("click", async 
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || r.status);
-    toast(`Imported ${d.created} Elegoo filaments (${d.skipped} skipped)`);
+    if (d.created > 0) {
+      alert(`✓ Imported ${d.created} ELEGOO filaments into Spoolman.\n\nYou can now create spools from these in Spoolman UI or when adding a spool here.`);
+    } else {
+      alert(`All ${d.total} ELEGOO filaments are already in Spoolman (${d.skipped} skipped).`);
+    }
   } catch (e) {
-    toast("Import failed: " + e.message, true);
+    alert("Import failed: " + e.message);
   } finally {
     btn.disabled = false;
     btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

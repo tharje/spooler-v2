@@ -690,9 +690,19 @@ class SPHandler(SimpleHTTPRequestHandler):
             except Exception as e:
                 self._json({"error": f"Vendor error: {e}"}, 500)
                 return
+            # Fetch existing article numbers to avoid duplicates
+            try:
+                with urllib.request.urlopen(f"{SPOOLMAN_URL}/api/v1/filament?limit=10000", timeout=5) as r:
+                    existing = {f["article_number"] for f in json.loads(r.read()) if f.get("article_number")}
+            except Exception:
+                existing = set()
             # Import filaments
             created = skipped = 0
             for f in entries:
+                article = f.get("id", "")
+                if article and article in existing:
+                    skipped += 1
+                    continue
                 body = {
                     "vendor_id":            vendor_id,
                     "material":             f.get("material", ""),
@@ -705,7 +715,7 @@ class SPHandler(SimpleHTTPRequestHandler):
                 if f.get("color_hex"):     body["color_hex"]                = f["color_hex"].lstrip("#")
                 if f.get("extruder_temp"): body["settings_extruder_temp"]   = f["extruder_temp"]
                 if f.get("bed_temp"):      body["settings_bed_temp"]        = f["bed_temp"]
-                if f.get("id"):            body["article_number"]           = f["id"]
+                if article:               body["article_number"]           = article
                 try:
                     freq = urllib.request.Request(
                         f"{SPOOLMAN_URL}/api/v1/filament",
