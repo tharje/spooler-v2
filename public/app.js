@@ -656,11 +656,30 @@ async function assignSpool(printerId, spoolId) {
 async function deleteSpool(spoolId) {
   if (!confirm("Remove this spool?")) return;
   try {
-    await fetch(`${SPOOLMAN_URL}/spool/${spoolId}`, { method: "DELETE" });
+    // Find the filament/vendor IDs before deleting the spool
+    const spool = spools.find(s => s.id == spoolId);
+    const filamentId = spool?.filament?.id;
+    const vendorId   = spool?.filament?.vendor?.id;
+
+    const r = await fetch(`${SPOOLMAN_URL}/spool/${spoolId}`, { method: "DELETE" });
+    if (!r.ok) throw new Error(`${r.status}`);
+
+    // Clean up the filament (may fail if shared – that's fine)
+    if (filamentId) {
+      await fetch(`${SPOOLMAN_URL}/filament/${filamentId}`, { method: "DELETE" });
+    }
+    // Clean up the vendor if it has no remaining filaments
+    if (vendorId) {
+      const vf = await fetch(`${SPOOLMAN_URL}/filament?vendor_id=${vendorId}`);
+      if (vf.ok && (await vf.json()).length === 0) {
+        await fetch(`${SPOOLMAN_URL}/vendor/${vendorId}`, { method: "DELETE" });
+      }
+    }
+
     await fetchSpools();
     toast("Spool removed");
   } catch (e) {
-    toast("Failed to remove spool", true);
+    toast("Failed to remove spool: " + e.message, true);
   }
 }
 
