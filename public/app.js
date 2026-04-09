@@ -702,6 +702,29 @@ const closeSpools = () => {
 btnSpools.addEventListener("click", openSpools);
 document.getElementById("btn-spools-close").addEventListener("click", closeSpools);
 
+document.getElementById("btn-import-filaments").addEventListener("click", async () => {
+  const btn = document.getElementById("btn-import-filaments");
+  btn.disabled = true;
+  btn.textContent = "Importing…";
+  try {
+    const r = await fetch("/api/import-filaments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ brand: "ELEGOO" }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || r.status);
+    toast(`Imported ${d.created} Elegoo filaments (${d.skipped} skipped)`);
+  } catch (e) {
+    toast("Import failed: " + e.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+    </svg> Import Elegoo`;
+  }
+});
+
 // Close all panels on backdrop click
 historyBackdrop.addEventListener("click", () => { closeHistory(); closeSpools(); });
 

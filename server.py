@@ -659,6 +659,68 @@ class SPHandler(SimpleHTTPRequestHandler):
             self._json({"error": "Not found"}, 404)
 
     def do_POST(self):
+        if self.path == "/api/import-filaments":
+            length = int(self.headers.get("Content-Length", 0))
+            req_body = json.loads(self.rfile.read(length)) if length else {}
+            brand = req_body.get("brand", "").strip()
+            if not brand:
+                self._json({"error": "brand required"}, 400)
+                return
+            db = get_spoolman_db()
+            entries = [f for f in db if f.get("manufacturer", "").lower() == brand.lower()]
+            if not entries:
+                self._json({"error": f"No filaments found for '{brand}'"}, 404)
+                return
+            # Find or create vendor
+            try:
+                vurl = f"{SPOOLMAN_URL}/api/v1/vendor?name={urllib.parse.quote(brand)}"
+                with urllib.request.urlopen(vurl, timeout=5) as r:
+                    vendors = json.loads(r.read())
+                if vendors:
+                    vendor_id = vendors[0]["id"]
+                else:
+                    vreq = urllib.request.Request(
+                        f"{SPOOLMAN_URL}/api/v1/vendor",
+                        data=json.dumps({"name": brand}).encode(),
+                        headers={"Content-Type": "application/json"},
+                        method="POST",
+                    )
+                    with urllib.request.urlopen(vreq, timeout=5) as r:
+                        vendor_id = json.loads(r.read())["id"]
+            except Exception as e:
+                self._json({"error": f"Vendor error: {e}"}, 500)
+                return
+            # Import filaments
+            created = skipped = 0
+            for f in entries:
+                body = {
+                    "vendor_id":            vendor_id,
+                    "material":             f.get("material", ""),
+                    "density":              f.get("density")  or 1.24,
+                    "diameter":             f.get("diameter") or 1.75,
+                    "weight":               f.get("weight")   or 1000,
+                }
+                if f.get("name"):          body["name"]                    = f["name"]
+                if f.get("spool_weight"):  body["spool_weight"]             = f["spool_weight"]
+                if f.get("color_hex"):     body["color_hex"]                = f["color_hex"].lstrip("#")
+                if f.get("extruder_temp"): body["settings_extruder_temp"]   = f["extruder_temp"]
+                if f.get("bed_temp"):      body["settings_bed_temp"]        = f["bed_temp"]
+                if f.get("id"):            body["article_number"]           = f["id"]
+                try:
+                    freq = urllib.request.Request(
+                        f"{SPOOLMAN_URL}/api/v1/filament",
+                        data=json.dumps(body).encode(),
+                        headers={"Content-Type": "application/json"},
+                        method="POST",
+                    )
+                    with urllib.request.urlopen(freq, timeout=5) as r:
+                        r.read()
+                    created += 1
+                except Exception:
+                    skipped += 1
+            print(f"[Import] {brand}: {created} created, {skipped} skipped")
+            self._json({"brand": brand, "created": created, "skipped": skipped, "total": len(entries)})
+            return
         if self.path.startswith("/api/spoolman"):
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length) if length else None
