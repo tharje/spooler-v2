@@ -184,7 +184,7 @@ main {
   cursor: pointer; padding: 4px; border-radius: 6px; display: flex; flex-shrink: 0;
 }
 .card-settings-btn:hover { color: var(--accent); background: rgba(99,102,241,.1); }
-.card-settings-btn svg { width: 16px; height: 16px; }
+.card-settings-btn svg { width: 18px; height: 18px; }
 
 .status-dot {
   width: 10px; height: 10px;
