@@ -262,7 +262,15 @@ function renderPrinter(printer) {
     <div class="card-header">
       <div class="status-dot ${sc}"></div>
       <div class="card-header-info">
-        <div class="card-title">${escHtml(printer.name)}</div>
+        <div class="card-title">
+          <span class="printer-name-text" ondblclick="renamePrinter('${escAttr(printer.id)}')">${escHtml(printer.name)}</span>
+          <button class="rename-btn" onclick="renamePrinter('${escAttr(printer.id)}')" title="Rename printer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+          </button>
+        </div>
         <div class="card-subtitle">${escHtml(printer.ip)}${printer.attrs?.FirmwareVersion ? ` · fw ${escHtml(printer.attrs.FirmwareVersion)}` : ""}</div>
       </div>
       <span class="status-badge ${sc}">${status}</span>
@@ -414,6 +422,32 @@ function removePrinter(id) {
   if (confirm("Remove this printer?")) {
     send({ action: "remove_printer", printer_id: id });
   }
+}
+
+function renamePrinter(id) {
+  const card = document.getElementById(`card-${id}`);
+  if (!card) return;
+  const nameSpan = card.querySelector(".printer-name-text");
+  if (!nameSpan || nameSpan.querySelector("input")) return; // already editing
+  const current = nameSpan.textContent;
+  const input = document.createElement("input");
+  input.className = "rename-input";
+  input.value = current;
+  input.maxLength = 40;
+  nameSpan.textContent = "";
+  nameSpan.appendChild(input);
+  input.focus();
+  input.select();
+  function commit() {
+    const val = input.value.trim();
+    nameSpan.textContent = val || current;
+    if (val && val !== current) send({ action: "rename_printer", printer_id: id, name: val });
+  }
+  input.addEventListener("blur", commit);
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); input.blur(); }
+    if (e.key === "Escape") { input.value = current; input.blur(); }
+  });
 }
 
 // ─── Discover / Add modal ──────────────────────────────────────────────────────

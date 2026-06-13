@@ -801,6 +801,15 @@ async def handle_browser_message(ws, raw):
         await broadcast_to_browsers({"type": "printer_removed", "printer_id": printer_id})
         return
 
+    if action == "rename_printer":
+        new_name = msg.get("name", "").strip()
+        p = printers.get(printer_id)
+        if p and new_name:
+            p.name = new_name
+            save_printers()
+            await p._broadcast_state()
+        return
+
     if not printer:
         await ws.send(json.dumps({"type": "error", "message": "Printer not found"}))
         return
