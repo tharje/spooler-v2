@@ -6,6 +6,7 @@ WebSocket proxy + HTTP server for the web UI
 
 import asyncio
 import json
+import secrets
 import socket
 import struct
 import uuid
@@ -301,6 +302,8 @@ class PrinterConnection:
         self._mqtt_client = None
         self._mqtt_serial = None
         self._mqtt_client_id = None
+        self._mqtt_request_id = None
+        self._mqtt_registered = False
         self._cc2_state = {}
 
     def to_dict(self):
@@ -447,19 +450,28 @@ class PrinterConnection:
             return False
 
     async def _send_mqtt_cmd(self, cmd, data=None):
-        # Official CC2 method codes (from elegooofficial/CentauriCarbon2 method.h)
-        CC2_METHODS = {
-            CMD_PAUSE:  1021,
-            CMD_STOP:   1022,
-            CMD_RESUME: 1023,
-            CMD_LIGHT:  1029,
-        }
-        method = CC2_METHODS.get(cmd)
-        if not method or not self._mqtt_client or not self._mqtt_serial:
+        if not self._mqtt_client or not self._mqtt_serial:
+            return False
+        # Allow raw method int (e.g. 1003 for GET_STATUS) or CC1 CMD_ constants
+        if isinstance(cmd, int) and cmd > 1000:
+            method = cmd  # already a CC2 method code
+        else:
+            # Official CC2 method codes (elegooofficial/CentauriCarbon2 method.h)
+            CC2_METHODS = {
+                CMD_PAUSE:  1021,
+                CMD_STOP:   1022,
+                CMD_RESUME: 1023,
+                CMD_LIGHT:  1029,
+            }
+            method = CC2_METHODS.get(cmd)
+            if not method:
+                return False
+        if not self._mqtt_registered and method != 1003:
+            print(f"[Printer {self.name}] CC2 not registered yet, dropping method {method}")
             return False
         topic = f"elegoo/{self._mqtt_serial}/{self._mqtt_client_id}/api_request"
         payload = {"id": uuid.uuid4().int & 0xFFFF, "method": method}
-        # LED: {"power": 1} on, {"power": 0} off  (from elegoo-homeassistant cc2/client.py)
+        # LED: {"params": {"power": 1/0}}  (elegoo-homeassistant cc2/client.py)
         if cmd == CMD_LIGHT and data:
             light_on = data.get("LightStatus", {}).get("SecondLight", False)
             payload["params"] = {"power": 1 if light_on else 0}
@@ -477,6 +489,13 @@ class PrinterConnection:
             return
         try:
             print(f"[Printer {self.name}] Connecting via MQTT to {self.ip}:1883 …")
+            ts_hex  = format(int(time.time() * 1000), "x")[-5:]
+            rnd_hex = format(secrets.randbelow(4096), "x")
+            self._mqtt_client_id  = f"0cli{ts_hex}{rnd_hex}"[:10]
+            self._mqtt_request_id = uuid.uuid4().hex[:16]
+            self._mqtt_registered = False
+            self._mqtt_serial     = None
+
             async with aiomqtt.Client(
                 hostname=self.ip,
                 port=1883,
@@ -484,12 +503,13 @@ class PrinterConnection:
                 password=self.access_code,
             ) as client:
                 self._mqtt_client = client
-                self._mqtt_client_id = str(uuid.uuid4()).replace("-", "")
+                # Subscribe to status (to discover serial) and registration response
+                await client.subscribe("elegoo/+/api_status")
+                await client.subscribe("elegoo/+/+/register_response")
                 self.connected = True
                 self.camera_url = f"http://{self.ip}:8080/mjpeg"
                 print(f"[Printer {self.name}] MQTT connected!")
                 await self._broadcast_state()
-                await client.subscribe("elegoo/+/api_status")
                 async for message in client.messages:
                     await self._handle_mqtt_message(message)
         except asyncio.CancelledError:
@@ -497,20 +517,49 @@ class PrinterConnection:
         except Exception as e:
             print(f"[Printer {self.name}] MQTT failed: {e}")
         finally:
-            self._mqtt_client = None
+            self._mqtt_client    = None
+            self._mqtt_registered = False
             self.connected = False
-            self.camera_url = f"http://{self.ip}:8080/mjpeg"  # keep camera visible while offline
+            self.camera_url = f"http://{self.ip}:8080/mjpeg"
             await self._broadcast_state()
 
     async def _handle_mqtt_message(self, message):
+        topic = str(message.topic)
+
+        # Registration response
+        if "register_response" in topic:
+            try:
+                p = json.loads(message.payload.decode())
+                if p.get("error") == "ok":
+                    self._mqtt_registered = True
+                    print(f"[Printer {self.name}] CC2 registered OK")
+                    # Request full status to populate all fields immediately
+                    await self._send_mqtt_cmd(1003)
+                else:
+                    print(f"[Printer {self.name}] CC2 registration failed: {p}")
+            except Exception:
+                pass
+            return
+
         try:
             payload = json.loads(message.payload.decode())
         except Exception:
             return
+
+        # Discover serial from first status message, then register
         if not self._mqtt_serial:
-            parts = str(message.topic).split("/")
+            parts = topic.split("/")
             if len(parts) >= 2:
                 self._mqtt_serial = parts[1]
+                sn = self._mqtt_serial
+                # Subscribe to command response topic
+                if self._mqtt_client:
+                    await self._mqtt_client.subscribe(f"elegoo/{sn}/{self._mqtt_client_id}/api_response")
+                    # Send registration request
+                    reg = {"client_id": self._mqtt_client_id, "request_id": self._mqtt_request_id}
+                    await self._mqtt_client.publish(f"elegoo/{sn}/api_register", json.dumps(reg))
+                    print(f"[Printer {self.name}] CC2 registration sent")
+
         result = payload.get("result", {})
         if not isinstance(result, dict) or not result:
             return
