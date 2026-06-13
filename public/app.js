@@ -439,7 +439,7 @@ function resetModal() {
 }
 
 inputType.addEventListener("change", () => {
-  labelAccessCode.style.display = inputType.value === "cc2" ? "" : "none";
+  labelAccessCode.style.display = inputType.value === "cc2" ? "flex" : "none";
 });
 
 document.getElementById("btn-add").addEventListener("click", openModal);
