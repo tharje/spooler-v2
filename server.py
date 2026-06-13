@@ -510,8 +510,16 @@ class PrinterConnection:
                 self.camera_url = f"http://{self.ip}:8080/mjpeg"
                 print(f"[Printer {self.name}] MQTT connected!")
                 await self._broadcast_state()
-                async for message in client.messages:
-                    await self._handle_mqtt_message(message)
+                poll_task = asyncio.create_task(self._mqtt_status_poller())
+                try:
+                    async for message in client.messages:
+                        await self._handle_mqtt_message(message)
+                finally:
+                    poll_task.cancel()
+                    try:
+                        await poll_task
+                    except asyncio.CancelledError:
+                        pass
         except asyncio.CancelledError:
             raise
         except Exception as e:
@@ -522,6 +530,12 @@ class PrinterConnection:
             self.connected = False
             self.camera_url = f"http://{self.ip}:8080/mjpeg"
             await self._broadcast_state()
+
+    async def _mqtt_status_poller(self):
+        while True:
+            await asyncio.sleep(5)
+            if self._mqtt_registered:
+                await self._send_mqtt_cmd(1003)
 
     async def _handle_mqtt_message(self, message):
         topic = str(message.topic)
@@ -546,6 +560,18 @@ class PrinterConnection:
         except Exception:
             return
 
+        # api_response: state data is top-level (not under "result")
+        if "api_response" in topic:
+            CC2_STATE_KEYS = {"machine_status", "print_status", "extruder",
+                              "heater_bed", "ztemperature_sensor", "gcode_move"}
+            updates = {k: v for k, v in payload.items()
+                       if k in CC2_STATE_KEYS and isinstance(v, dict)}
+            if updates:
+                _deep_merge(self._cc2_state, updates)
+                self._apply_cc2_status()
+                await self._broadcast_state()
+            return
+
         # Discover serial from first status message, then register
         if not self._mqtt_serial:
             parts = topic.split("/")
@@ -560,6 +586,7 @@ class PrinterConnection:
                     await self._mqtt_client.publish(f"elegoo/{sn}/api_register", json.dumps(reg))
                     print(f"[Printer {self.name}] CC2 registration sent")
 
+        # api_status: state data is under "result"
         result = payload.get("result", {})
         if not isinstance(result, dict) or not result:
             return
@@ -575,18 +602,50 @@ class PrinterConnection:
         ext   = s.get("extruder", {})
         bed   = s.get("heater_bed", {})
         ztemp = s.get("ztemperature_sensor", {})
+        ms    = s.get("machine_status", {})
 
         print_duration = ps.get("print_duration", 0) or 0
         remaining      = ps.get("remaining_time_sec", 0) or 0
+        state_str  = ps.get("state", "")
+        sub_status = ms.get("sub_status", 0)
 
-        # CC2 has no state field in periodic push; infer from durations
-        if print_duration > 0 or remaining > 0:
-            status_code = 3   # printing
+        # Transient states only exposed via sub_status (printer fw, not open-source)
+        _SUB_TRANSIENT = {2501: 5, 2503: 7}   # pausing=5, stopping=7
+        # Stable states from sub_status (fallback when state_str absent)
+        _SUB_STABLE = {
+            1045: 15, 1096: 15, 1405: 15,     # preheating → warming up
+            2075: 3, 2401: 3, 2402: 3,         # printing / resuming
+            2077: 9,                            # complete
+            2502: 6, 2505: 6,                  # paused
+            2504: 8,                           # cancelled
+        }
+        # Authoritative state string from CC2 open-source print_stats.cpp
+        _STATE_STR = {
+            "printing":  3,
+            "paused":    6,
+            "complete":  9,
+            "cancelled": 8,
+            "error":     14,
+            "standby":   0,
+        }
+
+        if sub_status in _SUB_TRANSIENT:
+            status_code = _SUB_TRANSIENT[sub_status]           # pausing / stopping
+        elif state_str in _STATE_STR:
+            status_code = _STATE_STR[state_str]                # from push state field
+        elif sub_status in _SUB_STABLE:
+            status_code = _SUB_STABLE[sub_status]              # from last GET_STATUS
+        elif print_duration > 0 or remaining > 0:
+            status_code = 3                                    # printing (no state yet)
         else:
-            status_code = 0   # idle
+            status_code = 0                                    # idle
 
-        total    = print_duration + remaining
-        progress = round(print_duration / total * 100) if total > 0 else 0
+        ms_progress = ms.get("progress", 0) or 0
+        if ms_progress > 0:
+            progress = ms_progress
+        else:
+            total    = print_duration + remaining
+            progress = round(print_duration / total * 100) if total > 0 else 0
 
         self.status = {
             "PrintInfo": {

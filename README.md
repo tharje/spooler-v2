@@ -132,8 +132,11 @@ See [CC2_INTEGRATION.md](CC2_INTEGRATION.md) for full CC2 protocol notes, topic 
 
 ## Acknowledgements
 
-CC2 (Elegoo Centauri Carbon 2) support would not have been possible without the reverse-engineering work of the following open-source projects. Huge thanks to their authors:
+CC2 (Elegoo Centauri Carbon 2) support would not have been possible without the following projects. Huge thanks to their authors:
 
+- [CentauriCarbon2](https://github.com/elegooofficial/CentauriCarbon2) by Elegoo (official) — CC2 firmware source; used for method codes (`method.h`), authoritative print state strings (`print_stats.cpp`: `"printing"`, `"paused"`, `"complete"`, `"cancelled"`, `"error"`), and machine-status sub_status codes
 - [centauri-sentinel](https://github.com/LegalMarc/centauri-sentinel) by LegalMarc — MQTT client details, topic structure, partial-status deep-merge, MJPEG grabber
-- [elegoo-homeassistant](https://github.com/danielcherubini/elegoo-homeassistant) by danielcherubini — CC2 MQTT transport type and access-code config
-- [sdcp-centauri-carbon](https://github.com/WalkerFrederick/sdcp-centauri-carbon) by WalkerFrederick — SDCP protocol documentation
+- [elegoo-homeassistant](https://github.com/danielcherubini/elegoo-homeassistant) by danielcherubini — CC2 MQTT transport type, access-code config, and sub_status constants
+- [sdcp-centauri-carbon](https://github.com/WalkerFrederick/sdcp-centauri-carbon) by WalkerFrederick — SDCP v3.0 protocol documentation (CC1)
+- [Spoolman](https://github.com/Donkie/Spoolman) by Donkie — open-source filament spool manager
+- [SpoolmanDB](https://github.com/Donkie/SpoolmanDB) by Donkie — filament database used for EAN lookup and catalogue import
