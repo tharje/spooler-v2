@@ -65,14 +65,36 @@ KEY_FILE         = DATA_DIR / "key.pem"
 # ─── Authentication ────────────────────────────────────────────────────────────
 
 AUTH_ENABLED    = os.getenv("AUTH_ENABLED", "true").lower() != "false"
-SPOOLER_USER    = os.getenv("SPOOLER_USERNAME", "admin")
-SPOOLER_PW_HASH = os.getenv("SPOOLER_PW_HASH", "")
+SPOOLER_USER    = os.getenv("SPOOLER_USERNAME", "")   # overrides saved username when set
+SPOOLER_PW_HASH = os.getenv("SPOOLER_PW_HASH", "")   # overrides saved hash when set
+AUTH_FILE       = DATA_DIR / "auth.json"
 SESSION_COOKIE  = "spooler_sid"
 SESSION_TTL     = 30 * 24 * 3600   # 30 days
 _sessions: dict = {}                # token → expiry (Unix epoch)
 
+def _load_auth() -> dict:
+    """Return saved credentials dict from AUTH_FILE, or {} if not set."""
+    try:
+        return json.loads(AUTH_FILE.read_text())
+    except Exception:
+        return {}
+
+def _has_password() -> bool:
+    """Return True if a password hash is configured (env var or saved file)."""
+    if SPOOLER_PW_HASH:
+        return True
+    return bool(_load_auth().get("pw_hash"))
+
+def _get_pw_hash() -> str:
+    return SPOOLER_PW_HASH or _load_auth().get("pw_hash", "")
+
+def _get_username() -> str:
+    return SPOOLER_USER or _load_auth().get("username", "admin")
+
+def _save_auth(username: str, pw_hash: str):
+    AUTH_FILE.write_text(json.dumps({"username": username, "pw_hash": pw_hash}))
+
 def _parse_sid(cookie_header: str) -> str:
-    """Extract the session token from a Cookie header value."""
     for part in cookie_header.split(";"):
         name, _, val = part.strip().partition("=")
         if name.strip() == SESSION_COOKIE:
@@ -80,7 +102,6 @@ def _parse_sid(cookie_header: str) -> str:
     return ""
 
 def _validate_session(token: str) -> bool:
-    """Return True if the token exists in _sessions and has not expired."""
     if not token:
         return False
     expiry = _sessions.get(token, 0)
@@ -90,7 +111,6 @@ def _validate_session(token: str) -> bool:
     return True
 
 def _create_session() -> str:
-    """Create a new session token, store it with an expiry, and return it."""
     token = secrets.token_urlsafe(32)
     _sessions[token] = time.time() + SESSION_TTL
     return token
@@ -980,9 +1000,10 @@ class SPHandler(SimpleHTTPRequestHandler):
         password = body.get("password", "")
 
         ok = False
-        if AUTH_ENABLED and BCRYPT_AVAILABLE and SPOOLER_PW_HASH and username == SPOOLER_USER:
+        pw_hash = _get_pw_hash()
+        if AUTH_ENABLED and BCRYPT_AVAILABLE and pw_hash and username == _get_username():
             try:
-                ok = _bcrypt.checkpw(password.encode(), SPOOLER_PW_HASH.encode())
+                ok = _bcrypt.checkpw(password.encode(), pw_hash.encode())
             except Exception:
                 pass
 
@@ -1008,6 +1029,43 @@ class SPHandler(SimpleHTTPRequestHandler):
         self.send_header("Set-Cookie", self._session_cookie("", clear=True))
         self.end_headers()
         self.wfile.write(b"{}")
+
+    def _handle_setup(self):
+        if _has_password():
+            self._json({"error": "Already configured"}, 403)
+            return
+        if not BCRYPT_AVAILABLE:
+            self._json({"error": "bcrypt not installed on server"}, 500)
+            return
+        length = int(self.headers.get("Content-Length", 0))
+        try:
+            body = json.loads(self.rfile.read(length))
+        except Exception:
+            self._json({"error": "Bad request"}, 400)
+            return
+        username = body.get("username", "").strip()
+        password = body.get("password", "")
+        if not username or not password:
+            self._json({"error": "Username and password are required"}, 400)
+            return
+        if len(password) < 8:
+            self._json({"error": "Password must be at least 8 characters"}, 400)
+            return
+        try:
+            pw_hash = _bcrypt.hashpw(password.encode(), _bcrypt.gensalt()).decode()
+            _save_auth(username, pw_hash)
+        except Exception as e:
+            self._json({"error": str(e)}, 500)
+            return
+        token = _create_session()
+        resp = json.dumps({"ok": True}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(resp)))
+        self.send_header("Set-Cookie", self._session_cookie(token))
+        self.end_headers()
+        self.wfile.write(resp)
+        print(f"[Auth] Initial password set for user '{username}'")
 
     # ── Camera proxy ─────────────────────────────────────────────────────────
 
@@ -1060,6 +1118,9 @@ class SPHandler(SimpleHTTPRequestHandler):
         # PWA assets needed before or during login
         if self.path in ("/manifest.json", "/icon.svg", "/sw.js", "/favicon.ico"):
             super().do_GET()
+            return
+        if self.path == "/api/auth-status":
+            self._json({"setup_required": not _has_password()})
             return
 
         # ── Auth gate ────────────────────────────────────────────────────────
@@ -1155,6 +1216,9 @@ class SPHandler(SimpleHTTPRequestHandler):
             return
         if self.path == "/api/logout":
             self._handle_logout()
+            return
+        if self.path == "/api/setup":
+            self._handle_setup()
             return
 
         # ── Auth gate ────────────────────────────────────────────────────────
@@ -1309,11 +1373,10 @@ async def main():
     elif not BCRYPT_AVAILABLE:
         print("[Auth] WARNING: 'bcrypt' package not installed – authentication will not work.")
         print("       Install it: pip install bcrypt")
-    elif not SPOOLER_PW_HASH:
-        print("[Auth] WARNING: SPOOLER_PW_HASH is not set – all logins will be rejected.")
-        print("       Generate a hash: python3 server.py --hash-password")
+    elif not _has_password():
+        print("[Auth] No password configured – first-time setup required via the web UI")
     else:
-        print(f"[Auth] Authentication enabled (user: {SPOOLER_USER})")
+        print(f"[Auth] Authentication enabled (user: {_get_username()})")
 
     # Load saved printers
     for entry in load_printers():

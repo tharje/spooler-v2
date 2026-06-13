@@ -17,7 +17,7 @@
       justify-content: center;
       padding: 24px;
     }
-    .login-card {
+    .card {
       background: #181921;
       border: 1px solid #2a2b38;
       border-radius: 12px;
@@ -29,15 +29,16 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      margin-bottom: 32px;
+      margin-bottom: 28px;
       font-size: 1.25rem;
       font-weight: 600;
       letter-spacing: -0.02em;
       color: #fff;
     }
     .logo svg { width: 28px; height: 28px; color: #6c8cff; }
-    h1 { font-size: 1rem; font-weight: 500; color: #9aa0b8; margin-bottom: 24px; }
-    label { display: block; margin-bottom: 16px; }
+    h1 { font-size: 1rem; font-weight: 500; color: #9aa0b8; margin-bottom: 4px; }
+    .subtitle { font-size: 0.82rem; color: #5a5f78; margin-bottom: 24px; }
+    label { display: block; margin-bottom: 14px; }
     label span { display: block; font-size: 0.8rem; color: #9aa0b8; margin-bottom: 6px; }
     input[type="text"], input[type="password"] {
       width: 100%;
@@ -66,9 +67,9 @@
     }
     button[type="submit"]:hover { background: #5a7bff; }
     button[type="submit"]:disabled { background: #3a4060; cursor: default; }
-    #error {
+    .error {
       display: none;
-      margin-top: 16px;
+      margin-top: 14px;
       padding: 10px 12px;
       background: #3a1c1c;
       border: 1px solid #7a2020;
@@ -76,10 +77,11 @@
       font-size: 0.85rem;
       color: #f87171;
     }
+    .hint { font-size: 0.78rem; color: #5a5f78; margin-top: 4px; }
   </style>
 </head>
 <body>
-  <div class="login-card">
+  <div class="card">
     <div class="logo">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <path d="M12 2L2 7l10 5 10-5-10-5z"/>
@@ -88,53 +90,103 @@
       </svg>
       Spooler
     </div>
-    <h1>Sign in to continue</h1>
-    <form id="login-form">
+
+    <!-- Filled in by JS based on /api/auth-status -->
+    <h1 id="heading"></h1>
+    <p class="subtitle" id="subtitle"></p>
+
+    <form id="form">
       <label><span>Username</span>
         <input id="username" type="text" autocomplete="username" required />
       </label>
       <label><span>Password</span>
         <input id="password" type="password" autocomplete="current-password" required />
       </label>
-      <button type="submit" id="btn-submit">Sign in</button>
+      <label id="confirm-row" style="display:none"><span>Confirm password</span>
+        <input id="confirm" type="password" autocomplete="new-password" />
+        <p class="hint">Minimum 8 characters.</p>
+      </label>
+      <button type="submit" id="btn">Sign in</button>
     </form>
-    <div id="error"></div>
+    <div class="error" id="error"></div>
   </div>
+
   <script>
-    document.getElementById("login-form").addEventListener("submit", async e => {
-      e.preventDefault();
-      const btn = document.getElementById("btn-submit");
-      const err = document.getElementById("error");
-      btn.disabled = true;
-      btn.textContent = "Signing in…";
-      err.style.display = "none";
+    let setupMode = false;
+
+    async function init() {
       try {
-        const resp = await fetch("/api/login", {
+        const r = await fetch("/api/auth-status");
+        const { setup_required } = await r.json();
+        setupMode = !!setup_required;
+      } catch {
+        setupMode = false;
+      }
+      if (setupMode) {
+        document.getElementById("heading").textContent = "Welcome to Spooler";
+        document.getElementById("subtitle").textContent = "Create an account to get started.";
+        document.getElementById("confirm-row").style.display = "block";
+        document.getElementById("password").setAttribute("autocomplete", "new-password");
+        document.getElementById("btn").textContent = "Create account";
+      } else {
+        document.getElementById("heading").textContent = "Sign in to continue";
+        document.getElementById("subtitle").textContent = "";
+        document.getElementById("btn").textContent = "Sign in";
+      }
+      document.getElementById("username").focus();
+    }
+
+    document.getElementById("form").addEventListener("submit", async e => {
+      e.preventDefault();
+      const btn   = document.getElementById("btn");
+      const err   = document.getElementById("error");
+      const user  = document.getElementById("username").value;
+      const pass  = document.getElementById("password").value;
+      const conf  = document.getElementById("confirm").value;
+
+      err.style.display = "none";
+
+      if (setupMode) {
+        if (pass !== conf) {
+          err.textContent = "Passwords do not match.";
+          err.style.display = "block";
+          return;
+        }
+        if (pass.length < 8) {
+          err.textContent = "Password must be at least 8 characters.";
+          err.style.display = "block";
+          return;
+        }
+      }
+
+      btn.disabled = true;
+      btn.textContent = setupMode ? "Creating account…" : "Signing in…";
+
+      const endpoint = setupMode ? "/api/setup" : "/api/login";
+      try {
+        const resp = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            username: document.getElementById("username").value,
-            password: document.getElementById("password").value,
-          }),
+          body: JSON.stringify({ username: user, password: pass }),
         });
         if (resp.ok) {
           location.replace("/");
         } else {
           const data = await resp.json().catch(() => ({}));
-          err.textContent = data.error || "Invalid credentials";
+          err.textContent = data.error || "Something went wrong.";
           err.style.display = "block";
           btn.disabled = false;
-          btn.textContent = "Sign in";
+          btn.textContent = setupMode ? "Create account" : "Sign in";
         }
       } catch {
         err.textContent = "Network error – is Spooler running?";
         err.style.display = "block";
         btn.disabled = false;
-        btn.textContent = "Sign in";
+        btn.textContent = setupMode ? "Create account" : "Sign in";
       }
     });
-    // Auto-focus username field
-    document.getElementById("username").focus();
+
+    init();
   </script>
 </body>
 </html>
