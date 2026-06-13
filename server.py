@@ -510,28 +510,37 @@ class PrinterConnection:
         await self._broadcast_state()
 
     def _apply_cc2_status(self):
-        s = self._cc2_state
+        s   = self._cc2_state
         ps  = s.get("print_status", {})
-        ms  = s.get("machine_status", {})
+        gm  = s.get("gcode_move", {})
         ext = s.get("extruder", {})
         bed = s.get("heater_bed", {})
-        state = ps.get("state", "idle")
-        status_code = {"printing": 3, "paused": 6}.get(state, 0)
-        progress = ms.get("progress", 0) or 0
+
+        print_duration = ps.get("print_duration", 0) or 0
+        remaining      = ps.get("remaining_time_sec", 0) or 0
+
+        # CC2 has no state field; infer from durations
+        if print_duration > 0 or remaining > 0:
+            status_code = 3   # printing
+        else:
+            status_code = 0   # idle
+
+        total    = print_duration + remaining
+        progress = round(print_duration / total * 100) if total > 0 else 0
+
         self.status = {
             "PrintInfo": {
-                "Status":       status_code,
-                "CurrentLayer": ps.get("current_layer", 0),
-                "CurrentTicks": progress,
-                "TotalTicks":   100,
-                "Filename":     ps.get("filename", ""),
-                "FileName":     ps.get("filename", ""),
-                "PrintTime":    ps.get("print_duration", 0),
-                "RemainTime":   ps.get("remaining_time_sec", 0),
+                "Status":         status_code,
+                "CurrentLayer":   ps.get("current_layer", 0),
+                "CurrentTicks":   progress,
+                "TotalTicks":     100,
+                "PrintTime":      print_duration,
+                "RemainTime":     remaining,
+                "TotalExtrusion": gm.get("extruder", 0),
             },
-            "TempOfNozzle":    ext.get("temperature", 0),
+            "TempOfNozzle":     ext.get("temperature", 0),
             "TempTargetNozzle": ext.get("target", 0),
-            "TempOfHotbed":    bed.get("temperature", 0),
+            "TempOfHotbed":     bed.get("temperature", 0),
             "TempTargetHotbed": bed.get("target", 0),
         }
 
