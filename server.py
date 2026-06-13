@@ -423,12 +423,19 @@ class PrinterConnection:
             "printer": self.to_dict(),
         })
 
+    def stop(self):
+        if self._task:
+            self._task.cancel()
+
     async def start(self):
-        while True:
-            await self.connect()
-            if not self.connected:
-                print(f"[Printer {self.name}] Retrying in 5 s …")
-            await asyncio.sleep(5)
+        try:
+            while True:
+                await self.connect()
+                if not self.connected:
+                    print(f"[Printer {self.name}] Retrying in 5 s …")
+                await asyncio.sleep(5)
+        except asyncio.CancelledError:
+            pass
 
 
 # ─── Browser WebSocket Server ──────────────────────────────────────────────────
@@ -494,7 +501,7 @@ async def handle_browser_message(ws, raw):
                 ip = dev.get("MainboardIP") or dev.get("_ip")
                 pc = PrinterConnection(pid, ip, name, mainboard_id=pid)
                 printers[pid] = pc
-                asyncio.create_task(pc.start())
+                pc._task = asyncio.create_task(pc.start())
                 new_count += 1
         if new_count:
             save_printers()
@@ -513,18 +520,15 @@ async def handle_browser_message(ws, raw):
             return
         pc = PrinterConnection(pid, ip, name)
         printers[pid] = pc
-        asyncio.create_task(pc.start())
+        pc._task = asyncio.create_task(pc.start())
         save_printers()
         await ws.send(json.dumps({"type": "info", "message": f"Adding {name} ({ip})…"}))
         return
 
     if action == "remove_printer":
         p = printers.pop(printer_id, None)
-        if p and p.ws:
-            try:
-                await p.ws.close()
-            except Exception:
-                pass
+        if p:
+            p.stop()
         save_printers()
         await broadcast_to_browsers({"type": "printer_removed", "printer_id": printer_id})
         return
@@ -808,7 +812,7 @@ async def main():
         pid, ip, name = entry["id"], entry["ip"], entry["name"]
         pc = PrinterConnection(pid, ip, name)
         printers[pid] = pc
-        asyncio.create_task(pc.start())
+        pc._task = asyncio.create_task(pc.start())
     if printers:
         print(f"[Config] Loaded {len(printers)} saved printer(s)")
 
