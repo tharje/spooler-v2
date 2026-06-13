@@ -293,7 +293,7 @@ class PrinterConnection:
         self.connected = False
         self.status = {}
         self.attrs = {}
-        self.camera_url = None
+        self.camera_url = f"http://{ip}:8080/mjpeg" if printer_type == "cc2" else None
         self._task = None
         self._last_print_status = None
         self._print_start_time = None
@@ -489,7 +489,7 @@ class PrinterConnection:
         finally:
             self._mqtt_client = None
             self.connected = False
-            self.camera_url = None
+            self.camera_url = f"http://{self.ip}:8080/mjpeg"  # keep camera visible while offline
             await self._broadcast_state()
 
     async def _handle_mqtt_message(self, message):
@@ -636,9 +636,6 @@ async def handle_browser_message(ws, raw):
         access_code  = msg.get("access_code", "").strip()
         if not ip:
             await ws.send(json.dumps({"type": "error", "message": "IP address required"}))
-            return
-        if printer_type == "cc2" and not access_code:
-            await ws.send(json.dumps({"type": "error", "message": "Access code required for CC2"}))
             return
         pid = ip
         if pid in printers:

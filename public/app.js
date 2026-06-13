@@ -450,7 +450,6 @@ document.getElementById("btn-modal-confirm").addEventListener("click", () => {
   const printer_type = inputType.value;
   const access_code = inputAccessCode.value.trim();
   if (!ip) { toast("Enter an IP address", true); return; }
-  if (printer_type === "cc2" && !access_code) { toast("Enter the access code for CC2", true); return; }
   send({ action: "add_printer", ip, name: name || undefined, printer_type, access_code });
   closeModal();
   resetModal();

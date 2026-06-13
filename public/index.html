@@ -91,9 +91,9 @@
         </select>
       </label>
       <label id="label-access-code" style="display:none">
-        Access Code
+        MQTT Passord
         <input id="input-access-code" type="text" placeholder="12345" maxlength="10" />
-        <span class="input-hint">Settings → Network on the printer</span>
+        <span class="input-hint">Finn koden på skriveren under Settings → Network. Kamera fungerer uten passord.</span>
       </label>
       <div class="modal-actions">
         <button id="btn-modal-cancel" class="btn btn-secondary">Cancel</button>
@@ -229,7 +229,7 @@
   <div id="toast-area"></div>
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=4"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
