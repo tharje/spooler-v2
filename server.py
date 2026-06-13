@@ -521,7 +521,10 @@ async def handle_browser_message(ws, raw):
     if action == "remove_printer":
         p = printers.pop(printer_id, None)
         if p and p.ws:
-            await p.ws.close()
+            try:
+                await p.ws.close()
+            except Exception:
+                pass
         save_printers()
         await broadcast_to_browsers({"type": "printer_removed", "printer_id": printer_id})
         return
