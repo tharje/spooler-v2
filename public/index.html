@@ -83,6 +83,18 @@
         IP Address
         <input id="input-ip" type="text" placeholder="192.168.1.100" />
       </label>
+      <label>
+        Printer Type
+        <select id="input-type">
+          <option value="cc1">CC1 – Centauri Carbon 1 (WebSocket/SDCP)</option>
+          <option value="cc2">CC2 – Centauri Carbon 2 (MQTT)</option>
+        </select>
+      </label>
+      <label id="label-access-code" style="display:none">
+        Access Code
+        <input id="input-access-code" type="text" placeholder="12345" maxlength="10" />
+        <span class="input-hint">Settings → Network on the printer</span>
+      </label>
       <div class="modal-actions">
         <button id="btn-modal-cancel" class="btn btn-secondary">Cancel</button>
         <button id="btn-modal-confirm" class="btn btn-primary">Add</button>

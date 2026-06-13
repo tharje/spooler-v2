@@ -35,6 +35,12 @@ except ImportError:
     print("       pip install websockets")
     print("       or run: ./setup.sh")
 
+try:
+    import aiomqtt
+    AIOMQTT_AVAILABLE = True
+except ImportError:
+    AIOMQTT_AVAILABLE = False
+
 PRINTER_PORT = 3030
 DISCOVERY_PORT = 3000
 WS_SERVER_PORT = 8765
@@ -97,7 +103,9 @@ browser_clients = set()
 # ─── Persistence ───────────────────────────────────────────────────────────────
 
 def save_printers():
-    data = [{"id": p.id, "ip": p.ip, "name": p.name} for p in printers.values()]
+    data = [{"id": p.id, "ip": p.ip, "name": p.name,
+              "printer_type": p.printer_type, "access_code": p.access_code}
+            for p in printers.values()]
     PRINTERS_FILE.write_text(json.dumps(data, indent=2))
 
 def load_printers():
@@ -260,22 +268,40 @@ CMD_CAMERA      = 386
 CMD_LIGHT       = 403
 
 
+def _deep_merge(base: dict, incoming: dict, max_keys: int = 500) -> dict:
+    for k, v in incoming.items():
+        if isinstance(v, dict) and isinstance(base.get(k), dict):
+            _deep_merge(base[k], v, max_keys)
+        else:
+            base[k] = v
+        if len(base) > max_keys:
+            break
+    return base
+
+
 # ─── Printer WebSocket Connection ─────────────────────────────────────────────
 
 class PrinterConnection:
-    def __init__(self, printer_id, ip, name, mainboard_id=""):
+    def __init__(self, printer_id, ip, name, mainboard_id="", printer_type="cc1", access_code=""):
         self.id = printer_id
         self.ip = ip
         self.name = name
         self.mainboard_id = mainboard_id
+        self.printer_type = printer_type
+        self.access_code = access_code
         self.ws = None
         self.connected = False
         self.status = {}
         self.attrs = {}
         self.camera_url = None
         self._task = None
-        self._last_print_status = None   # track status transitions
-        self._print_start_time = None    # wall-clock when print started
+        self._last_print_status = None
+        self._print_start_time = None
+        # CC2 MQTT state
+        self._mqtt_client = None
+        self._mqtt_serial = None
+        self._mqtt_client_id = None
+        self._cc2_state = {}
 
     def to_dict(self):
         pi = decode_printinfo(self.status.get("PrintInfo", {}))
@@ -284,6 +310,7 @@ class PrinterConnection:
             "id": self.id,
             "ip": self.ip,
             "name": self.name,
+            "printer_type": self.printer_type,
             "mainboard_id": self.mainboard_id,
             "connected": self.connected,
             "status": self.status,
@@ -406,6 +433,8 @@ class PrinterConnection:
         self._last_print_status = cur_status
 
     async def send_cmd(self, cmd, data):
+        if self.printer_type == "cc2":
+            return await self._send_mqtt_cmd(cmd)
         if not self.ws or not self.connected:
             return False
         msg = make_msg(cmd, data, self.mainboard_id)
@@ -416,6 +445,95 @@ class PrinterConnection:
         except Exception as e:
             print(f"[Printer {self.name}] Send error: {e}")
             return False
+
+    async def _send_mqtt_cmd(self, cmd):
+        CC2_METHODS = {CMD_PAUSE: 1001, CMD_RESUME: 1002, CMD_STOP: 1003}
+        method = CC2_METHODS.get(cmd)
+        if not method or not self._mqtt_client or not self._mqtt_serial:
+            return False
+        topic = f"elegoo/{self._mqtt_serial}/{self._mqtt_client_id}/api_request"
+        payload = json.dumps({"id": uuid.uuid4().int & 0xFFFF, "method": method})
+        try:
+            await self._mqtt_client.publish(topic, payload)
+            return True
+        except Exception as e:
+            print(f"[Printer {self.name}] MQTT send error: {e}")
+            return False
+
+    async def connect_mqtt(self):
+        if not AIOMQTT_AVAILABLE:
+            print(f"[Printer {self.name}] aiomqtt not installed — CC2 unavailable")
+            await self._broadcast_state()
+            return
+        try:
+            print(f"[Printer {self.name}] Connecting via MQTT to {self.ip}:1883 …")
+            async with aiomqtt.Client(
+                hostname=self.ip,
+                port=1883,
+                username="elegoo",
+                password=self.access_code,
+            ) as client:
+                self._mqtt_client = client
+                self._mqtt_client_id = str(uuid.uuid4()).replace("-", "")
+                self.connected = True
+                self.camera_url = f"http://{self.ip}:8080/mjpeg"
+                print(f"[Printer {self.name}] MQTT connected!")
+                await self._broadcast_state()
+                await client.subscribe("elegoo/+/api_status")
+                async for message in client.messages:
+                    await self._handle_mqtt_message(message)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print(f"[Printer {self.name}] MQTT failed: {e}")
+        finally:
+            self._mqtt_client = None
+            self.connected = False
+            self.camera_url = None
+            await self._broadcast_state()
+
+    async def _handle_mqtt_message(self, message):
+        try:
+            payload = json.loads(message.payload.decode())
+        except Exception:
+            return
+        if not self._mqtt_serial:
+            parts = str(message.topic).split("/")
+            if len(parts) >= 2:
+                self._mqtt_serial = parts[1]
+        result = payload.get("result", {})
+        if not isinstance(result, dict) or not result:
+            return
+        _deep_merge(self._cc2_state, result)
+        self._apply_cc2_status()
+        await self._check_print_transition()
+        await self._broadcast_state()
+
+    def _apply_cc2_status(self):
+        s = self._cc2_state
+        ps  = s.get("print_status", {})
+        ms  = s.get("machine_status", {})
+        ext = s.get("extruder", {})
+        bed = s.get("heater_bed", {})
+        state = ps.get("state", "idle")
+        status_code = {"printing": 3, "paused": 6}.get(state, 0)
+        progress = ms.get("progress", 0) or 0
+        self.status = {
+            "PrintInfo": {
+                "Status":       status_code,
+                "CurrentLayer": ps.get("current_layer", 0),
+                "CurrentTicks": progress,
+                "TotalTicks":   100,
+                "Filename":     ps.get("filename", ""),
+                "FileName":     ps.get("filename", ""),
+                "PrintTime":    ps.get("print_duration", 0),
+                "RemainTime":   ps.get("remaining_time_sec", 0),
+            },
+            "TempOfNozzle":    ext.get("temperature", 0),
+            "TempTargetNozzle": ext.get("target", 0),
+            "TempOfHotbed":    bed.get("temperature", 0),
+            "TempTargetHotbed": bed.get("target", 0),
+        }
 
     async def _broadcast_state(self):
         await broadcast_to_browsers({
@@ -430,7 +548,10 @@ class PrinterConnection:
     async def start(self):
         try:
             while True:
-                await self.connect()
+                if self.printer_type == "cc2":
+                    await self.connect_mqtt()
+                else:
+                    await self.connect()
                 if not self.connected:
                     print(f"[Printer {self.name}] Retrying in 5 s …")
                 await asyncio.sleep(5)
@@ -509,16 +630,21 @@ async def handle_browser_message(ws, raw):
         return
 
     if action == "add_printer":
-        ip = msg.get("ip", "").strip()
-        name = msg.get("name", f"Printer {len(printers)+1}").strip()
+        ip           = msg.get("ip", "").strip()
+        name         = msg.get("name", f"Printer {len(printers)+1}").strip()
+        printer_type = msg.get("printer_type", "cc1")
+        access_code  = msg.get("access_code", "").strip()
         if not ip:
             await ws.send(json.dumps({"type": "error", "message": "IP address required"}))
             return
-        pid = ip  # use IP as ID when manually added
+        if printer_type == "cc2" and not access_code:
+            await ws.send(json.dumps({"type": "error", "message": "Access code required for CC2"}))
+            return
+        pid = ip
         if pid in printers:
             await ws.send(json.dumps({"type": "info", "message": "Printer already added"}))
             return
-        pc = PrinterConnection(pid, ip, name)
+        pc = PrinterConnection(pid, ip, name, printer_type=printer_type, access_code=access_code)
         printers[pid] = pc
         pc._task = asyncio.create_task(pc.start())
         save_printers()
@@ -809,8 +935,12 @@ async def main():
 
     # Load saved printers
     for entry in load_printers():
-        pid, ip, name = entry["id"], entry["ip"], entry["name"]
-        pc = PrinterConnection(pid, ip, name)
+        pid  = entry["id"]
+        ip   = entry["ip"]
+        name = entry["name"]
+        ptype = entry.get("printer_type", "cc1")
+        acode = entry.get("access_code", "")
+        pc = PrinterConnection(pid, ip, name, printer_type=ptype, access_code=acode)
         printers[pid] = pc
         pc._task = asyncio.create_task(pc.start())
     if printers:

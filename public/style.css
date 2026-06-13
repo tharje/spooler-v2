@@ -406,6 +406,7 @@ main {
 .modal-box select option,
 .modal-box select optgroup { background: var(--surface2); color: var(--text); }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+.input-hint { font-size: 11px; color: var(--text-muted); margin-top: -2px; }
 
 /* ─── Toast ───────────────────────────────────────────────────────────────── */
 #toast-area {

@@ -426,21 +426,39 @@ const modal = document.getElementById("modal-add");
 const openModal  = () => modal.classList.add("open");
 const closeModal = () => modal.classList.remove("open");
 
-document.getElementById("btn-add").addEventListener("click", openModal);
-document.getElementById("btn-modal-cancel").addEventListener("click", closeModal);
-document.getElementById("btn-modal-confirm").addEventListener("click", () => {
-  const ip   = document.getElementById("input-ip").value.trim();
-  const name = document.getElementById("input-name").value.trim();
-  if (!ip) { toast("Enter an IP address", true); return; }
-  send({ action: "add_printer", ip, name: name || undefined });
-  closeModal();
+const inputType       = document.getElementById("input-type");
+const labelAccessCode = document.getElementById("label-access-code");
+const inputAccessCode = document.getElementById("input-access-code");
+
+function resetModal() {
   document.getElementById("input-ip").value = "";
   document.getElementById("input-name").value = "";
+  inputType.value = "cc1";
+  inputAccessCode.value = "";
+  labelAccessCode.style.display = "none";
+}
+
+inputType.addEventListener("change", () => {
+  labelAccessCode.style.display = inputType.value === "cc2" ? "" : "none";
+});
+
+document.getElementById("btn-add").addEventListener("click", openModal);
+document.getElementById("btn-modal-cancel").addEventListener("click", () => { closeModal(); resetModal(); });
+document.getElementById("btn-modal-confirm").addEventListener("click", () => {
+  const ip          = document.getElementById("input-ip").value.trim();
+  const name        = document.getElementById("input-name").value.trim();
+  const printer_type = inputType.value;
+  const access_code = inputAccessCode.value.trim();
+  if (!ip) { toast("Enter an IP address", true); return; }
+  if (printer_type === "cc2" && !access_code) { toast("Enter the access code for CC2", true); return; }
+  send({ action: "add_printer", ip, name: name || undefined, printer_type, access_code });
+  closeModal();
+  resetModal();
 });
 
 // Close modal on backdrop click or Escape key
-modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+modal.addEventListener("click", (e) => { if (e.target === modal) { closeModal(); resetModal(); } });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeModal(); resetModal(); } });
 
 // ─── Toast ─────────────────────────────────────────────────────────────────────
 function toast(msg, isError = false) {

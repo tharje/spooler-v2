@@ -4,7 +4,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends openssl \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir websockets
+RUN pip install --no-cache-dir websockets aiomqtt
 
 COPY server.py .
 COPY public/ public/
