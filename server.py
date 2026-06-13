@@ -536,7 +536,6 @@ class PrinterConnection:
         while True:
             await asyncio.sleep(5)
             if self._mqtt_registered:
-                await self._send_mqtt_cmd(1002)  # full state (temps, LED, filament)
                 await self._send_mqtt_cmd(1003)  # machine_status (pause/stop sub_status)
 
     async def _handle_mqtt_message(self, message):
@@ -645,12 +644,9 @@ class PrinterConnection:
         else:
             status_code = 0                                    # idle
 
-        ms_progress = ms.get("progress", 0) or 0
-        if ms_progress > 0:
-            progress = ms_progress
-        else:
-            total    = print_duration + remaining
-            progress = round(print_duration / total * 100) if total > 0 else 0
+        # machine_status.progress uses an unknown scale — use time-based only
+        total    = print_duration + remaining
+        progress = min(100, round(print_duration / total * 100)) if total > 0 else 0
 
         # print_status.filament_used is per-print mm (from CC2 print_stats.cpp)
         # gcode_move.extruder is the absolute E-axis position (accumulates across prints)
