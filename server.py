@@ -434,7 +434,7 @@ class PrinterConnection:
 
     async def send_cmd(self, cmd, data):
         if self.printer_type == "cc2":
-            return await self._send_mqtt_cmd(cmd)
+            return await self._send_mqtt_cmd(cmd, data)
         if not self.ws or not self.connected:
             return False
         msg = make_msg(cmd, data, self.mainboard_id)
@@ -446,15 +446,25 @@ class PrinterConnection:
             print(f"[Printer {self.name}] Send error: {e}")
             return False
 
-    async def _send_mqtt_cmd(self, cmd):
-        CC2_METHODS = {CMD_PAUSE: 1001, CMD_RESUME: 1002, CMD_STOP: 1003}
+    async def _send_mqtt_cmd(self, cmd, data=None):
+        # Official CC2 method codes (from elegooofficial/CentauriCarbon2 method.h)
+        CC2_METHODS = {
+            CMD_PAUSE:  1021,
+            CMD_STOP:   1022,
+            CMD_RESUME: 1023,
+            CMD_LIGHT:  1029,
+        }
         method = CC2_METHODS.get(cmd)
         if not method or not self._mqtt_client or not self._mqtt_serial:
             return False
         topic = f"elegoo/{self._mqtt_serial}/{self._mqtt_client_id}/api_request"
-        payload = json.dumps({"id": uuid.uuid4().int & 0xFFFF, "method": method})
+        payload = {"id": uuid.uuid4().int & 0xFFFF, "method": method}
+        # LED: {"power": 1} on, {"power": 0} off  (from elegoo-homeassistant cc2/client.py)
+        if cmd == CMD_LIGHT and data:
+            light_on = data.get("LightStatus", {}).get("SecondLight", False)
+            payload["params"] = {"power": 1 if light_on else 0}
         try:
-            await self._mqtt_client.publish(topic, payload)
+            await self._mqtt_client.publish(topic, json.dumps(payload))
             return True
         except Exception as e:
             print(f"[Printer {self.name}] MQTT send error: {e}")
@@ -510,16 +520,17 @@ class PrinterConnection:
         await self._broadcast_state()
 
     def _apply_cc2_status(self):
-        s   = self._cc2_state
-        ps  = s.get("print_status", {})
-        gm  = s.get("gcode_move", {})
-        ext = s.get("extruder", {})
-        bed = s.get("heater_bed", {})
+        s     = self._cc2_state
+        ps    = s.get("print_status", {})
+        gm    = s.get("gcode_move", {})
+        ext   = s.get("extruder", {})
+        bed   = s.get("heater_bed", {})
+        ztemp = s.get("ztemperature_sensor", {})
 
         print_duration = ps.get("print_duration", 0) or 0
         remaining      = ps.get("remaining_time_sec", 0) or 0
 
-        # CC2 has no state field; infer from durations
+        # CC2 has no state field in periodic push; infer from durations
         if print_duration > 0 or remaining > 0:
             status_code = 3   # printing
         else:
@@ -542,6 +553,7 @@ class PrinterConnection:
             "TempTargetNozzle": ext.get("target", 0),
             "TempOfHotbed":     bed.get("temperature", 0),
             "TempTargetHotbed": bed.get("target", 0),
+            "TempOfBox":        ztemp.get("temperature", 0),
         }
 
     async def _broadcast_state(self):
