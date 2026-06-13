@@ -195,10 +195,11 @@ function isPaused(printer) {
 function getProgress(printer) {
   const pi = printer.status?.PrintInfo;
   if (!pi) return null;
-  const cur = pi.CurrentLayer ?? pi.CurrentTicks;
-  const tot = pi.TotalLayer   ?? pi.TotalTicks;
-  if (!tot) return null;
-  return Math.round((cur / tot) * 100);
+  if ((pi.TotalLayer ?? 0) > 0)
+    return Math.min(100, Math.round((pi.CurrentLayer / pi.TotalLayer) * 100));
+  if ((pi.TotalTicks ?? 0) > 0)
+    return Math.min(100, Math.round((pi.CurrentTicks / pi.TotalTicks) * 100));
+  return null;
 }
 
 function getFilename(printer) {

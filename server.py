@@ -305,6 +305,8 @@ class PrinterConnection:
         self._mqtt_request_id = None
         self._mqtt_registered = False
         self._cc2_state = {}
+        self._filament_mm_max = 0.0
+        self._prev_state_str = ""
 
     def to_dict(self):
         pi = decode_printinfo(self.status.get("PrintInfo", {}))
@@ -648,12 +650,18 @@ class PrinterConnection:
         total    = print_duration + remaining
         progress = min(100, round(print_duration / total * 100)) if total > 0 else 0
 
-        # print_status.filament_used is per-print mm (from CC2 print_stats.cpp)
-        # gcode_move.extruder is the absolute E-axis position (accumulates across prints)
-        filament_mm = ps.get("filament_used", None)
-        if filament_mm is None:
-            filament_mm = gm.get("extruder", 0)
-        filament_mm = filament_mm or 0
+        # Reset filament watermark when a new print starts
+        if state_str == "printing" and self._prev_state_str not in ("printing", "paused"):
+            self._filament_mm_max = 0.0
+        if state_str:
+            self._prev_state_str = state_str
+
+        # Filament: track high watermark to survive G92 E0 resets and stale 1002 zeros.
+        # filament_used from the push is most accurate; gcode_move.extruder as fallback.
+        raw_filament = (ps.get("filament_used") or 0) or (gm.get("extruder") or 0)
+        if raw_filament > self._filament_mm_max:
+            self._filament_mm_max = raw_filament
+        filament_mm = self._filament_mm_max
 
         # LED: middleware reports as led.status (0=off, 1-255=on)
         led = s.get("led", {})
@@ -663,6 +671,7 @@ class PrinterConnection:
             "PrintInfo": {
                 "Status":         status_code,
                 "CurrentLayer":   ps.get("current_layer", 0),
+                "TotalLayer":     ps.get("total_layer", 0),
                 "CurrentTicks":   progress,
                 "TotalTicks":     100,
                 "PrintTime":      print_duration,
