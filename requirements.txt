@@ -1,0 +1,3 @@
+websockets
+aiomqtt
+bcrypt

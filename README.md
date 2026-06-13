@@ -102,6 +102,48 @@ Spooler integrates with **[Spoolman](https://github.com/Donkie/Spoolman)** – t
 | Diameter (mm) | 1.75 | |
 | Density (g/cm³) | 1.24 | Auto-filled when material is selected |
 
+## Authentication
+
+Spooler supports optional password protection via a session cookie. Authentication is enabled by default.
+
+### Quick setup
+
+**1. Generate a password hash:**
+```bash
+python3 server.py --hash-password
+# or inside Docker:
+docker compose exec spooler python3 server.py --hash-password
+```
+
+**2. Create a `.env` file** (copy from `.env.example`):
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and set `SPOOLER_PW_HASH` to the hash from step 1. The username defaults to `admin`; override it with `SPOOLER_USERNAME`.
+
+**3. Restart:**
+```bash
+docker compose up -d
+```
+
+Open Spooler in your browser — you will be prompted to sign in.
+
+### Disable authentication (trusted LAN only)
+
+Add `AUTH_ENABLED=false` to `.env`. A warning is printed at startup when auth is off.
+
+### How it works
+
+| Part | Mechanism |
+|------|-----------|
+| Password | bcrypt hash stored in `SPOOLER_PW_HASH` env var — never plain text |
+| Session | Signed random token (`secrets.token_urlsafe`), stored in memory, 30-day TTL |
+| Cookie | `HttpOnly; SameSite=Strict`, `Secure` flag added automatically over HTTPS |
+| HTTP API | 401 JSON on missing/invalid session |
+| WebSocket (port 8765) | Session cookie validated in the handshake — all printer commands are protected |
+| Camera feed | Streamed through `/api/camera/<id>` behind auth — not loaded directly from the printer |
+
 ## Protocol
 
 | Printer | Transport | Notes |

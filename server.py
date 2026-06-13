@@ -18,7 +18,7 @@ import os
 import ssl
 import subprocess
 import sys
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 
 try:
@@ -42,6 +42,12 @@ try:
 except ImportError:
     AIOMQTT_AVAILABLE = False
 
+try:
+    import bcrypt as _bcrypt
+    BCRYPT_AVAILABLE = True
+except ImportError:
+    BCRYPT_AVAILABLE = False
+
 PRINTER_PORT = 3030
 DISCOVERY_PORT = 3000
 WS_SERVER_PORT = 8765
@@ -55,6 +61,48 @@ HISTORY_FILE     = DATA_DIR / "history.json"
 SPOOLMAN_URL     = "http://localhost:7912"
 CERT_FILE        = DATA_DIR / "cert.pem"
 KEY_FILE         = DATA_DIR / "key.pem"
+
+# ─── Authentication ────────────────────────────────────────────────────────────
+
+AUTH_ENABLED    = os.getenv("AUTH_ENABLED", "true").lower() != "false"
+SPOOLER_USER    = os.getenv("SPOOLER_USERNAME", "admin")
+SPOOLER_PW_HASH = os.getenv("SPOOLER_PW_HASH", "")
+SESSION_COOKIE  = "spooler_sid"
+SESSION_TTL     = 30 * 24 * 3600   # 30 days
+_sessions: dict = {}                # token → expiry (Unix epoch)
+
+def _parse_sid(cookie_header: str) -> str:
+    """Extract the session token from a Cookie header value."""
+    for part in cookie_header.split(";"):
+        name, _, val = part.strip().partition("=")
+        if name.strip() == SESSION_COOKIE:
+            return val.strip()
+    return ""
+
+def _validate_session(token: str) -> bool:
+    """Return True if the token exists in _sessions and has not expired."""
+    if not token:
+        return False
+    expiry = _sessions.get(token, 0)
+    if time.time() > expiry:
+        _sessions.pop(token, None)
+        return False
+    return True
+
+def _create_session() -> str:
+    """Create a new session token, store it with an expiry, and return it."""
+    token = secrets.token_urlsafe(32)
+    _sessions[token] = time.time() + SESSION_TTL
+    return token
+
+def _auth_ok(handler) -> bool:
+    """Return True if the request carries a valid session or auth is disabled."""
+    if not AUTH_ENABLED:
+        return True
+    token = _parse_sid(handler.headers.get("Cookie", ""))
+    return _validate_session(token)
+
+# ──────────────────────────────────────────────────────────────────────────────
 
 def ensure_ssl_cert():
     """Generate a self-signed cert if one doesn't exist yet."""
@@ -742,6 +790,16 @@ async def broadcast_to_browsers(msg):
 
 
 async def browser_handler(websocket):
+    if AUTH_ENABLED:
+        try:
+            headers = websocket.request.headers       # websockets >= 14
+        except AttributeError:
+            headers = websocket.request_headers       # websockets < 14
+        token = _parse_sid(headers.get("cookie", ""))
+        if not _validate_session(token):
+            await websocket.close(1008, "Unauthorized")
+            return
+
     browser_clients.add(websocket)
     print(f"[Browser] Client connected ({len(browser_clients)} total)")
 
@@ -886,9 +944,102 @@ class SPHandler(SimpleHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass  # silence access log
 
+    # ── Auth helpers ────────────────────────────────────────────────────────
+
+    def _check_auth(self) -> bool:
+        """Gate a route: return True if the request is authenticated.
+        On failure sends 401 (for /api/ paths) or redirects to /login."""
+        if _auth_ok(self):
+            return True
+        if self.path.startswith("/api/"):
+            self._json({"error": "Unauthorized"}, 401)
+        else:
+            self.send_response(302)
+            self.send_header("Location", "/login")
+            self.end_headers()
+        return False
+
+    def _session_cookie(self, token: str, clear: bool = False) -> str:
+        is_https = getattr(self.server, "_is_https", False)
+        if clear:
+            value = f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0"
+        else:
+            value = f"{SESSION_COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict"
+        if is_https:
+            value += "; Secure"
+        return value
+
+    def _handle_login(self):
+        length = int(self.headers.get("Content-Length", 0))
+        try:
+            body = json.loads(self.rfile.read(length))
+        except Exception:
+            self._json({"error": "Bad request"}, 400)
+            return
+        username = body.get("username", "")
+        password = body.get("password", "")
+
+        ok = False
+        if AUTH_ENABLED and BCRYPT_AVAILABLE and SPOOLER_PW_HASH and username == SPOOLER_USER:
+            try:
+                ok = _bcrypt.checkpw(password.encode(), SPOOLER_PW_HASH.encode())
+            except Exception:
+                pass
+
+        if not ok:
+            self._json({"error": "Invalid credentials"}, 401)
+            return
+
+        token = _create_session()
+        resp = json.dumps({"ok": True}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(resp)))
+        self.send_header("Set-Cookie", self._session_cookie(token))
+        self.end_headers()
+        self.wfile.write(resp)
+
+    def _handle_logout(self):
+        token = _parse_sid(self.headers.get("Cookie", ""))
+        _sessions.pop(token, None)
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", "2")
+        self.send_header("Set-Cookie", self._session_cookie("", clear=True))
+        self.end_headers()
+        self.wfile.write(b"{}")
+
+    # ── Camera proxy ─────────────────────────────────────────────────────────
+
+    def _proxy_camera(self):
+        printer_id = urllib.parse.unquote(self.path[len("/api/camera/"):].split("?")[0])
+        p = printers.get(printer_id)
+        if not p or not p.camera_url:
+            self._json({"error": "Camera not available"}, 404)
+            return
+        try:
+            with urllib.request.urlopen(p.camera_url, timeout=10) as upstream:
+                ct = upstream.headers.get("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+                self.send_response(200)
+                self.send_header("Content-Type", ct)
+                self.send_header("Cache-Control", "no-cache")
+                self.end_headers()
+                while True:
+                    chunk = upstream.read(8192)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+        except (ConnectionResetError, BrokenPipeError):
+            pass  # client disconnected
+        except Exception:
+            pass
+
+    # ── HTTP routes ──────────────────────────────────────────────────────────
+
     def do_GET(self):
+        # ── Auth-exempt ──────────────────────────────────────────────────────
         if self.path == "/cert.pem":
-            # Let users download and install the self-signed cert on their device
             data = CERT_FILE.read_bytes() if CERT_FILE.exists() else b""
             self.send_response(200)
             self.send_header("Content-Type", "application/x-pem-file")
@@ -897,7 +1048,28 @@ class SPHandler(SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
             return
-        if self.path == "/api/printers":
+        if self.path in ("/login", "/login.html"):
+            login_file = Path(__file__).parent / "public" / "login.html"
+            data = login_file.read_bytes() if login_file.exists() else b"Login page not found"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        # PWA assets needed before or during login
+        if self.path in ("/manifest.json", "/icon.svg", "/sw.js", "/favicon.ico"):
+            super().do_GET()
+            return
+
+        # ── Auth gate ────────────────────────────────────────────────────────
+        if not self._check_auth():
+            return
+
+        # ── Protected routes ─────────────────────────────────────────────────
+        if self.path.startswith("/api/camera/"):
+            self._proxy_camera()
+        elif self.path == "/api/printers":
             self._json([p.to_dict() for p in printers.values()])
         elif self.path == "/api/history":
             self._json(load_history())
@@ -932,6 +1104,8 @@ class SPHandler(SimpleHTTPRequestHandler):
             super().do_GET()
 
     def do_PATCH(self):
+        if not self._check_auth():
+            return
         if self.path.startswith("/api/spoolman"):
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length) if length else None
@@ -967,12 +1141,27 @@ class SPHandler(SimpleHTTPRequestHandler):
             self._json({"error": f"Spoolman unreachable: {e}"}, 502)
 
     def do_DELETE(self):
+        if not self._check_auth():
+            return
         if self.path.startswith("/api/spoolman"):
             self._proxy_spoolman("DELETE", self.path[len("/api/spoolman"):], None)
         else:
             self._json({"error": "Not found"}, 404)
 
     def do_POST(self):
+        # ── Auth-exempt ──────────────────────────────────────────────────────
+        if self.path == "/api/login":
+            self._handle_login()
+            return
+        if self.path == "/api/logout":
+            self._handle_logout()
+            return
+
+        # ── Auth gate ────────────────────────────────────────────────────────
+        if not self._check_auth():
+            return
+
+        # ── Protected routes ─────────────────────────────────────────────────
         if self.path == "/api/import-filaments":
             length = int(self.headers.get("Content-Length", 0))
             req_body = json.loads(self.rfile.read(length)) if length else {}
@@ -1091,7 +1280,7 @@ class SPHandler(SimpleHTTPRequestHandler):
 
 
 def run_http(port):
-    server = HTTPServer(("0.0.0.0", port), SPHandler)
+    server = ThreadingHTTPServer(("0.0.0.0", port), SPHandler)
     print(f"[HTTP] Serving on http://0.0.0.0:{port}")
     server.serve_forever()
 
@@ -1100,8 +1289,9 @@ def run_https(port):
         return
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.load_cert_chain(str(CERT_FILE), str(KEY_FILE))
-    server = HTTPServer(("0.0.0.0", port), SPHandler)
+    server = ThreadingHTTPServer(("0.0.0.0", port), SPHandler)
     server.socket = ctx.wrap_socket(server.socket, server_side=True)
+    server._is_https = True  # used by SPHandler to set the Secure cookie flag
     print(f"[HTTPS] Serving on https://0.0.0.0:{port}")
     server.serve_forever()
 
@@ -1113,6 +1303,17 @@ async def main():
         print("\n[ERROR] Please install the 'websockets' package first.")
         print("  python3 -m venv venv && . venv/bin/activate && pip install websockets")
         sys.exit(1)
+
+    if not AUTH_ENABLED:
+        print("[Auth] WARNING: AUTH_ENABLED=false – Spooler is open to everyone on the network!")
+    elif not BCRYPT_AVAILABLE:
+        print("[Auth] WARNING: 'bcrypt' package not installed – authentication will not work.")
+        print("       Install it: pip install bcrypt")
+    elif not SPOOLER_PW_HASH:
+        print("[Auth] WARNING: SPOOLER_PW_HASH is not set – all logins will be rejected.")
+        print("       Generate a hash: python3 server.py --hash-password")
+    else:
+        print(f"[Auth] Authentication enabled (user: {SPOOLER_USER})")
 
     # Load saved printers
     for entry in load_printers():
@@ -1145,6 +1346,19 @@ async def main():
 
 
 if __name__ == "__main__":
+    if "--hash-password" in sys.argv:
+        if not BCRYPT_AVAILABLE:
+            print("Error: bcrypt is not installed. Run: pip install bcrypt")
+            sys.exit(1)
+        import getpass
+        pw  = getpass.getpass("Password: ")
+        pw2 = getpass.getpass("Confirm:  ")
+        if pw != pw2:
+            print("Passwords do not match.")
+            sys.exit(1)
+        print(_bcrypt.hashpw(pw.encode(), _bcrypt.gensalt()).decode())
+        sys.exit(0)
+
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

@@ -5,6 +5,16 @@ const WS_URL  = `${location.protocol === "https:" ? "wss" : "ws"}://${location.h
 const SPOOLMAN_URL = "/api/spoolman/api/v1";
 const RECONNECT_DELAY = 3000;
 
+// Redirect to login on any 401 from our own API
+const _fetch = window.fetch.bind(window);
+window.fetch = async function(url, options) {
+  const resp = await _fetch(url, options);
+  if (resp.status === 401 && typeof url === "string" && url.startsWith("/api/")) {
+    location.replace("/login");
+  }
+  return resp;
+};
+
 let ws       = null;
 let printers = {}; // id → printer data
 let history  = []; // print history log
@@ -77,7 +87,8 @@ function connect() {
     }
   };
 
-  ws.onclose = () => {
+  ws.onclose = (ev) => {
+    if (ev.code === 1008) { location.replace("/login"); return; }
     console.warn("[WS] Disconnected, retrying…");
     setTimeout(connect, RECONNECT_DELAY);
   };
@@ -256,7 +267,9 @@ function renderPrinter(printer) {
   const filamentG  = printer.filament_g  ?? 0;
   const lightOn    = printer.status?.LightStatus?.SecondLight === 1;
 
-  const cameraUrl = printer.camera_url;
+  const cameraUrl = printer.camera_url
+    ? `/api/camera/${encodeURIComponent(printer.id)}`
+    : null;
 
   card.innerHTML = `
     <!-- Header -->
@@ -446,6 +459,12 @@ document.getElementById("btn-settings-save").addEventListener("click", () => {
   if (!name) { document.getElementById("settings-name").focus(); return; }
   send({ action: "update_printer", printer_id: id, name, access_code: code });
   document.getElementById("modal-printer-settings").style.display = "none";
+});
+
+// ─── Sign out ─────────────────────────────────────────────────────────────────
+document.getElementById("btn-signout").addEventListener("click", async () => {
+  await fetch("/api/logout", { method: "POST" }).catch(() => {});
+  location.replace("/login");
 });
 
 // ─── Discover / Add modal ──────────────────────────────────────────────────────

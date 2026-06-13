@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Spooler – Sign in</title>
+  <meta name="theme-color" content="#0d0e12" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0d0e12;
+      color: #e2e4ea;
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .login-card {
+      background: #181921;
+      border: 1px solid #2a2b38;
+      border-radius: 12px;
+      padding: 40px 36px;
+      width: 100%;
+      max-width: 360px;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 32px;
+      font-size: 1.25rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: #fff;
+    }
+    .logo svg { width: 28px; height: 28px; color: #6c8cff; }
+    h1 { font-size: 1rem; font-weight: 500; color: #9aa0b8; margin-bottom: 24px; }
+    label { display: block; margin-bottom: 16px; }
+    label span { display: block; font-size: 0.8rem; color: #9aa0b8; margin-bottom: 6px; }
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      padding: 10px 12px;
+      background: #0d0e12;
+      border: 1px solid #2a2b38;
+      border-radius: 8px;
+      color: #e2e4ea;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input:focus { border-color: #6c8cff; }
+    button[type="submit"] {
+      width: 100%;
+      padding: 11px;
+      margin-top: 8px;
+      background: #6c8cff;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    button[type="submit"]:hover { background: #5a7bff; }
+    button[type="submit"]:disabled { background: #3a4060; cursor: default; }
+    #error {
+      display: none;
+      margin-top: 16px;
+      padding: 10px 12px;
+      background: #3a1c1c;
+      border: 1px solid #7a2020;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      color: #f87171;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+        <path d="M2 17l10 5 10-5"/>
+        <path d="M2 12l10 5 10-5"/>
+      </svg>
+      Spooler
+    </div>
+    <h1>Sign in to continue</h1>
+    <form id="login-form">
+      <label><span>Username</span>
+        <input id="username" type="text" autocomplete="username" required />
+      </label>
+      <label><span>Password</span>
+        <input id="password" type="password" autocomplete="current-password" required />
+      </label>
+      <button type="submit" id="btn-submit">Sign in</button>
+    </form>
+    <div id="error"></div>
+  </div>
+  <script>
+    document.getElementById("login-form").addEventListener("submit", async e => {
+      e.preventDefault();
+      const btn = document.getElementById("btn-submit");
+      const err = document.getElementById("error");
+      btn.disabled = true;
+      btn.textContent = "Signing in…";
+      err.style.display = "none";
+      try {
+        const resp = await fetch("/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: document.getElementById("username").value,
+            password: document.getElementById("password").value,
+          }),
+        });
+        if (resp.ok) {
+          location.replace("/");
+        } else {
+          const data = await resp.json().catch(() => ({}));
+          err.textContent = data.error || "Invalid credentials";
+          err.style.display = "block";
+          btn.disabled = false;
+          btn.textContent = "Sign in";
+        }
+      } catch {
+        err.textContent = "Network error – is Spooler running?";
+        err.style.display = "block";
+        btn.disabled = false;
+        btn.textContent = "Sign in";
+      }
+    });
+    // Auto-focus username field
+    document.getElementById("username").focus();
+  </script>
+</body>
+</html>

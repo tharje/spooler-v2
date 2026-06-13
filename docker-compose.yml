@@ -19,6 +19,9 @@ services:
   spooler:
     build: .
     network_mode: host
+    env_file:
+      - path: .env
+        required: false   # OK to omit on first run; set AUTH_ENABLED=false if no .env
     environment:
       DATA_DIR: /data
     volumes:
