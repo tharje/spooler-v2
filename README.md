@@ -15,6 +15,7 @@ Local web GUI for **Elegoo Centauri Carbon** FDM 3D printers (CC1 and CC2). Cont
 - **Spoolman integration** – filament spool inventory via [Spoolman](https://github.com/Donkie/Spoolman); auto-deducts used grams after each print, assign spools to printers
 - **EAN barcode lookup** – scan a spool's barcode to auto-fill brand, material, colour and weight from SpoolmanDB
 - **Filament catalogue import** – one-click import of all ELEGOO filaments from SpoolmanDB (97 entries with extruder temp, bed temp, spool weight and more)
+- **Authentication** – password-protected login with session cookies; first-time setup via the web UI
 - **PWA** – installable as a home screen app on Android and iOS (no app store needed)
 - **HTTPS** – self-signed cert on port 8443 for secure PWA install; Tailscale serve works out of the box
 - **Docker** – single `docker compose up -d` starts both Spooler and Spoolman
@@ -104,45 +105,46 @@ Spooler integrates with **[Spoolman](https://github.com/Donkie/Spoolman)** – t
 
 ## Authentication
 
-Spooler supports optional password protection via a session cookie. Authentication is enabled by default.
+Spooler is password-protected by default. On first visit, the browser shows a **Create account** page where you choose a username and password. No terminal setup required.
 
-### Quick setup
-
-**1. Generate a password hash:**
-```bash
-python3 server.py --hash-password
-# or inside Docker:
-docker compose exec spooler python3 server.py --hash-password
-```
-
-**2. Create a `.env` file** (copy from `.env.example`):
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and set `SPOOLER_PW_HASH` to the hash from step 1. The username defaults to `admin`; override it with `SPOOLER_USERNAME`.
-
-**3. Restart:**
-```bash
-docker compose up -d
-```
-
-Open Spooler in your browser — you will be prompted to sign in.
+The password hash is stored in `DATA_DIR/auth.json` inside the Docker volume and persists across restarts and rebuilds.
 
 ### Disable authentication (trusted LAN only)
 
-Add `AUTH_ENABLED=false` to `.env`. A warning is printed at startup when auth is off.
+Create a `.env` file in the project root:
+
+```
+AUTH_ENABLED=false
+```
+
+A warning is printed at startup when auth is off.
+
+### Advanced: set credentials via environment variable
+
+If you prefer to manage credentials outside the data volume (e.g. Docker secrets or CI), set `SPOOLER_PW_HASH` in `.env`. This takes priority over the saved file.
+
+```bash
+# Generate a bcrypt hash
+docker compose exec spooler python3 server.py --hash-password
+```
+
+```env
+SPOOLER_PW_HASH=$2b$12$...
+SPOOLER_USERNAME=admin   # optional, default is whatever you set at first-time setup
+```
+
+See `.env.example` for all available options.
 
 ### How it works
 
 | Part | Mechanism |
 |------|-----------|
-| Password | bcrypt hash stored in `SPOOLER_PW_HASH` env var — never plain text |
-| Session | Signed random token (`secrets.token_urlsafe`), stored in memory, 30-day TTL |
-| Cookie | `HttpOnly; SameSite=Strict`, `Secure` flag added automatically over HTTPS |
-| HTTP API | 401 JSON on missing/invalid session |
-| WebSocket (port 8765) | Session cookie validated in the handshake — all printer commands are protected |
-| Camera feed | Streamed through `/api/camera/<id>` behind auth — not loaded directly from the printer |
+| Password | bcrypt hash saved to `DATA_DIR/auth.json` or `SPOOLER_PW_HASH` env var |
+| Session | Random token (`secrets.token_urlsafe`), stored in memory, 30-day TTL |
+| Cookie | `HttpOnly; SameSite=Strict`, `Secure` flag set automatically over HTTPS |
+| HTTP API | 401 JSON on missing/invalid session; pages redirect to `/login` |
+| WebSocket (port 8765) | Session cookie validated in the handshake — all printer commands protected |
+| Camera feed | Proxied through `/api/camera/<id>` behind auth — not exposed directly from the printer |
 
 ## Protocol
 
