@@ -1,6 +1,6 @@
 # Spooler v2
 
-Local web GUI for **Elegoo Centauri Carbon** FDM 3D printers. Control and monitor multiple printers from a single browser tab — or install as a PWA on your phone.
+Local web GUI for **Elegoo Centauri Carbon** FDM 3D printers (CC1 and CC2). Control and monitor multiple printers from a single browser tab — or install as a PWA on your phone.
 
 ## Features
 
@@ -104,7 +104,12 @@ Spooler integrates with **[Spoolman](https://github.com/Donkie/Spoolman)** – t
 
 ## Protocol
 
-Uses **SDCP v3.0** (Smart Device Control Protocol) over WebSocket on port 3030. Status codes match the CarbonicSidecar / elegoo-homeassistant reference implementations.
+| Printer | Transport | Notes |
+|---------|-----------|-------|
+| CC1 (Centauri Carbon 1) | SDCP v3.0 over WebSocket (port 3030) | Status codes match CarbonicSidecar / elegoo-homeassistant |
+| CC2 (Centauri Carbon 2) | MQTT – printer hosts its own broker (port 1883) | Client subscribes to `elegoo/<serial>/api_status`; commands to `elegoo/<serial>/<client_id>/api_request` |
+
+See [CC2_INTEGRATION.md](CC2_INTEGRATION.md) for full CC2 protocol notes, topic map, payload shape, and integration guidance.
 
 ## Ports
 
@@ -116,6 +121,7 @@ Uses **SDCP v3.0** (Smart Device Control Protocol) over WebSocket on port 3030. 
 | 7912 | Spoolman – filament manager UI and API |
 | 3030 | WebSocket – backend ↔ printer (SDCP) |
 | 3000 | UDP – printer discovery broadcast |
+| 1883 | MQTT – CC2 printer broker (on the printer, not the server) |
 
 ## Stack
 
@@ -123,3 +129,11 @@ Uses **SDCP v3.0** (Smart Device Control Protocol) over WebSocket on port 3030. 
 - **Frontend** – Vanilla HTML/CSS/JS, no build step
 - **Spool manager** – [Spoolman](https://github.com/Donkie/Spoolman) (official Docker image)
 - **Filament database** – [SpoolmanDB](https://github.com/Donkie/SpoolmanDB) (EAN lookup + catalogue import)
+
+## Acknowledgements
+
+CC2 (Elegoo Centauri Carbon 2) support would not have been possible without the reverse-engineering work of the following open-source projects. Huge thanks to their authors:
+
+- [centauri-sentinel](https://github.com/LegalMarc/centauri-sentinel) by LegalMarc — MQTT client details, topic structure, partial-status deep-merge, MJPEG grabber
+- [elegoo-homeassistant](https://github.com/danielcherubini/elegoo-homeassistant) by danielcherubini — CC2 MQTT transport type and access-code config
+- [sdcp-centauri-carbon](https://github.com/WalkerFrederick/sdcp-centauri-carbon) by WalkerFrederick — SDCP protocol documentation
