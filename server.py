@@ -314,6 +314,7 @@ class PrinterConnection:
             "ip": self.ip,
             "name": self.name,
             "printer_type": self.printer_type,
+            "access_code": self.access_code,
             "mainboard_id": self.mainboard_id,
             "connected": self.connected,
             "status": self.status,
@@ -801,13 +802,21 @@ async def handle_browser_message(ws, raw):
         await broadcast_to_browsers({"type": "printer_removed", "printer_id": printer_id})
         return
 
-    if action == "rename_printer":
-        new_name = msg.get("name", "").strip()
+    if action in ("rename_printer", "update_printer"):
         p = printers.get(printer_id)
-        if p and new_name:
+        if not p:
+            return
+        new_name = msg.get("name", "").strip()
+        if new_name:
             p.name = new_name
-            save_printers()
-            await p._broadcast_state()
+        if p.printer_type == "cc2":
+            new_code = msg.get("access_code", p.access_code).strip()
+            if new_code != p.access_code:
+                p.access_code = new_code
+                p.stop()
+                p._task = asyncio.create_task(p.start())
+        save_printers()
+        await p._broadcast_state()
         return
 
     if not printer:

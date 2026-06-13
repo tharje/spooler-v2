@@ -177,44 +177,14 @@ main {
   border-bottom: 1px solid var(--border);
 }
 .card-header-info { flex: 1; min-width: 0; }
-.card-title {
-  font-size: 15px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.printer-name-text { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.rename-btn {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 2px;
-  border-radius: 4px;
-  display: flex;
-  flex-shrink: 0;
-  opacity: 0;
-  transition: opacity .15s;
-}
-.card-title:hover .rename-btn { opacity: 1; }
-.rename-btn:hover { color: var(--accent); }
-.rename-btn svg { width: 12px; height: 12px; }
-.rename-input {
-  background: var(--surface2);
-  border: 1px solid var(--accent);
-  border-radius: 4px;
-  color: var(--text);
-  font-size: 15px;
-  font-weight: 600;
-  padding: 0 4px;
-  width: 160px;
-  outline: none;
-}
+.card-title { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card-subtitle { color: var(--text-muted); font-size: 12px; margin-top: 1px; }
+.card-settings-btn {
+  background: none; border: none; color: var(--text-muted);
+  cursor: pointer; padding: 4px; border-radius: 6px; display: flex; flex-shrink: 0;
+}
+.card-settings-btn:hover { color: var(--accent); background: rgba(99,102,241,.1); }
+.card-settings-btn svg { width: 16px; height: 16px; }
 
 .status-dot {
   width: 10px; height: 10px;
@@ -437,6 +407,15 @@ main {
 .modal-box select optgroup { background: var(--surface2); color: var(--text); }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
 .input-hint { font-size: 11px; color: var(--text-muted); margin-top: -2px; }
+.settings-readonly {
+  display: block;
+  padding: 8px 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
 
 /* ─── Toast ───────────────────────────────────────────────────────────────── */
 #toast-area {

@@ -262,18 +262,16 @@ function renderPrinter(printer) {
     <div class="card-header">
       <div class="status-dot ${sc}"></div>
       <div class="card-header-info">
-        <div class="card-title">
-          <span class="printer-name-text" ondblclick="renamePrinter('${escAttr(printer.id)}')">${escHtml(printer.name)}</span>
-          <button class="rename-btn" onclick="renamePrinter('${escAttr(printer.id)}')" title="Rename printer">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-            </svg>
-          </button>
-        </div>
+        <div class="card-title">${escHtml(printer.name)}</div>
         <div class="card-subtitle">${escHtml(printer.ip)}${printer.attrs?.FirmwareVersion ? ` · fw ${escHtml(printer.attrs.FirmwareVersion)}` : ""}</div>
       </div>
       <span class="status-badge ${sc}">${status}</span>
+      <button class="card-settings-btn" onclick="openPrinterSettings('${escAttr(printer.id)}')" title="Printer settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
       <button class="card-remove-btn" onclick="removePrinter('${escAttr(printer.id)}')" title="Remove printer">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
@@ -424,31 +422,31 @@ function removePrinter(id) {
   }
 }
 
-function renamePrinter(id) {
-  const card = document.getElementById(`card-${id}`);
-  if (!card) return;
-  const nameSpan = card.querySelector(".printer-name-text");
-  if (!nameSpan || nameSpan.querySelector("input")) return; // already editing
-  const current = nameSpan.textContent;
-  const input = document.createElement("input");
-  input.className = "rename-input";
-  input.value = current;
-  input.maxLength = 40;
-  nameSpan.textContent = "";
-  nameSpan.appendChild(input);
-  input.focus();
-  input.select();
-  function commit() {
-    const val = input.value.trim();
-    nameSpan.textContent = val || current;
-    if (val && val !== current) send({ action: "rename_printer", printer_id: id, name: val });
-  }
-  input.addEventListener("blur", commit);
-  input.addEventListener("keydown", e => {
-    if (e.key === "Enter") { e.preventDefault(); input.blur(); }
-    if (e.key === "Escape") { input.value = current; input.blur(); }
-  });
+function openPrinterSettings(id) {
+  const p = printers[id];
+  if (!p) return;
+  document.getElementById("settings-printer-id").value = id;
+  document.getElementById("settings-name").value = p.name || "";
+  document.getElementById("settings-ip").textContent = p.ip || id;
+  document.getElementById("settings-type").textContent =
+    p.printer_type === "cc2" ? "CC2 – Centauri Carbon 2 (MQTT)" : "CC1 – Centauri Carbon 1 (WebSocket/SDCP)";
+  const accessRow = document.getElementById("settings-access-row");
+  accessRow.style.display = p.printer_type === "cc2" ? "flex" : "none";
+  document.getElementById("settings-access-code").value = p.access_code || "";
+  document.getElementById("modal-printer-settings").style.display = "flex";
+  document.getElementById("settings-name").focus();
 }
+document.getElementById("btn-settings-cancel").addEventListener("click", () => {
+  document.getElementById("modal-printer-settings").style.display = "none";
+});
+document.getElementById("btn-settings-save").addEventListener("click", () => {
+  const id   = document.getElementById("settings-printer-id").value;
+  const name = document.getElementById("settings-name").value.trim();
+  const code = document.getElementById("settings-access-code").value.trim();
+  if (!name) { document.getElementById("settings-name").focus(); return; }
+  send({ action: "update_printer", printer_id: id, name, access_code: code });
+  document.getElementById("modal-printer-settings").style.display = "none";
+});
 
 // ─── Discover / Add modal ──────────────────────────────────────────────────────
 document.getElementById("btn-discover").addEventListener("click", () => {

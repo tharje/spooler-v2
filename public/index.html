@@ -102,6 +102,35 @@
     </div>
   </div>
 
+  <!-- Printer Settings Modal -->
+  <div id="modal-printer-settings" class="modal" style="display:none">
+    <div class="modal-box">
+      <h3>Printer Settings</h3>
+      <input type="hidden" id="settings-printer-id" />
+      <label>
+        Name
+        <input id="settings-name" type="text" placeholder="My Printer" maxlength="40" />
+      </label>
+      <label>
+        IP Address
+        <span id="settings-ip" class="settings-readonly"></span>
+      </label>
+      <label>
+        Type
+        <span id="settings-type" class="settings-readonly"></span>
+      </label>
+      <label id="settings-access-row" style="display:none">
+        MQTT Password
+        <input id="settings-access-code" type="text" placeholder="12345" maxlength="10" />
+        <span class="input-hint">Under Settings → Network on the printer. Changing this reconnects.</span>
+      </label>
+      <div class="modal-actions">
+        <button id="btn-settings-cancel" class="btn btn-secondary">Cancel</button>
+        <button id="btn-settings-save" class="btn btn-primary">Save</button>
+      </div>
+    </div>
+  </div>
+
   <!-- History panel -->
   <div id="panel-history" class="side-panel">
     <div class="side-panel-header">
