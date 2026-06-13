@@ -535,7 +535,8 @@ class PrinterConnection:
         while True:
             await asyncio.sleep(5)
             if self._mqtt_registered:
-                await self._send_mqtt_cmd(1003)
+                await self._send_mqtt_cmd(1002)  # full state (temps, LED, filament)
+                await self._send_mqtt_cmd(1003)  # machine_status (pause/stop sub_status)
 
     async def _handle_mqtt_message(self, message):
         topic = str(message.topic)
@@ -547,8 +548,8 @@ class PrinterConnection:
                 if p.get("error") == "ok":
                     self._mqtt_registered = True
                     print(f"[Printer {self.name}] CC2 registered OK")
-                    # Request full status to populate all fields immediately
-                    await self._send_mqtt_cmd(1003)
+                    await self._send_mqtt_cmd(1002)  # full state: temps, LED, filament
+                    await self._send_mqtt_cmd(1003)  # machine_status: pause/stop
                 else:
                     print(f"[Printer {self.name}] CC2 registration failed: {p}")
             except Exception:
@@ -560,11 +561,14 @@ class PrinterConnection:
         except Exception:
             return
 
-        # api_response: state data is top-level (not under "result")
+        # api_response: method 1003 puts data top-level; method 1002 wraps under "result"
         if "api_response" in topic:
             CC2_STATE_KEYS = {"machine_status", "print_status", "extruder",
-                              "heater_bed", "ztemperature_sensor", "gcode_move"}
-            updates = {k: v for k, v in payload.items()
+                              "heater_bed", "ztemperature_sensor", "gcode_move", "led"}
+            # Try result-wrapped format first (method 1002), then top-level (method 1003)
+            inner = payload.get("result")
+            source = inner if isinstance(inner, dict) else payload
+            updates = {k: v for k, v in source.items()
                        if k in CC2_STATE_KEYS and isinstance(v, dict)}
             if updates:
                 _deep_merge(self._cc2_state, updates)
@@ -647,6 +651,17 @@ class PrinterConnection:
             total    = print_duration + remaining
             progress = round(print_duration / total * 100) if total > 0 else 0
 
+        # print_status.filament_used is per-print mm (from CC2 print_stats.cpp)
+        # gcode_move.extruder is the absolute E-axis position (accumulates across prints)
+        filament_mm = ps.get("filament_used", None)
+        if filament_mm is None:
+            filament_mm = gm.get("extruder", 0)
+        filament_mm = filament_mm or 0
+
+        # LED: middleware reports as led.status (0=off, 1-255=on)
+        led = s.get("led", {})
+        led_on = 1 if (led.get("status", 0) or 0) > 0 else 0
+
         self.status = {
             "PrintInfo": {
                 "Status":         status_code,
@@ -655,13 +670,14 @@ class PrinterConnection:
                 "TotalTicks":     100,
                 "PrintTime":      print_duration,
                 "RemainTime":     remaining,
-                "TotalExtrusion": gm.get("extruder", 0),
+                "TotalExtrusion": filament_mm,
             },
             "TempOfNozzle":     ext.get("temperature", 0),
             "TempTargetNozzle": ext.get("target", 0),
             "TempOfHotbed":     bed.get("temperature", 0),
             "TempTargetHotbed": bed.get("target", 0),
             "TempOfBox":        ztemp.get("temperature", 0),
+            "LightStatus":      {"SecondLight": led_on},
         }
 
     async def _broadcast_state(self):
