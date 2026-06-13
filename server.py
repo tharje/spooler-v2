@@ -307,6 +307,8 @@ class PrinterConnection:
         self._cc2_state = {}
         self._filament_mm_max = 0.0
         self._prev_state_str = ""
+        self._extruder_offset = 0.0
+        self._last_extruder = 0.0
 
     def to_dict(self):
         pi = decode_printinfo(self.status.get("PrintInfo", {}))
@@ -572,6 +574,10 @@ class PrinterConnection:
             source = inner if isinstance(inner, dict) else payload
             updates = {k: v for k, v in source.items()
                        if k in CC2_STATE_KEYS and isinstance(v, dict)}
+            # Method 1002 full-state response (has "result" wrapper): filament_used is
+            # stale/zero at connection time — strip it so only live push values count.
+            if inner is not None and isinstance(updates.get("print_status"), dict):
+                updates["print_status"].pop("filament_used", None)
             if updates:
                 _deep_merge(self._cc2_state, updates)
                 self._apply_cc2_status()
@@ -650,18 +656,28 @@ class PrinterConnection:
         total    = print_duration + remaining
         progress = min(100, round(print_duration / total * 100)) if total > 0 else 0
 
-        # Reset filament watermark when a new print starts
+        # Reset filament tracking at the start of a new print
         if state_str == "printing" and self._prev_state_str not in ("printing", "paused"):
             self._filament_mm_max = 0.0
+            self._extruder_offset = 0.0
+            self._last_extruder = 0.0
         if state_str:
             self._prev_state_str = state_str
 
-        # Filament: track high watermark to survive G92 E0 resets and stale 1002 zeros.
-        # filament_used from the push is most accurate; gcode_move.extruder as fallback.
-        raw_filament = (ps.get("filament_used") or 0) or (gm.get("extruder") or 0)
-        if raw_filament > self._filament_mm_max:
-            self._filament_mm_max = raw_filament
-        filament_mm = self._filament_mm_max
+        # Primary: print_status.filament_used (cumulative Klipper counter, not in 1002).
+        # Use a high watermark in case a push occasionally sends 0.
+        filament_from_push = ps.get("filament_used") or 0
+        if filament_from_push > self._filament_mm_max:
+            self._filament_mm_max = filament_from_push
+
+        # Fallback: gcode_move.extruder accumulated across G92 E0 resets.
+        # When E drops to near-zero, add the previous segment to a running offset.
+        raw_ext = gm.get("extruder") or 0
+        if raw_ext < self._last_extruder * 0.5 and self._last_extruder > 1.0:
+            self._extruder_offset += self._last_extruder
+        self._last_extruder = raw_ext
+
+        filament_mm = max(self._filament_mm_max, self._extruder_offset + raw_ext)
 
         # LED: middleware reports as led.status (0=off, 1-255=on)
         led = s.get("led", {})
