@@ -1,9 +1,12 @@
-# Spooler + Spoolman – run both services with a single command:
+# Spooler + Spoolman
+#
+# Quick start (no git clone needed):
+#   curl -fsSL https://raw.githubusercontent.com/tharje/spooler-v2/main/docker-compose.yml -o docker-compose.yml
 #   docker compose up -d
 #
 # network_mode: host is required on Linux so Spooler can:
 #   - send UDP broadcast on port 3000 (printer discovery)
-#   - open WebSocket to printers on port 3030
+#   - reach printers via WebSocket on port 3030 / MQTT on port 1883
 
 services:
 
@@ -17,11 +20,13 @@ services:
     restart: unless-stopped
 
   spooler:
-    build: .
+    image: ghcr.io/tharje/spooler-v2:latest
+    # To build from source instead:
+    #   replace the image line above with:  build: .
     network_mode: host
     env_file:
       - path: .env
-        required: false   # OK to omit on first run; set AUTH_ENABLED=false if no .env
+        required: false
     environment:
       DATA_DIR: /data
     volumes:

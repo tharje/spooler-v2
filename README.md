@@ -1,42 +1,65 @@
 # Spooler v2
 
-Local web GUI for **Elegoo Centauri Carbon** FDM 3D printers (CC1 and CC2). Control and monitor multiple printers from a single browser tab — or install as a PWA on your phone.
+Local web GUI for **Elegoo Centauri Carbon** FDM 3D printers (CC1 and CC2). Monitor and control multiple printers from a single browser tab — or install as a PWA on your phone.
 
-## Features
+![Status: printing, paused, idle, complete](https://img.shields.io/badge/CC1%20%26%20CC2-supported-brightgreen)
 
-- **Live status** – accurate status mapping from SDCP v3.0 (idle, printing, warming up, paused, leveling, complete, cancelled)
-- **Camera feed** – MJPEG stream direct from each printer
-- **Temperature monitoring** – nozzle, bed and chamber with live values
-- **Print progress** – layer count, percentage, elapsed and remaining time
-- **Filament tracking** – live mm/g per print and cumulative history log
-- **Controls** – pause, resume, stop, light toggle
-- **Auto-discovery** – UDP broadcast finds printers on the local network
-- **Persistence** – printers and print history saved between restarts
-- **Spoolman integration** – filament spool inventory via [Spoolman](https://github.com/Donkie/Spoolman); auto-deducts used grams after each print, assign spools to printers
-- **EAN barcode lookup** – scan a spool's barcode to auto-fill brand, material, colour and weight from SpoolmanDB
-- **Filament catalogue import** – one-click import of all ELEGOO filaments from SpoolmanDB (97 entries with extruder temp, bed temp, spool weight and more)
-- **Authentication** – password-protected login with session cookies; first-time setup via the web UI
-- **PWA** – installable as a home screen app on Android and iOS (no app store needed)
-- **HTTPS** – self-signed cert on port 8443 for secure PWA install; Tailscale serve works out of the box
-- **Docker** – single `docker compose up -d` starts both Spooler and Spoolman
+## Quick start
 
-## Requirements
-
-- Docker (recommended), or Python 3.12+
-
-## Setup
-
-### Option A – Docker (recommended)
+**Requires:** [Docker](https://docs.docker.com/get-docker/)
 
 ```bash
-git clone https://github.com/tharje/spooler-v2.git
-cd spooler-v2
+curl -fsSL https://raw.githubusercontent.com/tharje/spooler-v2/main/docker-compose.yml -o docker-compose.yml
 docker compose up -d
 ```
 
-Open **http://\<server-ip\>:8080** in your browser.
+Open **`http://<server-ip>:8080`** in your browser. On first visit you will be prompted to create a username and password.
 
-> `network_mode: host` is required on Linux so Spooler can reach printers via UDP broadcast and WebSocket. On macOS/Windows use the Python setup below.
+> **Note:** `network_mode: host` is required on Linux. On **macOS or Windows**, Docker's host networking does not work — use the [Python setup](#option-b--python-no-docker) instead.
+
+---
+
+## Features
+
+- **Live status** – idle, printing, warming up, paused, leveling, complete, cancelled, error
+- **Camera feed** – MJPEG stream from each printer (CC2), proxied through Spooler behind auth
+- **Temperature monitoring** – nozzle, bed and chamber with live target values
+- **Print progress** – layer count, percentage, elapsed and remaining time
+- **Filament tracking** – live mm/g per print and cumulative history log
+- **Controls** – pause, resume, stop, light toggle
+- **Auto-discovery** – finds printers on the local network automatically
+- **Persistence** – printers, history and spool data saved between restarts
+- **Authentication** – password-protected login; first-time setup via the web UI, no terminal needed
+- **Spoolman integration** – filament spool inventory with auto-deduction after each print
+- **EAN barcode lookup** – scan a spool to auto-fill brand, material, colour and weight
+- **Filament catalogue import** – one-click import of all ELEGOO filaments from SpoolmanDB
+- **PWA** – installable as a home screen app on Android and iOS
+- **HTTPS** – self-signed cert on port 8443; works with Tailscale serve out of the box
+
+---
+
+## Installation
+
+### Option A – Docker (recommended)
+
+No git clone needed. Just download the compose file and start:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tharje/spooler-v2/main/docker-compose.yml -o docker-compose.yml
+docker compose up -d
+```
+
+Open **`http://<server-ip>:8080`**.
+
+Both Spooler and Spoolman start automatically. Data is stored in Docker volumes (`spooler_data`, `spoolman_data`) and survives restarts and rebuilds.
+
+**Useful commands:**
+
+```bash
+docker compose pull && docker compose up -d   # update to latest version
+docker compose logs -f                        # live logs
+docker compose down                           # stop (data preserved)
+```
 
 ### Option B – Python (no Docker)
 
@@ -44,116 +67,96 @@ Open **http://\<server-ip\>:8080** in your browser.
 git clone https://github.com/tharje/spooler-v2.git
 cd spooler-v2
 ./setup.sh
-. venv/bin/activate && python3 server.py
 ```
 
-Spoolman still needs to run separately (see [Spoolman docs](https://github.com/Donkie/Spoolman)).
+Spoolman needs to run separately — see [Spoolman docs](https://github.com/Donkie/Spoolman).
+
+---
 
 ## Install as PWA
 
-On **Android** (Chrome): open `http://<server-ip>:8080` → tap ⋮ → **Add to Home Screen**  
-On **iOS** (Safari): open the URL → tap Share → **Add to Home Screen**
+**Android** (Chrome): open the URL → tap ⋮ → **Add to Home Screen**  
+**iOS** (Safari): open the URL → tap Share → **Add to Home Screen**
 
-For a proper standalone app (no browser chrome), use **HTTPS**:
-- `https://<server-ip>:8443` with the self-signed cert, or
-- [Tailscale serve](https://tailscale.com/kb/1312/serve) for a valid cert automatically
+For a proper standalone app (no browser chrome), use HTTPS:
 
-## Docker commands
+- `https://<server-ip>:8443` — self-signed cert (download and install it from that URL)
+- [Tailscale serve](https://tailscale.com/kb/1312/serve) — valid cert automatically
 
-```bash
-docker compose up -d            # start
-docker compose down             # stop (data preserved)
-docker compose logs -f          # live logs
-docker compose up -d --build    # rebuild after update
-```
-
-Data is stored in Docker volumes (`spooler_data`, `spoolman_data`) and survives restarts and rebuilds. Only `docker compose down -v` removes all data.
-
-## Adding printers
-
-- Click **Discover** to auto-detect printers on the network (UDP port 3000)
-- Click **Add Printer** to enter an IP address manually
-
-Printer configs are saved and reconnected automatically on next start.
-
-## Filament history
-
-All completed and cancelled prints are logged with filename, filament used (mm and grams), print time and completion status. Open the **History** panel from the sidebar.
-
-## Spoolman
-
-Spooler integrates with **[Spoolman](https://github.com/Donkie/Spoolman)** – the open-source filament spool manager.
-
-- Spoolman runs on **port 7912** alongside Spooler (Docker Compose starts both)
-- Open **Spoolman UI** directly from the Spools panel for advanced management
-- Assign a spool to a printer from the printer card – used grams are deducted automatically when a print completes
-- Add spools manually or scan the EAN barcode to auto-fill details from SpoolmanDB
-- **Import Elegoo** button imports all 97 ELEGOO filament types from SpoolmanDB in one click, including material, colour, density, diameter, extruder temp, bed temp and spool weight
-- Low/empty spool warnings appear on the printer card and as notifications
-
-### Spool form fields
-
-| Field | Default | Notes |
-|-------|---------|-------|
-| Brand | – | Loaded from SpoolmanDB (53 brands) |
-| Material | – | Loaded from SpoolmanDB (51 types); auto-fills density |
-| Color name | – | Free text |
-| Color hex | `#888888` | Colour picker |
-| Total weight (g) | 1000 | Net filament weight |
-| Diameter (mm) | 1.75 | |
-| Density (g/cm³) | 1.24 | Auto-filled when material is selected |
+---
 
 ## Authentication
 
-Spooler is password-protected by default. On first visit, the browser shows a **Create account** page where you choose a username and password. No terminal setup required.
+On first visit, Spooler shows a **Create account** page. Choose a username and password — done. No terminal or config file needed.
 
-The password hash is stored in `DATA_DIR/auth.json` inside the Docker volume and persists across restarts and rebuilds.
+### Disable authentication
 
-### Disable authentication (trusted LAN only)
+For trusted local networks where you don't want a password, create a `.env` file next to `docker-compose.yml`:
 
-Create a `.env` file in the project root:
-
-```
+```env
 AUTH_ENABLED=false
 ```
 
-A warning is printed at startup when auth is off.
+Then restart: `docker compose up -d`
 
-### Advanced: set credentials via environment variable
+### Advanced: credentials via environment variable
 
-If you prefer to manage credentials outside the data volume (e.g. Docker secrets or CI), set `SPOOLER_PW_HASH` in `.env`. This takes priority over the saved file.
+If you prefer to manage credentials outside the data volume (e.g. Docker secrets):
 
 ```bash
 # Generate a bcrypt hash
 docker compose exec spooler python3 server.py --hash-password
 ```
 
+Add to `.env`:
+
 ```env
 SPOOLER_PW_HASH=$2b$12$...
-SPOOLER_USERNAME=admin   # optional, default is whatever you set at first-time setup
+SPOOLER_USERNAME=admin
 ```
 
-See `.env.example` for all available options.
+See [`.env.example`](.env.example) for all options.
 
-### How it works
+---
 
-| Part | Mechanism |
-|------|-----------|
-| Password | bcrypt hash saved to `DATA_DIR/auth.json` or `SPOOLER_PW_HASH` env var |
-| Session | Random token (`secrets.token_urlsafe`), stored in memory, 30-day TTL |
-| Cookie | `HttpOnly; SameSite=Strict`, `Secure` flag set automatically over HTTPS |
-| HTTP API | 401 JSON on missing/invalid session; pages redirect to `/login` |
-| WebSocket (port 8765) | Session cookie validated in the handshake — all printer commands protected |
-| Camera feed | Proxied through `/api/camera/<id>` behind auth — not exposed directly from the printer |
+## Adding printers
+
+- Click **Discover** to auto-find printers on the network
+- Click **Add Printer** to enter an IP address manually
+
+For **CC2 (Centauri Carbon 2)**, you also need the MQTT password shown on the printer under **Settings → Network**.
+
+Printer configs are saved and reconnect automatically on restart.
+
+---
+
+## Filament tracking
+
+- Live filament usage (mm and grams) shown on each printer card while printing
+- All completed and cancelled prints are logged in the **History** panel
+- Assign a Spoolman spool to a printer — used grams are deducted automatically after each print
+
+---
+
+## Spoolman
+
+Spooler integrates with **[Spoolman](https://github.com/Donkie/Spoolman)**, an open-source filament spool manager.
+
+- Runs on **port 7912** alongside Spooler (started automatically by Docker Compose)
+- Open **Spoolman UI** directly from the Spools panel
+- Add spools manually or scan an EAN barcode to auto-fill details
+- **Import Elegoo** imports all 97 ELEGOO filament types from SpoolmanDB in one click
+
+---
 
 ## Protocol
 
 | Printer | Transport | Notes |
 |---------|-----------|-------|
-| CC1 (Centauri Carbon 1) | SDCP v3.0 over WebSocket (port 3030) | Status codes match CarbonicSidecar / elegoo-homeassistant |
-| CC2 (Centauri Carbon 2) | MQTT – printer hosts its own broker (port 1883) | Client subscribes to `elegoo/<serial>/api_status`; commands to `elegoo/<serial>/<client_id>/api_request` |
+| CC1 (Centauri Carbon 1) | SDCP v3.0 over WebSocket (port 3030) | |
+| CC2 (Centauri Carbon 2) | MQTT – printer hosts its own broker (port 1883) | Requires MQTT password from printer settings |
 
-See [CC2_INTEGRATION.md](CC2_INTEGRATION.md) for full CC2 protocol notes, topic map, payload shape, and integration guidance.
+See [CC2_INTEGRATION.md](CC2_INTEGRATION.md) for full CC2 protocol notes.
 
 ## Ports
 
@@ -163,24 +166,24 @@ See [CC2_INTEGRATION.md](CC2_INTEGRATION.md) for full CC2 protocol notes, topic 
 | 8443 | HTTPS – web UI (self-signed cert, needed for PWA) |
 | 8765 | WebSocket – browser ↔ backend |
 | 7912 | Spoolman – filament manager UI and API |
-| 3030 | WebSocket – backend ↔ printer (SDCP) |
+| 3030 | WebSocket – backend ↔ printer (CC1/SDCP) |
 | 3000 | UDP – printer discovery broadcast |
 | 1883 | MQTT – CC2 printer broker (on the printer, not the server) |
 
 ## Stack
 
-- **Backend** – Python 3.12, `asyncio`, `websockets`
+- **Backend** – Python 3.12, `asyncio`, `websockets`, `aiomqtt`, `bcrypt`
 - **Frontend** – Vanilla HTML/CSS/JS, no build step
 - **Spool manager** – [Spoolman](https://github.com/Donkie/Spoolman) (official Docker image)
-- **Filament database** – [SpoolmanDB](https://github.com/Donkie/SpoolmanDB) (EAN lookup + catalogue import)
+- **Filament database** – [SpoolmanDB](https://github.com/Donkie/SpoolmanDB)
 
 ## Acknowledgements
 
-CC2 (Elegoo Centauri Carbon 2) support would not have been possible without the following projects. Huge thanks to their authors:
+CC2 support would not have been possible without these projects:
 
-- [CentauriCarbon2](https://github.com/elegooofficial/CentauriCarbon2) by Elegoo (official) — CC2 firmware source; used for method codes (`method.h`), authoritative print state strings (`print_stats.cpp`: `"printing"`, `"paused"`, `"complete"`, `"cancelled"`, `"error"`), and machine-status sub_status codes
+- [CentauriCarbon2](https://github.com/elegooofficial/CentauriCarbon2) by Elegoo (official) — firmware source; method codes, print state strings and sub_status codes
 - [centauri-sentinel](https://github.com/LegalMarc/centauri-sentinel) by LegalMarc — MQTT client details, topic structure, partial-status deep-merge, MJPEG grabber
-- [elegoo-homeassistant](https://github.com/danielcherubini/elegoo-homeassistant) by danielcherubini — CC2 MQTT transport type, access-code config, and sub_status constants
+- [elegoo-homeassistant](https://github.com/danielcherubini/elegoo-homeassistant) by danielcherubini — CC2 MQTT transport, access-code config and sub_status constants
 - [sdcp-centauri-carbon](https://github.com/WalkerFrederick/sdcp-centauri-carbon) by WalkerFrederick — SDCP v3.0 protocol documentation (CC1)
 - [Spoolman](https://github.com/Donkie/Spoolman) by Donkie — open-source filament spool manager
-- [SpoolmanDB](https://github.com/Donkie/SpoolmanDB) by Donkie — filament database used for EAN lookup and catalogue import
+- [SpoolmanDB](https://github.com/Donkie/SpoolmanDB) by Donkie — filament database for EAN lookup and catalogue import
