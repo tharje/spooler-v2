@@ -795,7 +795,7 @@ main {
   bottom: 16px;
   left: 16px;
   z-index: 90;
-  background: none;
+  background: var(--surface2);
   border: 1px solid var(--border);
   border-radius: 99px;
   padding: 3px 10px;
@@ -803,12 +803,13 @@ main {
   font-weight: 600;
   color: var(--text-muted);
   cursor: pointer;
-  transition: color .15s, border-color .15s;
+  transition: color .15s, border-color .15s, background .15s;
   letter-spacing: .3px;
 }
 #version-badge:hover {
   color: var(--text);
   border-color: var(--accent);
+  background: var(--border);
 }
 
 /* ─── Changelog modal ─────────────────────────────────────────────────────── */
