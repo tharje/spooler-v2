@@ -4,6 +4,10 @@ Local web GUI for **Elegoo Centauri Carbon** FDM 3D printers (CC1 and CC2). Moni
 
 ![Status: printing, paused, idle, complete](https://img.shields.io/badge/CC1%20%26%20CC2-supported-brightgreen)
 
+> **Branches**
+> - `main` — latest stable release. This is what the Docker image (`ghcr.io/tharje/spooler-v2:latest`) is built from.
+> - `dev` — active development. New features and fixes land here first and are tested before being merged to `main`.
+
 ## Quick start
 
 **Requires:** [Docker](https://docs.docker.com/get-docker/)
