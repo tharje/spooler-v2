@@ -1075,23 +1075,38 @@ class SPHandler(SimpleHTTPRequestHandler):
         if not p or not p.camera_url:
             self._json({"error": "Camera not available"}, 404)
             return
+        import http.client as _http
+        parsed = urllib.parse.urlparse(p.camera_url)
         try:
-            with urllib.request.urlopen(p.camera_url, timeout=10) as upstream:
-                ct = upstream.headers.get("Content-Type", "multipart/x-mixed-replace; boundary=frame")
-                self.send_response(200)
-                self.send_header("Content-Type", ct)
-                self.send_header("Cache-Control", "no-cache")
-                self.end_headers()
-                while True:
-                    chunk = upstream.read(8192)
-                    if not chunk:
-                        break
-                    self.wfile.write(chunk)
-                    self.wfile.flush()
+            conn = _http.HTTPConnection(parsed.netloc, timeout=10)
+            conn.request("GET", parsed.path or "/")
+            resp = conn.getresponse()
+            # Remove read timeout after connecting — MJPEG frame rate can be
+            # very low during printing and must not trigger a socket timeout.
+            try:
+                conn.sock.settimeout(None)
+            except Exception:
+                pass
+            ct = resp.getheader("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+            self.send_response(200)
+            self.send_header("Content-Type", ct)
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            while True:
+                chunk = resp.read(8192)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                self.wfile.flush()
         except (ConnectionResetError, BrokenPipeError):
             pass  # client disconnected
         except Exception:
             pass
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
     # ── HTTP routes ──────────────────────────────────────────────────────────
 
