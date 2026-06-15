@@ -1026,6 +1026,45 @@ document.getElementById("modal-spool-picker").addEventListener("click", (e) => {
     document.getElementById("modal-spool-picker").classList.remove("open");
 });
 
+// ─── Changelog ────────────────────────────────────────────────────────────────
+let _changelog = [];
+
+async function loadChangelog() {
+  try {
+    const resp = await fetch("/changelog.json");
+    _changelog = await resp.json();
+    if (_changelog.length > 0)
+      document.getElementById("version-badge").textContent = "v" + _changelog[0].version;
+  } catch (e) {
+    console.warn("Could not load changelog:", e);
+  }
+}
+
+function openChangelog() {
+  document.getElementById("changelog-body").innerHTML = _changelog.map(entry => `
+    <div class="changelog-entry">
+      <div class="changelog-entry-header">
+        <span class="changelog-version">v${entry.version}</span>
+        <span class="changelog-date">${entry.date}</span>
+      </div>
+      <ul class="changelog-list">
+        ${entry.changes.map(c => `<li>${c}</li>`).join("")}
+      </ul>
+    </div>
+  `).join("");
+  document.getElementById("modal-changelog").classList.add("open");
+}
+
+document.getElementById("version-badge").addEventListener("click", openChangelog);
+document.getElementById("btn-changelog-close").addEventListener("click", () => {
+  document.getElementById("modal-changelog").classList.remove("open");
+});
+document.getElementById("modal-changelog").addEventListener("click", (e) => {
+  if (e.target === document.getElementById("modal-changelog"))
+    document.getElementById("modal-changelog").classList.remove("open");
+});
+
 // ─── Boot ──────────────────────────────────────────────────────────────────────
 document.getElementById("btn-spoolman-ui").href = `http://${location.hostname}:7912`;
+loadChangelog();
 connect();
