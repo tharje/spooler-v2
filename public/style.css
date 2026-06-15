@@ -789,6 +789,82 @@ main {
   margin-top: 10px;
 }
 
+/* ─── Version badge ──────────────────────────────────────────────────────── */
+#version-badge {
+  position: fixed;
+  bottom: 16px;
+  left: 16px;
+  z-index: 90;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+  letter-spacing: .3px;
+}
+#version-badge:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+/* ─── Changelog modal ─────────────────────────────────────────────────────── */
+.modal-box-changelog {
+  width: min(500px, 92vw);
+  max-height: 85vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.changelog-body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-right: 4px;
+}
+.changelog-entry-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.changelog-version {
+  font-size: 15px;
+  font-weight: 700;
+}
+.changelog-date {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 2px 8px;
+}
+.changelog-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.changelog-list li {
+  font-size: 13px;
+  color: var(--text-muted);
+  display: flex;
+  gap: 8px;
+  line-height: 1.5;
+}
+.changelog-list li::before {
+  content: "·";
+  color: var(--accent);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
 /* ─── Responsive ──────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
   .sidenav { width: 52px; }
