@@ -544,10 +544,10 @@ class PrinterConnection:
             return False
         topic = f"elegoo/{self._mqtt_serial}/{self._mqtt_client_id}/api_request"
         payload = {"id": uuid.uuid4().int & 0xFFFF, "method": method}
-        # LED: {"params": {"power": 1/0}}  (elegoo-homeassistant cc2/client.py)
         if cmd == CMD_LIGHT and data:
             light_on = data.get("LightStatus", {}).get("SecondLight", False)
             payload["params"] = {"power": 1 if light_on else 0}
+            print(f"[Printer {self.name}] CC2 light → {json.dumps(payload)}")
         try:
             await self._mqtt_client.publish(topic, json.dumps(payload))
             return True
@@ -949,8 +949,11 @@ async def handle_browser_message(ws, raw):
         if not ok:
             await ws.send(json.dumps({"type": "error", "message": "Printer not connected"}))
         elif action in ("light_on", "light_off"):
-            await asyncio.sleep(0.5)
-            await printer.send_cmd(CMD_STATUS, {})
+            await asyncio.sleep(0.4)
+            if printer.printer_type == "cc2":
+                await printer._send_mqtt_cmd(1002)  # full state refresh → updates led.status
+            else:
+                await printer.send_cmd(CMD_STATUS, {})
 
 
 # ─── HTTP File Upload Proxy ────────────────────────────────────────────────────
