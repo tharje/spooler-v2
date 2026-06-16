@@ -103,7 +103,7 @@ header {
   gap: 2px;
   position: sticky;
   top: 60px;
-  height: calc(100vh - 60px);
+  height: calc(100vh - 60px - 36px);
 }
 
 .sidenav-item {
@@ -126,6 +126,8 @@ header {
 .sidenav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
 .sidenav-item:hover { background: var(--surface2); color: var(--text); }
 .sidenav-item.active { background: rgba(255,107,43,.12); color: var(--accent); }
+.sidenav-spacer { flex: 1; }
+.sidenav-item-signout:hover { background: rgba(220,50,50,.1); color: #e05555; }
 
 /* ─── Main / Grid ─────────────────────────────────────────────────────────── */
 main {
