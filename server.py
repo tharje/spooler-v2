@@ -605,10 +605,15 @@ class PrinterConnection:
             await self._broadcast_state()
 
     async def _mqtt_status_poller(self):
+        tick = 0
         while True:
             await asyncio.sleep(5)
             if self._mqtt_registered:
-                await self._send_mqtt_cmd(1003)  # machine_status (pause/stop sub_status)
+                await self._send_mqtt_cmd(1003)  # machine_status sub_status (transient states)
+                if tick % 3 == 0:               # every 15 s: full state incl. print_status.state
+                    await asyncio.sleep(0.2)
+                    await self._send_mqtt_cmd(1002)
+            tick += 1
 
     async def _handle_mqtt_message(self, message):
         topic = str(message.topic)
@@ -707,6 +712,7 @@ class PrinterConnection:
             "cancelled": 8,
             "error":     14,
             "standby":   0,
+            "idle":      0,
         }
 
         if sub_status in _SUB_TRANSIENT:
@@ -715,10 +721,8 @@ class PrinterConnection:
             status_code = _STATE_STR[state_str]                # from push state field
         elif sub_status in _SUB_STABLE:
             status_code = _SUB_STABLE[sub_status]              # from last GET_STATUS
-        elif print_duration > 0 or remaining > 0:
-            status_code = 3                                    # printing (no state yet)
         else:
-            status_code = 0                                    # idle
+            status_code = 0                                    # idle / unknown state
 
         # machine_status.progress uses an unknown scale — use time-based only
         total    = print_duration + remaining
@@ -1070,6 +1074,32 @@ class SPHandler(SimpleHTTPRequestHandler):
         self.wfile.write(resp)
         print(f"[Auth] Initial password set for user '{username}'")
 
+    def _handle_change_password(self):
+        if not BCRYPT_AVAILABLE:
+            self._json({"error": "bcrypt not installed on server"}, 500)
+            return
+        length = int(self.headers.get("Content-Length", 0))
+        try:
+            body = json.loads(self.rfile.read(length))
+        except Exception:
+            self._json({"error": "Bad request"}, 400)
+            return
+        password = body.get("password", "")
+        if len(password) < 8:
+            self._json({"error": "Password must be at least 8 characters"}, 400)
+            return
+        try:
+            pw_hash = _bcrypt.hashpw(password.encode(), _bcrypt.gensalt()).decode()
+            # Read existing username and overwrite hash
+            auth = _load_auth()
+            username = auth.get("username", "admin")
+            _save_auth(username, pw_hash)
+        except Exception as e:
+            self._json({"error": str(e)}, 500)
+            return
+        self._json({"ok": True})
+        print(f"[Auth] Password changed for user '{username}'")
+
     # ── Camera proxy ─────────────────────────────────────────────────────────
 
     def _proxy_camera(self):
@@ -1241,6 +1271,10 @@ class SPHandler(SimpleHTTPRequestHandler):
 
         # ── Auth gate ────────────────────────────────────────────────────────
         if not self._check_auth():
+            return
+
+        if self.path == "/api/change-password":
+            self._handle_change_password()
             return
 
         # ── Protected routes ─────────────────────────────────────────────────

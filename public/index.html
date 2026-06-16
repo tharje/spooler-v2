@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css?v=11" />
+  <link rel="stylesheet" href="style.css?v=13" />
 </head>
 <body>
   <header>
@@ -36,14 +36,6 @@
         </svg>
         Add Printer
       </button>
-      <button id="btn-signout" class="btn btn-secondary" title="Sign out">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-          <polyline points="16 17 21 12 16 7"/>
-          <line x1="21" y1="12" x2="9" y2="12"/>
-        </svg>
-        Sign out
-      </button>
     </div>
   </header>
 
@@ -63,6 +55,22 @@
         <line x1="2" y1="12" x2="8" y2="12"/><line x1="16" y1="12" x2="22" y2="12"/>
       </svg>
       <span>Spools</span>
+    </button>
+    <button id="btn-app-settings" class="sidenav-item" title="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+      <span>Settings</span>
+    </button>
+    <div class="sidenav-spacer"></div>
+    <button id="btn-signout-nav" class="sidenav-item sidenav-item-signout" title="Sign out">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+        <polyline points="16 17 21 12 16 7"/>
+        <line x1="21" y1="12" x2="9" y2="12"/>
+      </svg>
+      <span>Sign out</span>
     </button>
   </nav>
 
@@ -268,6 +276,25 @@
     <button id="version-badge" class="footer-version" title="Release notes">v…</button>
   </footer>
 
+  <!-- Settings modal -->
+  <div id="modal-app-settings" class="modal">
+    <div class="modal-box">
+      <h3>Settings</h3>
+      <label>
+        New password
+        <input id="settings-new-password" type="password" placeholder="Min. 8 characters" />
+      </label>
+      <label>
+        Confirm password
+        <input id="settings-confirm-password" type="password" placeholder="Repeat password" />
+      </label>
+      <div class="modal-actions">
+        <button id="btn-app-settings-cancel" class="btn btn-secondary">Cancel</button>
+        <button id="btn-app-settings-save" class="btn btn-primary">Change password</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Changelog modal -->
   <div id="modal-changelog" class="modal">
     <div class="modal-box modal-box-changelog">
@@ -283,7 +310,7 @@
   <div id="toast-area"></div>
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-  <script src="app.js?v=11"></script>
+  <script src="app.js?v=12"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
