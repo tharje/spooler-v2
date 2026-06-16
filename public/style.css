@@ -789,6 +789,88 @@ main {
   margin-top: 10px;
 }
 
+/* ─── Footer ──────────────────────────────────────────────────────────────── */
+.app-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  height: 36px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.footer-brand {
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: .2px;
+}
+.footer-version {
+  background: none;
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 0;
+  letter-spacing: .3px;
+  transition: color .15s;
+}
+.footer-version:hover { color: var(--accent); }
+
+/* ─── Changelog modal ─────────────────────────────────────────────────────── */
+.modal-box-changelog {
+  width: min(520px, 94vw);
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+}
+.changelog-body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding-right: 2px;
+}
+.cl-entry-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.cl-version {
+  font-size: 16px;
+  font-weight: 700;
+}
+.cl-date {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 2px 9px;
+}
+.cl-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.cl-list li {
+  font-size: 13px;
+  color: var(--text-muted);
+  display: flex;
+  gap: 9px;
+  line-height: 1.5;
+}
+.cl-list li::before {
+  content: "–";
+  color: var(--accent);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
 /* ─── Responsive ──────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
   .sidenav { width: 52px; }

@@ -1,0 +1,35 @@
+[
+  {
+    "version": "2.1.0",
+    "date": "2026-06-16",
+    "changes": [
+      "Fixed CC2 light button not reflecting state after click",
+      "Fixed CC2 print progress showing over 100% (layer count used as percentage)",
+      "Fixed CC2 filament usage stuck at initial connection value",
+      "Fixed CC1 camera feed dropping during printing",
+      "Added password authentication with first-time setup via web UI",
+      "Added Spoolman integration: filament spool inventory with auto-deduction after each print",
+      "Added ELEGOO filament catalogue import from SpoolmanDB (97 filament types)",
+      "Added EAN barcode scan to auto-fill spool brand, material and colour",
+      "Docker image published to ghcr.io — two-command install, no git clone needed"
+    ]
+  },
+  {
+    "version": "2.0.0",
+    "date": "2026-05-20",
+    "changes": [
+      "Initial release",
+      "CC1 (Centauri Carbon 1) support via SDCP v3.0 over WebSocket",
+      "CC2 (Centauri Carbon 2) support via MQTT",
+      "Live status: idle, printing, warming up, paused, leveling, complete, cancelled, error",
+      "Temperature monitoring: nozzle, bed and chamber with live target values",
+      "Print progress: layer count, percentage, elapsed and remaining time",
+      "Filament tracking: live mm/g per print and cumulative history log",
+      "Camera feed proxied through Spooler (CC2)",
+      "Controls: pause, resume, stop, light toggle",
+      "Auto-discovery via UDP broadcast",
+      "PWA: installable on Android and iOS",
+      "HTTPS with self-signed cert on port 8443"
+    ]
+  }
+]

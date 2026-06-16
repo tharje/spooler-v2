@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=11" />
 </head>
 <body>
   <header>
@@ -262,11 +262,28 @@
 
   </div><!-- /.app-body -->
 
+  <!-- Footer -->
+  <footer class="app-footer">
+    <span class="footer-brand">Spooler v2</span>
+    <button id="version-badge" class="footer-version" title="Release notes">v…</button>
+  </footer>
+
+  <!-- Changelog modal -->
+  <div id="modal-changelog" class="modal">
+    <div class="modal-box modal-box-changelog">
+      <h3>Release Notes</h3>
+      <div id="changelog-body" class="changelog-body"></div>
+      <div class="modal-actions">
+        <button id="btn-changelog-close" class="btn btn-secondary">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast notifications -->
   <div id="toast-area"></div>
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=11"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
