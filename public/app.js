@@ -265,7 +265,7 @@ function renderPrinter(printer) {
   const remaining = printer.status?.PrintInfo?.RemainTime ?? 0;
   const filamentMm = printer.filament_mm ?? 0;
   const filamentG  = printer.filament_g  ?? 0;
-  const lightOn    = printer.status?.LightStatus?.SecondLight === 1;
+  const lightOn    = getLightOn(printer);
 
   const cameraUrl = printer.camera_url
     ? `/api/camera/${encodeURIComponent(printer.id)}`
@@ -419,7 +419,19 @@ function syncEmptyState() {
 }
 
 // ─── User actions ──────────────────────────────────────────────────────────────
+const _lightPending = {}; // printerId → { on: bool, until: ms timestamp }
+
+function getLightOn(printer) {
+  const p = _lightPending[printer.id];
+  if (p && Date.now() < p.until) return p.on;
+  return printer.status?.LightStatus?.SecondLight === 1;
+}
+
 function printerAction(id, action) {
+  if (action === "light_on" || action === "light_off") {
+    _lightPending[id] = { on: action === "light_on", until: Date.now() + 5000 };
+    if (printers[id]) renderPrinter(printers[id]);
+  }
   send({ action, printer_id: id });
 }
 
