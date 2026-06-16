@@ -483,22 +483,45 @@ document.getElementById("btn-signout")?.addEventListener("click", signOut);
 document.getElementById("btn-signout-nav")?.addEventListener("click", signOut);
 
 // ─── App settings ─────────────────────────────────────────────────────────────
-const _settingsModal = document.getElementById("modal-app-settings");
-document.getElementById("btn-app-settings")?.addEventListener("click", () => {
-  document.getElementById("settings-new-password").value = "";
-  document.getElementById("settings-confirm-password").value = "";
+const _settingsModal    = document.getElementById("modal-app-settings");
+const _settingsMenu     = document.getElementById("settings-menu");
+const _settingsPwPage   = document.getElementById("settings-change-password");
+const _settingsNotifPage = document.getElementById("settings-notifications");
+
+function _openSettings() {
+  [_settingsPwPage, _settingsNotifPage].forEach(p => p && (p.style.display = "none"));
+  _settingsMenu.style.display = "";
   _settingsModal?.classList.add("open");
-});
+}
+function _showSettingsPage(pageEl) {
+  _settingsMenu.style.display = "none";
+  [_settingsPwPage, _settingsNotifPage].forEach(p => p && (p.style.display = "none"));
+  pageEl.style.display = "";
+}
+function _backToSettingsMenu() {
+  [_settingsPwPage, _settingsNotifPage].forEach(p => p && (p.style.display = "none"));
+  _settingsMenu.style.display = "";
+}
+
+document.getElementById("btn-app-settings")?.addEventListener("click", _openSettings);
 document.getElementById("btn-app-settings-cancel")?.addEventListener("click", () =>
   _settingsModal?.classList.remove("open"));
 _settingsModal?.addEventListener("click", e => {
   if (e.target === _settingsModal) _settingsModal.classList.remove("open");
 });
+
+// Password sub-page
+document.getElementById("btn-settings-goto-password")?.addEventListener("click", () => {
+  document.getElementById("settings-new-password").value = "";
+  document.getElementById("settings-confirm-password").value = "";
+  _showSettingsPage(_settingsPwPage);
+});
+document.getElementById("btn-settings-back")?.addEventListener("click", _backToSettingsMenu);
 document.getElementById("btn-app-settings-save")?.addEventListener("click", async () => {
   const pw  = document.getElementById("settings-new-password").value;
   const pw2 = document.getElementById("settings-confirm-password").value;
-  if (pw.length < 8)        { toast("Password must be at least 8 characters"); return; }
-  if (pw !== pw2)           { toast("Passwords do not match"); return; }
+  if (pw.length < 8)  { toast("Password must be at least 8 characters"); return; }
+  if (pw !== pw2)     { toast("Passwords do not match"); return; }
   const r = await fetch("/api/change-password", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -510,6 +533,132 @@ document.getElementById("btn-app-settings-save")?.addEventListener("click", asyn
   } else {
     const d = await r.json().catch(() => ({}));
     toast(d.error || "Failed to update password");
+  }
+});
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+// ─── Push notifications ───────────────────────────────────────────────────────
+
+async function _subscribePush() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const keyResp = await fetch("/api/push-public-key");
+    if (!keyResp.ok) return null;
+    const { publicKey } = await keyResp.json();
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: publicKey,
+    });
+    await fetch("/api/push-subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(sub.toJSON()),
+    });
+    return sub;
+  } catch (e) {
+    console.warn("Push subscribe failed:", e);
+    return null;
+  }
+}
+
+async function _unsubscribePush() {
+  if (!("serviceWorker" in navigator)) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      await fetch("/api/push-unsubscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint: sub.endpoint }),
+      });
+      await sub.unsubscribe();
+    }
+  } catch (e) {
+    console.warn("Push unsubscribe failed:", e);
+  }
+}
+
+// Notifications sub-page UI
+async function _populateNotifForm() {
+  const resp = await fetch("/api/notification-settings").catch(() => null);
+  const s = resp?.ok ? await resp.json().catch(() => ({})) : {};
+  const set = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el[typeof val === "boolean" ? "checked" : "value"] = val;
+  };
+  set("notif-finished-on",               s.finished?.enabled        ?? false);
+  set("notif-layer-on",                  s.layer?.enabled           ?? false);
+  set("notif-layer-number",              s.layer?.layer             ?? 1);
+  set("notif-nozzle-idle-on",            s.nozzle_idle?.enabled     ?? false);
+  set("notif-nozzle-idle-threshold",     s.nozzle_idle?.threshold   ?? 50);
+  set("notif-nozzle-printing-on",        s.nozzle_printing?.enabled ?? false);
+  set("notif-nozzle-printing-threshold", s.nozzle_printing?.threshold ?? 260);
+  _syncNotifParams();
+}
+
+function _syncNotifParams() {
+  const show = (paramId, checkId) => {
+    const param = document.getElementById(paramId);
+    const cb    = document.getElementById(checkId);
+    if (param && cb) param.style.display = cb.checked ? "" : "none";
+  };
+  show("notif-layer-param",           "notif-layer-on");
+  show("notif-nozzle-idle-param",     "notif-nozzle-idle-on");
+  show("notif-nozzle-printing-param", "notif-nozzle-printing-on");
+}
+
+["notif-layer-on","notif-nozzle-idle-on","notif-nozzle-printing-on"].forEach(id =>
+  document.getElementById(id)?.addEventListener("change", _syncNotifParams));
+
+document.getElementById("btn-settings-goto-notifications")?.addEventListener("click", () => {
+  _populateNotifForm();
+  _showSettingsPage(_settingsNotifPage);
+});
+document.getElementById("btn-settings-back-notif")?.addEventListener("click", _backToSettingsMenu);
+document.getElementById("btn-notif-save")?.addEventListener("click", async () => {
+  const gb = id => document.getElementById(id)?.checked ?? false;
+  const gv = id => parseFloat(document.getElementById(id)?.value) || 0;
+  const s = {
+    finished:        { enabled: gb("notif-finished-on") },
+    layer:           { enabled: gb("notif-layer-on"),           layer:     gv("notif-layer-number") },
+    nozzle_idle:     { enabled: gb("notif-nozzle-idle-on"),     threshold: gv("notif-nozzle-idle-threshold") },
+    nozzle_printing: { enabled: gb("notif-nozzle-printing-on"), threshold: gv("notif-nozzle-printing-threshold") },
+  };
+  const anyEnabled = Object.values(s).some(v => v.enabled);
+  if (anyEnabled) {
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") { toast("Notification permission denied in browser settings"); return; }
+    const sub = await _subscribePush();
+    if (!sub) toast("Push subscription failed — notifications may not arrive when app is closed");
+  } else {
+    await _unsubscribePush();
+  }
+  const r = await fetch("/api/notification-settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(s),
+  });
+  if (r.ok) {
+    toast("Notification settings saved");
+    _backToSettingsMenu();
+  } else {
+    toast("Failed to save notification settings");
+  }
+});
+
+document.getElementById("btn-notif-test")?.addEventListener("click", async () => {
+  const perm = await Notification.requestPermission();
+  if (perm !== "granted") { toast("Allow notifications in browser settings first"); return; }
+  const sub = await _subscribePush();
+  if (!sub) { toast("Could not register push subscription"); return; }
+  const r = await fetch("/api/push-test", { method: "POST" });
+  if (r.ok) {
+    toast("Test notification sent — check your phone");
+  } else {
+    const d = await r.json().catch(() => ({}));
+    toast(d.error || "Failed to send test notification");
   }
 });
 
@@ -1077,7 +1226,7 @@ let _changelog = [];
 
 async function loadChangelog() {
   try {
-    const r = await fetch("/changelog.json");
+    const r = await fetch("/changelog.json?v=" + Date.now());
     const data = await r.json();
     if (!Array.isArray(data) || data.length === 0) return;
     _changelog = data;

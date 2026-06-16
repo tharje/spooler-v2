@@ -48,6 +48,18 @@ try:
 except ImportError:
     BCRYPT_AVAILABLE = False
 
+try:
+    from pywebpush import webpush, WebPushException
+    from cryptography.hazmat.primitives.asymmetric.ec import generate_private_key, SECP256R1
+    from cryptography.hazmat.backends import default_backend
+    from cryptography.hazmat.primitives.serialization import (
+        Encoding, PrivateFormat, PublicFormat, NoEncryption,
+    )
+    import base64 as _b64
+    WEBPUSH_AVAILABLE = True
+except ImportError:
+    WEBPUSH_AVAILABLE = False
+
 PRINTER_PORT = 3030
 DISCOVERY_PORT = 3000
 WS_SERVER_PORT = 8765
@@ -93,6 +105,81 @@ def _get_username() -> str:
 
 def _save_auth(username: str, pw_hash: str):
     AUTH_FILE.write_text(json.dumps({"username": username, "pw_hash": pw_hash}))
+
+# ─── Web Push (VAPID) ─────────────────────────────────────────────────────────
+
+VAPID_FILE         = DATA_DIR / "vapid_keys.json"
+PUSH_SUBS_FILE     = DATA_DIR / "push_subscriptions.json"
+NOTIF_SETTINGS_FILE = DATA_DIR / "notification_settings.json"
+
+_vapid_private_pem: str = ""
+_vapid_public_key:  str = ""
+_push_subs: list = []   # list of subscription dicts
+
+def _init_vapid():
+    global _vapid_private_pem, _vapid_public_key, _push_subs
+    if not WEBPUSH_AVAILABLE:
+        return
+    try:
+        if VAPID_FILE.exists():
+            d = json.loads(VAPID_FILE.read_text())
+            _vapid_private_pem = d["private_pem"]
+            _vapid_public_key  = d["public_key"]
+        else:
+            pk = generate_private_key(SECP256R1(), default_backend())
+            _vapid_private_pem = pk.private_bytes(
+                Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()
+            ).decode()
+            pub = pk.public_key().public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
+            _vapid_public_key = _b64.urlsafe_b64encode(pub).rstrip(b"=").decode()
+            VAPID_FILE.write_text(json.dumps({
+                "private_pem": _vapid_private_pem,
+                "public_key":  _vapid_public_key,
+            }))
+            print("[Push] Generated new VAPID key pair")
+        if PUSH_SUBS_FILE.exists():
+            _push_subs = json.loads(PUSH_SUBS_FILE.read_text())
+        print(f"[Push] VAPID ready — public key: {_vapid_public_key[:20]}…")
+    except Exception as e:
+        print(f"[Push] VAPID init failed: {e}")
+
+def _save_push_subs():
+    PUSH_SUBS_FILE.write_text(json.dumps(_push_subs))
+
+def _load_notif_settings() -> dict:
+    try:
+        return json.loads(NOTIF_SETTINGS_FILE.read_text()) if NOTIF_SETTINGS_FILE.exists() else {}
+    except Exception:
+        return {}
+
+def _save_notif_settings(s: dict):
+    NOTIF_SETTINGS_FILE.write_text(json.dumps(s))
+
+def _send_push_all(title: str, body: str):
+    if not WEBPUSH_AVAILABLE or not _vapid_private_pem or not _push_subs:
+        return
+    dead = []
+    for sub in list(_push_subs):
+        try:
+            webpush(
+                subscription_info=sub,
+                data=json.dumps({"title": title, "body": body}),
+                vapid_private_key=_vapid_private_pem,
+                vapid_claims={"sub": "mailto:spooler@local"},
+            )
+        except WebPushException as e:
+            status = getattr(e.response, "status_code", None) if e.response else None
+            if status in (404, 410):
+                dead.append(sub)
+            else:
+                print(f"[Push] WebPush error: {e}")
+        except Exception as e:
+            print(f"[Push] Send error: {e}")
+    if dead:
+        for d in dead:
+            try: _push_subs.remove(d)
+            except ValueError: pass
+        _save_push_subs()
 
 def _parse_sid(cookie_header: str) -> str:
     for part in cookie_header.split(";"):
@@ -377,6 +464,12 @@ class PrinterConnection:
         self._prev_state_str = ""
         self._extruder_offset = 0.0
         self._last_extruder = 0.0
+        self._notif_state = {
+            "last_status": None,
+            "nozzle_idle_fired": False,
+            "layer_fired": False,
+            "nozzle_hot_fired": False,
+        }
 
     def to_dict(self):
         pi = decode_printinfo(self.status.get("PrintInfo", {}))
@@ -774,7 +867,58 @@ class PrinterConnection:
             "LightStatus":      {"SecondLight": led_on},
         }
 
+    def _check_notifications(self):
+        s = _load_notif_settings()
+        if not s:
+            return
+        ns = self._notif_state
+        pi = self.status.get("PrintInfo", {})
+        status  = pi.get("Status", 0)
+        nozzle  = self.status.get("TempOfNozzle") or self.status.get("NozzleTemp") or 0
+        layer   = pi.get("CurrentLayer", 0)
+        is_idle     = status == 0
+        is_printing = status in (3, 6)
+        is_done     = status in (9, 8)
+        last        = ns["last_status"]
+
+        if s.get("finished", {}).get("enabled") and is_done and last is not None and last not in (9, 8):
+            label = "complete" if status == 9 else "cancelled"
+            _send_push_all(f"{self.name} — Print {label}", f"Your print has {label}.")
+
+        if s.get("nozzle_idle", {}).get("enabled") and is_idle:
+            thr = s["nozzle_idle"].get("threshold", 50)
+            if nozzle > thr and not ns["nozzle_idle_fired"]:
+                _send_push_all(f"{self.name} — Nozzle hot", f"Nozzle is {round(nozzle)}°C while idle.")
+                ns["nozzle_idle_fired"] = True
+            elif nozzle <= thr:
+                ns["nozzle_idle_fired"] = False
+        elif not is_idle:
+            ns["nozzle_idle_fired"] = False
+
+        if s.get("layer", {}).get("enabled") and is_printing:
+            target = s["layer"].get("layer", 1)
+            if layer >= target and not ns["layer_fired"]:
+                _send_push_all(f"{self.name} — Layer {target} reached", f"Currently on layer {layer}.")
+                ns["layer_fired"] = True
+            if layer < target:
+                ns["layer_fired"] = False
+        if not is_printing:
+            ns["layer_fired"] = False
+
+        if s.get("nozzle_printing", {}).get("enabled") and is_printing:
+            thr = s["nozzle_printing"].get("threshold", 260)
+            if nozzle > thr and not ns["nozzle_hot_fired"]:
+                _send_push_all(f"{self.name} — Nozzle overheat", f"Nozzle is {round(nozzle)}°C during print.")
+                ns["nozzle_hot_fired"] = True
+            elif nozzle <= thr:
+                ns["nozzle_hot_fired"] = False
+        elif not is_printing:
+            ns["nozzle_hot_fired"] = False
+
+        ns["last_status"] = status
+
     async def _broadcast_state(self):
+        self._check_notifications()
         await broadcast_to_browsers({
             "type": "printer_update",
             "printer": self.to_dict(),
@@ -1176,6 +1320,15 @@ class SPHandler(SimpleHTTPRequestHandler):
             return
 
         # ── Protected routes ─────────────────────────────────────────────────
+        if self.path == "/api/push-public-key":
+            if WEBPUSH_AVAILABLE and _vapid_public_key:
+                self._json({"publicKey": _vapid_public_key})
+            else:
+                self._json({"error": "Web Push not available"}, 503)
+            return
+        if self.path == "/api/notification-settings":
+            self._json(_load_notif_settings())
+            return
         if self.path.startswith("/api/camera/"):
             self._proxy_camera()
         elif self.path == "/api/printers":
@@ -1275,6 +1428,59 @@ class SPHandler(SimpleHTTPRequestHandler):
 
         if self.path == "/api/change-password":
             self._handle_change_password()
+            return
+
+        if self.path == "/api/push-subscribe":
+            length = int(self.headers.get("Content-Length", 0))
+            try:
+                sub = json.loads(self.rfile.read(length))
+            except Exception:
+                self._json({"error": "Bad request"}, 400)
+                return
+            endpoint = sub.get("endpoint", "")
+            if not endpoint:
+                self._json({"error": "Missing endpoint"}, 400)
+                return
+            _push_subs[:] = [s for s in _push_subs if s.get("endpoint") != endpoint]
+            _push_subs.append(sub)
+            _save_push_subs()
+            self._json({"ok": True})
+            return
+
+        if self.path == "/api/push-unsubscribe":
+            length = int(self.headers.get("Content-Length", 0))
+            try:
+                body = json.loads(self.rfile.read(length))
+            except Exception:
+                self._json({"error": "Bad request"}, 400)
+                return
+            endpoint = body.get("endpoint", "")
+            _push_subs[:] = [s for s in _push_subs if s.get("endpoint") != endpoint]
+            _save_push_subs()
+            self._json({"ok": True})
+            return
+
+        if self.path == "/api/notification-settings":
+            length = int(self.headers.get("Content-Length", 0))
+            try:
+                s = json.loads(self.rfile.read(length))
+            except Exception:
+                self._json({"error": "Bad request"}, 400)
+                return
+            _save_notif_settings(s)
+            self._json({"ok": True})
+            return
+
+        if self.path == "/api/push-test":
+            self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            if not WEBPUSH_AVAILABLE:
+                self._json({"error": "Web Push not available on server"}, 503)
+                return
+            if not _push_subs:
+                self._json({"error": "No push subscriptions registered"}, 400)
+                return
+            _send_push_all("Spooler — Test notification", "Push notifications are working!")
+            self._json({"ok": True})
             return
 
         # ── Protected routes ─────────────────────────────────────────────────
@@ -1429,6 +1635,8 @@ async def main():
         print("[Auth] No password configured – first-time setup required via the web UI")
     else:
         print(f"[Auth] Authentication enabled (user: {_get_username()})")
+
+    _init_vapid()
 
     # Load saved printers
     for entry in load_printers():
