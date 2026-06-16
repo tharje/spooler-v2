@@ -1033,8 +1033,9 @@ async function loadChangelog() {
   try {
     const resp = await fetch("/changelog.json");
     _changelog = await resp.json();
-    if (_changelog.length > 0)
-      document.getElementById("version-badge").textContent = "v" + _changelog[0].version;
+    if (Array.isArray(_changelog) && _changelog.length > 0)
+      if (document.getElementById("version-badge"))
+        document.getElementById("version-badge").textContent = "v" + _changelog[0].version;
   } catch (e) {
     console.warn("Could not load changelog:", e);
   }
@@ -1055,11 +1056,11 @@ function openChangelog() {
   document.getElementById("modal-changelog").classList.add("open");
 }
 
-document.getElementById("version-badge").addEventListener("click", openChangelog);
-document.getElementById("btn-changelog-close").addEventListener("click", () => {
-  document.getElementById("modal-changelog").classList.remove("open");
+document.getElementById("version-badge")?.addEventListener("click", openChangelog);
+document.getElementById("btn-changelog-close")?.addEventListener("click", () => {
+  document.getElementById("modal-changelog")?.classList.remove("open");
 });
-document.getElementById("modal-changelog").addEventListener("click", (e) => {
+document.getElementById("modal-changelog")?.addEventListener("click", (e) => {
   if (e.target === document.getElementById("modal-changelog"))
     document.getElementById("modal-changelog").classList.remove("open");
 });
