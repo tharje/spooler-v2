@@ -20,9 +20,9 @@ services:
     restart: unless-stopped
 
   spooler:
-    image: ghcr.io/tharje/spooler-v2:latest
-    # To build from source instead:
-    #   replace the image line above with:  build: .
+    build: .
+    # To use pre-built image instead:
+    #   replace the build line above with:  image: ghcr.io/tharje/spooler-v2:latest
     network_mode: host
     env_file:
       - path: .env
