@@ -1,5 +1,17 @@
 # Releases
 
+## v2.1.1 — 2026-06-16
+
+### UI
+- Replaced gear icon on printer cards with pencil/edit icon
+- Added Settings gear to sidenav with change-password modal
+- Moved Sign out to bottom of sidenav, removed from header
+
+### Bug fixes
+- Fixed CC2 status showing "printing" after print completes (poll method 1002 every 15 s for fresh state; removed stale print_duration fallback)
+
+---
+
 ## v2.1.0 — 2026-06-16
 
 ### Bug fixes

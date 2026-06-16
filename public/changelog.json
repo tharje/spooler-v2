@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.1.1",
+    "date": "2026-06-16",
+    "changes": [
+      "Replaced gear icon on printer cards with pencil/edit icon",
+      "Added Settings gear to sidenav with change-password modal",
+      "Moved Sign out to bottom of sidenav, removed from header",
+      "Fixed CC2 status showing 'printing' after print completes"
+    ]
+  },
+  {
     "version": "2.1.0",
     "date": "2026-06-16",
     "changes": [
