@@ -1,7 +1,9 @@
 /* Spooler – frontend app.js */
 "use strict";
 
-const WS_URL  = `${location.protocol === "https:" ? "wss" : "ws"}://${location.hostname}:8765`;
+const WS_URL  = location.protocol === "https:"
+  ? `wss://${location.hostname}:8766`
+  : `ws://${location.hostname}:8765`;
 const SPOOLMAN_URL = "/api/spoolman/api/v1";
 const RECONNECT_DELAY = 3000;
 
@@ -761,7 +763,6 @@ document.getElementById("btn-notif-test")?.addEventListener("click", async () =>
 
 // ─── Printers panel ────────────────────────────────────────────────────────────
 const printersPanel = document.getElementById("panel-printers");
-const btnPrinters   = document.getElementById("btn-printers");
 
 const inputType       = document.getElementById("input-type");
 const labelAccessCode = document.getElementById("label-access-code");
@@ -798,21 +799,21 @@ inputType.addEventListener("change", () => {
 const openPrinters = () => {
   printersPanel.classList.add("open");
   historyBackdrop.classList.add("open");
-  btnPrinters.classList.add("active");
 };
 const closePrinters = () => {
   printersPanel.classList.remove("open");
   historyBackdrop.classList.remove("open");
-  btnPrinters.classList.remove("active");
   resetPrinterForm();
 };
 
-btnPrinters.addEventListener("click", openPrinters);
+document.getElementById("btn-add")?.addEventListener("click", () => {
+  resetPrinterForm();
+  openPrinters();
+});
 document.getElementById("btn-printers-close").addEventListener("click", closePrinters);
 
-document.getElementById("btn-discover").addEventListener("click", () => {
+function _triggerDiscover(btn) {
   send({ action: "discover" });
-  const btn = document.getElementById("btn-discover");
   btn.disabled = true;
   btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
     <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
@@ -823,7 +824,13 @@ document.getElementById("btn-discover").addEventListener("click", () => {
       <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
     </svg> Scan for Printers`;
   }, 4000);
+}
+document.getElementById("btn-discover")?.addEventListener("click", e => {
+  openPrinters();
+  _triggerDiscover(e.currentTarget);
 });
+
+document.getElementById("btn-discover-panel")?.addEventListener("click", e => _triggerDiscover(e.currentTarget));
 
 document.getElementById("btn-modal-confirm").addEventListener("click", () => {
   const ip          = document.getElementById("input-ip").value.trim();

@@ -311,10 +311,8 @@ class SPHandler(SimpleHTTPRequestHandler):
             super().do_GET()
             return
         if self.path == "/api/auth-status":
-            sid = _parse_sid(self.headers.get("Cookie", ""))
-            authed = _auth_ok(sid)
             resp = {"setup_required": not _has_password()}
-            if authed:
+            if _auth_ok(self):
                 resp["spoolman_url"] = get_spoolman_url()
             self._json(resp)
             return

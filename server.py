@@ -5,8 +5,10 @@ Entry point: starts HTTP, HTTPS, and WebSocket servers.
 """
 
 import asyncio
+import contextlib
 import logging
 import os
+import ssl as _ssl
 import sys
 import threading
 from pathlib import Path
@@ -73,6 +75,7 @@ logging.getLogger("websockets.asyncio.server").addFilter(_SuppressIncompleteHand
 HTTP_PORT     = int(os.getenv("HTTP_PORT",  "8080"))
 HTTPS_PORT    = int(os.getenv("HTTPS_PORT", "8443"))
 WS_PORT       = int(os.getenv("WS_PORT",   "8765"))
+WSS_PORT      = int(os.getenv("WSS_PORT",  "8766"))
 HTTPS_ENABLED = os.getenv("HTTPS_ENABLED", "true").lower() != "false"
 
 # Wire the auth file path now that DATA_DIR is resolved
@@ -119,12 +122,34 @@ async def main() -> None:
 
     http_thread = threading.Thread(target=run_http, args=(HTTP_PORT,), daemon=True)
     http_thread.start()
+
+    # Build WSS SSL context — required for WebSocket when accessed via HTTPS
+    ssl_ctx = None
     if HTTPS_ENABLED:
+        from http_handler import CERT_FILE, KEY_FILE, ensure_ssl_cert
+        ensure_ssl_cert()
+        if CERT_FILE.exists() and KEY_FILE.exists():
+            try:
+                ssl_ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_SERVER)
+                ssl_ctx.load_cert_chain(str(CERT_FILE), str(KEY_FILE))
+            except Exception as e:
+                print(f"[WSS] SSL context error: {e}")
+
         https_thread = threading.Thread(target=run_https, args=(HTTPS_PORT,), daemon=True)
         https_thread.start()
 
     print(f"[WS]   Browser WebSocket on ws://0.0.0.0:{WS_PORT}")
-    async with ws_serve(browser_handler, "0.0.0.0", WS_PORT, ping_interval=20, ping_timeout=10):
+    if ssl_ctx:
+        print(f"[WSS]  Browser WebSocket on wss://0.0.0.0:{WSS_PORT}")
+
+    async with contextlib.AsyncExitStack() as stack:
+        await stack.enter_async_context(
+            ws_serve(browser_handler, "0.0.0.0", WS_PORT, ping_interval=20, ping_timeout=10)
+        )
+        if ssl_ctx:
+            await stack.enter_async_context(
+                ws_serve(browser_handler, "0.0.0.0", WSS_PORT, ssl=ssl_ctx, ping_interval=20, ping_timeout=10)
+            )
         print("\n" + "─" * 50)
         print("  Spooler is running!")
         print(f"  HTTP:  http://localhost:{HTTP_PORT}")

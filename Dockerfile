@@ -15,6 +15,6 @@ COPY public/ public/
 ENV DATA_DIR=/data
 ENV PYTHONUNBUFFERED=1
 
-EXPOSE 8080 8443 8765
+EXPOSE 8080 8443 8765 8766
 
 CMD ["python3", "server.py"]
