@@ -24,6 +24,12 @@ def filament_mm_to_grams(mm: float) -> float:
     return round(vol_cm3 * FILAMENT_DENSITY, 1)
 
 
+def _atomic_write(path: Path, text: str) -> None:
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(text)
+    os.replace(tmp, path)
+
+
 def save_printers(printers: dict) -> None:
     data = [
         {
@@ -35,7 +41,7 @@ def save_printers(printers: dict) -> None:
         }
         for p in printers.values()
     ]
-    PRINTERS_FILE.write_text(json.dumps(data, indent=2))
+    _atomic_write(PRINTERS_FILE, json.dumps(data, indent=2))
 
 
 def load_printers() -> list:
@@ -64,7 +70,7 @@ def load_tray_map() -> dict:
 
 
 def save_tray_map(tray_map: dict) -> None:
-    TRAY_MAP_FILE.write_text(json.dumps(tray_map, indent=2))
+    _atomic_write(TRAY_MAP_FILE, json.dumps(tray_map, indent=2))
 
 
 def append_history(entry: dict) -> None:
@@ -72,4 +78,4 @@ def append_history(entry: dict) -> None:
     history.append(entry)
     if len(history) > HISTORY_MAX_ENTRIES:
         history = history[-HISTORY_MAX_ENTRIES:]
-    HISTORY_FILE.write_text(json.dumps(history, indent=2))
+    _atomic_write(HISTORY_FILE, json.dumps(history, indent=2))

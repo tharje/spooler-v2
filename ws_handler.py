@@ -129,7 +129,7 @@ async def handle_browser_message(ws, raw: str) -> None:
         await state.broadcast_to_browsers({"type": "printer_removed", "printer_id": printer_id})
         return
 
-    if action in ("rename_printer", "update_printer"):
+    if action == "update_printer":
         p = state.printers.get(printer_id)
         if not p:
             return
@@ -197,6 +197,9 @@ async def handle_browser_message(ws, raw: str) -> None:
         if not filename:
             await ws.send(json.dumps({"type": "error", "message": "No filename specified"}))
             return
+        if ".." in filename.replace("\\", "/").split("/"):
+            await ws.send(json.dumps({"type": "error", "message": "Invalid filename"}))
+            return
         ok = await printer.start_print_file(filename)
         if not ok:
             await ws.send(json.dumps({"type": "error", "message": "Could not start print"}))
@@ -204,7 +207,8 @@ async def handle_browser_message(ws, raw: str) -> None:
 
     if action == "delete_files":
         files = msg.get("files", [])
-        if isinstance(files, list):
+        if (isinstance(files, list) and len(files) <= 50
+                and all(isinstance(f, str) and f for f in files)):
             await printer.send_cmd(CMD_DELETE_FILES, {"FileList": files})
         return
 

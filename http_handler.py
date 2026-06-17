@@ -95,8 +95,11 @@ class SPHandler(SimpleHTTPRequestHandler):
         return value
 
     def _read_body(self) -> bytes | None:
-        length = min(int(self.headers.get("Content-Length", 0)), MAX_BODY)
-        return self.rfile.read(length) if length else None
+        raw = int(self.headers.get("Content-Length", 0))
+        if raw > MAX_BODY:
+            self._json({"error": "Request body too large"}, 413)
+            return None
+        return self.rfile.read(raw) if raw else None
 
     def _handle_login(self):
         ip = self.client_address[0]
@@ -195,14 +198,14 @@ class SPHandler(SimpleHTTPRequestHandler):
         try:
             pw_hash = _bcrypt.hashpw(password.encode(), _bcrypt.gensalt()).decode()
             from auth import _load_auth
-            auth = _load_auth()
-            username = auth.get("username", "admin")
+            auth_data = _load_auth()
+            username = auth_data.get("username", "admin")
             _save_auth(username, pw_hash)
         except Exception as e:
             self._json({"error": str(e)}, 500)
             return
         self._json({"ok": True})
-        print(f"[Auth] Password changed for user '{auth.get('username', 'admin')}'")
+        print(f"[Auth] Password changed for user '{username}'")
 
     # ── Camera proxy ──────────────────────────────────────────────────────────
 
@@ -253,9 +256,12 @@ class SPHandler(SimpleHTTPRequestHandler):
     # ── Spoolman proxy ────────────────────────────────────────────────────────
 
     def _proxy_spoolman(self, method: str, path: str, body: bytes | None):
+        if not path.startswith("/api/v1/"):
+            self._json({"error": "Invalid Spoolman path"}, 400)
+            return
         try:
             req = urllib.request.Request(
-                f"{get_spoolman_url()}{path or '/'}",
+                f"{get_spoolman_url()}{path}",
                 data=body,
                 headers={"Content-Type": "application/json"} if body else {},
                 method=method,
@@ -305,7 +311,12 @@ class SPHandler(SimpleHTTPRequestHandler):
             super().do_GET()
             return
         if self.path == "/api/auth-status":
-            self._json({"setup_required": not _has_password(), "spoolman_url": get_spoolman_url()})
+            sid = _parse_sid(self.headers.get("Cookie", ""))
+            authed = _auth_ok(sid)
+            resp = {"setup_required": not _has_password()}
+            if authed:
+                resp["spoolman_url"] = get_spoolman_url()
+            self._json(resp)
             return
 
         if not self._check_auth():
@@ -477,12 +488,16 @@ class SPHandler(SimpleHTTPRequestHandler):
         if not printer:
             self._json({"error": "Printer not found"}, 404)
             return
+        ct = self.headers.get("Content-Type", "")
+        if not ct.startswith("multipart/form-data"):
+            self._json({"error": "Expected multipart/form-data"}, 400)
+            return
         body = self._read_body()
         try:
             req = urllib.request.Request(
                 f"http://{printer.ip}/uploadFile/upload",
                 data=body,
-                headers={"Content-Type": self.headers.get("Content-Type", "application/octet-stream")},
+                headers={"Content-Type": ct},
                 method="POST",
             )
             with urllib.request.urlopen(req, timeout=30) as resp:
@@ -498,7 +513,6 @@ class SPHandler(SimpleHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(body)
 

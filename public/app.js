@@ -1436,7 +1436,7 @@ function openChangelog() {
         <span class="cl-date">${entry.date}</span>
       </div>
       <ul class="cl-list">
-        ${entry.changes.map(c => `<li>${c}</li>`).join("")}
+        ${entry.changes.map(c => `<li>${escHtml(c)}</li>`).join("")}
       </ul>
     </div>`).join("");
   document.getElementById("modal-changelog")?.classList.add("open");

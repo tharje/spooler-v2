@@ -151,7 +151,8 @@ class CC2Connection(PrinterConnection):
             if not method:
                 return False
         if not self._mqtt_registered and method != 1003:
-            print(f"[Printer {self.name}] CC2 not registered yet, dropping method {method}")
+            if state.DEBUG:
+                print(f"[Printer {self.name}] CC2 not registered yet, dropping method {method}")
             return False
         topic   = f"elegoo/{self._mqtt_serial}/{self._mqtt_client_id}/api_request"
         payload = {"id": uuid.uuid4().int & 0xFFFF, "method": method}
@@ -224,19 +225,17 @@ class CC2Connection(PrinterConnection):
                 return
 
             source = inner if isinstance(inner, dict) else payload
-            method = payload.get("method")
-            # Log full response for canvas/filament probe methods so we can see
-            # what the printer returns regardless of whether keys are already known.
-            if method in (2005, 1056):
-                print(f"[CC2 canvas probe] method={method} full response: "
-                      f"{json.dumps(source)[:800]}")
-            else:
-                unknown = {k for k in source if k not in _CC2_STATE_KEYS
-                           and k not in ("error_code",) and isinstance(source[k], (dict, list))}
-                if unknown:
-                    print(f"[CC2 canvas probe] method={method} "
-                          f"unknown keys: {unknown} — "
-                          f"raw: {json.dumps({k: source[k] for k in unknown})[:600]}")
+            if state.DEBUG:
+                _method = payload.get("method")
+                if _method in (2005, 1056, 1044):
+                    print(f"[CC2 probe] method={_method} full response: "
+                          f"{json.dumps(payload)[:800]}")
+                else:
+                    unknown = {k for k in source if k not in _CC2_STATE_KEYS
+                               and k not in ("error_code",) and isinstance(source[k], (dict, list))}
+                    if unknown:
+                        print(f"[CC2] method={_method} unknown keys: {unknown} — "
+                              f"raw: {json.dumps({k: source[k] for k in unknown})[:600]}")
             updates = {k: v for k, v in source.items()
                        if k in _CC2_STATE_KEYS and isinstance(v, dict)}
             # Strip stale filament_used from the 1002 full-state snapshot
@@ -417,6 +416,6 @@ class CC2Connection(PrinterConnection):
             if active_tray != self._prev_active_tray_id:
                 self._prev_active_tray_id = active_tray
                 spool_id = (state.tray_map.get(self.id) or {}).get(str(active_tray)) if active_tray >= 0 else None
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 loop.run_in_executor(None, spoolman_assign, self.id, spool_id)
                 print(f"[Printer {self.name}] Active tray changed → {active_tray}, spool {spool_id}")

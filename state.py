@@ -6,6 +6,10 @@ circular imports: nothing here imports from within this project.
 """
 
 import json
+import os
+
+# Set DEBUG=1 in the environment to enable verbose MQTT/protocol logging.
+DEBUG: bool = os.environ.get("DEBUG", "").lower() in ("1", "true", "yes")
 
 # { printer_id: PrinterConnection }
 printers: dict = {}

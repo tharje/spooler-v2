@@ -61,7 +61,9 @@ def _get_username() -> str:
 
 
 def _save_auth(username: str, pw_hash: str) -> None:
-    _AUTH_FILE.write_text(json.dumps({"username": username, "pw_hash": pw_hash}))
+    tmp = _AUTH_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"username": username, "pw_hash": pw_hash}))
+    os.replace(tmp, _AUTH_FILE)
 
 
 # ── Session helpers ────────────────────────────────────────────────────────────

@@ -107,7 +107,7 @@ class CC1Connection(PrinterConnection):
         if active_tray != self._prev_active_tray_id:
             self._prev_active_tray_id = active_tray
             spool_id = (state.tray_map.get(self.id) or {}).get(str(active_tray)) if active_tray >= 0 else None
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             loop.run_in_executor(None, spoolman_assign, self.id, spool_id)
             print(f"[Printer {self.name}] Active tray changed → {active_tray}, spool {spool_id}")
 
@@ -171,10 +171,12 @@ class CC1Connection(PrinterConnection):
                     ci = payload  # flat — the payload IS the canvas_info
                 if isinstance(ci, dict):
                     self._apply_canvas(ci)
-                    print(f"[Printer {self.name}] Canvas: {len(ci.get('canvas_list', []))} canvas(es), "
-                          f"active_tray={ci.get('active_tray_id', -1)}")
+                    if state.DEBUG:
+                        print(f"[Printer {self.name}] Canvas: {len(ci.get('canvas_list', []))} canvas(es), "
+                              f"active_tray={ci.get('active_tray_id', -1)}")
                 else:
-                    print(f"[Printer {self.name}] Canvas cmd 324 raw payload: {json.dumps(payload)[:400]}")
+                    if state.DEBUG:
+                        print(f"[Printer {self.name}] Canvas cmd 324 raw payload: {json.dumps(payload)[:400]}")
         elif cmd == CMD_LIST_FILES:
             file_list = payload.get("FileList") or []
             if file_list and all(f.get("type") == 0 for f in file_list):
