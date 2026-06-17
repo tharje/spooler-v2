@@ -168,7 +168,8 @@ See [CC2_INTEGRATION.md](CC2_INTEGRATION.md) for full CC2 protocol notes.
 |------|---------|
 | 8080 | HTTP – web UI |
 | 8443 | HTTPS – web UI (self-signed cert, needed for PWA) |
-| 8765 | WebSocket – browser ↔ backend |
+| 8765 | WebSocket – browser ↔ backend (plain, HTTP) |
+| 8766 | WebSocket – browser ↔ backend (WSS, HTTPS/PWA) |
 | 7912 | Spoolman – filament manager UI and API |
 | 3030 | WebSocket – backend ↔ printer (CC1/SDCP) |
 | 3000 | UDP – printer discovery broadcast |
@@ -180,6 +181,12 @@ See [CC2_INTEGRATION.md](CC2_INTEGRATION.md) for full CC2 protocol notes.
 - **Frontend** – Vanilla HTML/CSS/JS, no build step
 - **Spool manager** – [Spoolman](https://github.com/Donkie/Spoolman) (official Docker image)
 - **Filament database** – [SpoolmanDB](https://github.com/Donkie/SpoolmanDB)
+
+## Contributors
+
+- [snazy2000](https://github.com/snazy2000) — modular backend refactor (auth, discovery, spoolman, printers modules), AMS/Canvas multi-material hub support
+
+---
 
 ## Acknowledgements
 

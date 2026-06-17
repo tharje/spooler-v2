@@ -1,5 +1,20 @@
 [
   {
+    "version": "2.2.0",
+    "date": "2026-06-17",
+    "changes": [
+      "Modular backend: server split into auth, state, persistence, discovery, spoolman, ws_handler, http_handler and printers modules (contributed by snazy2000)",
+      "AMS/Canvas multi-material hub support — active tray auto-assigns linked spool (contributed by snazy2000)",
+      "WSS WebSocket on port 8766 so PWA and HTTPS users get a proper secure connection",
+      "Web Push notifications: print complete, layer checkpoint, nozzle still hot, nozzle overheat",
+      "Settings modal with Change Password and Notifications subpages",
+      "Discover and Add Printer moved to header; removed + button from sidenav",
+      "Fixed CC2 status stuck on 'printing' after print completes",
+      "Fixed auth-status API returning 500 for unauthenticated requests",
+      "Camera stream excluded from service worker fetch interception (fixes MJPEG on iOS PWA)"
+    ]
+  },
+  {
     "version": "2.1.1",
     "date": "2026-06-16",
     "changes": [
