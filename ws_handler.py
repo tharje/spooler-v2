@@ -214,5 +214,8 @@ async def handle_browser_message(ws, raw: str) -> None:
         if not ok:
             await ws.send(json.dumps({"type": "error", "message": "Printer not connected"}))
         elif action in ("light_on", "light_off"):
-            await asyncio.sleep(0.5)
-            await printer.send_cmd(CMD_STATUS, {})
+            await asyncio.sleep(0.4)
+            if printer.printer_type == "cc2":
+                await printer._send_mqtt_cmd(1002)  # full state refresh → updates led.status
+            else:
+                await printer.send_cmd(CMD_STATUS, {})

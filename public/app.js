@@ -303,7 +303,7 @@ function renderPrinter(printer) {
   const remaining = printer.status?.PrintInfo?.RemainTime ?? 0;
   const filamentMm = printer.filament_mm ?? 0;
   const filamentG  = printer.filament_g  ?? 0;
-  const lightOn    = printer.status?.LightStatus?.SecondLight === 1;
+  const lightOn    = getLightOn(printer);
 
   const cameraUrl = printer.camera_url
     ? `/api/camera/${encodeURIComponent(printer.id)}`
@@ -328,8 +328,9 @@ function renderPrinter(printer) {
         </svg>
       </button>
       <button class="card-settings-btn" onclick="openPrinterSettings('${escAttr(printer.id)}')" title="Printer settings">
-        <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
-          <path d="M12 15.5a3.5 3.5 0 0 1-3.5-3.5A3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.92c.04-.36.07-.72.07-1.08s-.03-.73-.07-1.08l2.24-1.75c.2-.16.25-.44.12-.67l-2.12-3.66c-.12-.23-.39-.3-.61-.23l-2.64 1.06c-.55-.42-1.14-.77-1.8-1.03l-.38-2.65C14.46 2.18 14.26 2 14 2h-4c-.26 0-.46.18-.49.42l-.38 2.65c-.66.26-1.26.61-1.8 1.03L4.69 5.04c-.22-.07-.49 0-.61.23L1.96 8.93c-.13.22-.07.5.12.67l2.24 1.75c-.04.35-.07.72-.07 1.08s.03.73.07 1.08L2.08 15.26c-.2.16-.25.44-.12.67l2.12 3.66c.12.23.39.3.61.23l2.64-1.06c.55.42 1.14.77 1.8 1.03l.38 2.65c.03.24.23.42.49.42h4c.26 0 .46-.18.5-.42l.38-2.65c.66-.26 1.26-.61 1.8-1.03l2.64 1.06c.22.07.49 0 .61-.23l2.12-3.66c.12-.22.07-.51-.12-.67l-2.24-1.75z"/>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
         </svg>
       </button>
       <button class="card-remove-btn" onclick="removePrinter('${escAttr(printer.id)}')" title="Remove printer">
@@ -516,7 +517,19 @@ function syncEmptyState() {
 }
 
 // ─── User actions ──────────────────────────────────────────────────────────────
+const _lightPending = {}; // printerId → { on: bool, until: ms timestamp }
+
+function getLightOn(printer) {
+  const p = _lightPending[printer.id];
+  if (p && Date.now() < p.until) return p.on;
+  return printer.status?.LightStatus?.SecondLight === 1;
+}
+
 function printerAction(id, action) {
+  if (action === "light_on" || action === "light_off") {
+    _lightPending[id] = { on: action === "light_on", until: Date.now() + 5000 };
+    if (printers[id]) renderPrinter(printers[id]);
+  }
   send({ action, printer_id: id });
 }
 
@@ -560,9 +573,42 @@ function openPrinterSettings(id) {
 }
 
 // ─── Sign out ─────────────────────────────────────────────────────────────────
-document.getElementById("btn-signout").addEventListener("click", async () => {
+async function signOut() {
   await fetch("/api/logout", { method: "POST" }).catch(() => {});
   location.replace("/login");
+}
+document.getElementById("btn-signout")?.addEventListener("click", signOut);
+document.getElementById("btn-signout-nav")?.addEventListener("click", signOut);
+
+// ─── App settings ─────────────────────────────────────────────────────────────
+const _settingsModal = document.getElementById("modal-app-settings");
+document.getElementById("btn-app-settings")?.addEventListener("click", () => {
+  document.getElementById("settings-new-password").value = "";
+  document.getElementById("settings-confirm-password").value = "";
+  _settingsModal?.classList.add("open");
+});
+document.getElementById("btn-app-settings-cancel")?.addEventListener("click", () =>
+  _settingsModal?.classList.remove("open"));
+_settingsModal?.addEventListener("click", e => {
+  if (e.target === _settingsModal) _settingsModal.classList.remove("open");
+});
+document.getElementById("btn-app-settings-save")?.addEventListener("click", async () => {
+  const pw  = document.getElementById("settings-new-password").value;
+  const pw2 = document.getElementById("settings-confirm-password").value;
+  if (pw.length < 8)        { toast("Password must be at least 8 characters"); return; }
+  if (pw !== pw2)           { toast("Passwords do not match"); return; }
+  const r = await fetch("/api/change-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password: pw }),
+  });
+  if (r.ok) {
+    toast("Password updated");
+    _settingsModal?.classList.remove("open");
+  } else {
+    const d = await r.json().catch(() => ({}));
+    toast(d.error || "Failed to update password");
+  }
 });
 
 // ─── Printers panel ────────────────────────────────────────────────────────────
@@ -1366,6 +1412,44 @@ document.getElementById("modal-spool-picker").addEventListener("click", (e) => {
     document.getElementById("modal-spool-picker").classList.remove("open");
 });
 
+// ─── Changelog ────────────────────────────────────────────────────────────────
+let _changelog = [];
+
+async function loadChangelog() {
+  try {
+    const r = await fetch("/changelog.json");
+    const data = await r.json();
+    if (!Array.isArray(data) || data.length === 0) return;
+    _changelog = data;
+    const badge = document.getElementById("version-badge");
+    if (badge) badge.textContent = "v" + _changelog[0].version;
+  } catch (_) {}
+}
+
+function openChangelog() {
+  const body = document.getElementById("changelog-body");
+  if (!body) return;
+  body.innerHTML = _changelog.map(entry => `
+    <div class="cl-entry">
+      <div class="cl-entry-header">
+        <span class="cl-version">v${entry.version}</span>
+        <span class="cl-date">${entry.date}</span>
+      </div>
+      <ul class="cl-list">
+        ${entry.changes.map(c => `<li>${c}</li>`).join("")}
+      </ul>
+    </div>`).join("");
+  document.getElementById("modal-changelog")?.classList.add("open");
+}
+
+document.getElementById("version-badge")?.addEventListener("click", openChangelog);
+document.getElementById("btn-changelog-close")?.addEventListener("click", () =>
+  document.getElementById("modal-changelog")?.classList.remove("open"));
+document.getElementById("modal-changelog")?.addEventListener("click", e => {
+  if (e.target.id === "modal-changelog")
+    e.target.classList.remove("open");
+});
+
 // ─── Boot ──────────────────────────────────────────────────────────────────────
 fetch("/api/auth-status")
   .then(r => r.json())
@@ -1373,4 +1457,5 @@ fetch("/api/auth-status")
     if (spoolman_url) document.getElementById("btn-spoolman-ui").href = spoolman_url;
   })
   .catch(() => {});
+loadChangelog();
 connect();

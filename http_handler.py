@@ -179,6 +179,31 @@ class SPHandler(SimpleHTTPRequestHandler):
         self.wfile.write(resp)
         print(f"[Auth] Initial password set for user '{username}'")
 
+    def _handle_change_password(self):
+        if not BCRYPT_AVAILABLE or not _bcrypt:
+            self._json({"error": "bcrypt not installed on server"}, 500)
+            return
+        try:
+            body = json.loads(self._read_body() or b"{}")
+        except Exception:
+            self._json({"error": "Bad request"}, 400)
+            return
+        password = body.get("password", "")
+        if len(password) < 8:
+            self._json({"error": "Password must be at least 8 characters"}, 400)
+            return
+        try:
+            pw_hash = _bcrypt.hashpw(password.encode(), _bcrypt.gensalt()).decode()
+            from auth import _load_auth
+            auth = _load_auth()
+            username = auth.get("username", "admin")
+            _save_auth(username, pw_hash)
+        except Exception as e:
+            self._json({"error": str(e)}, 500)
+            return
+        self._json({"ok": True})
+        print(f"[Auth] Password changed for user '{auth.get('username', 'admin')}'")
+
     # ── Camera proxy ──────────────────────────────────────────────────────────
 
     def _proxy_camera(self):
@@ -352,7 +377,9 @@ class SPHandler(SimpleHTTPRequestHandler):
         if not self._check_auth():
             return
 
-        if self.path == "/api/import-filaments":
+        if self.path == "/api/change-password":
+            self._handle_change_password()
+        elif self.path == "/api/import-filaments":
             self._handle_import_filaments()
         elif self.path.startswith("/api/spoolman"):
             self._proxy_spoolman("POST", self.path[len("/api/spoolman"):], self._read_body())
