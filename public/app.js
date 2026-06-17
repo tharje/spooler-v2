@@ -19,6 +19,8 @@ let ws       = null;
 let printers = {}; // id → printer data
 let history  = []; // print history log
 let spools   = []; // spool inventory from Spoolman
+let trayMap  = {}; // printer_id → { tray_id_str → spoolman_spool_id }
+let _prevActiveTray = {}; // printer_id → last seen active_tray_id
 
 // ─── Spoolman field helpers ────────────────────────────────────────────────────
 function spoolName(s)       { return [s.filament?.vendor?.name, s.filament?.material, s.filament?.name].filter(Boolean).join(" ") || `Spool ${s.id}`; }
@@ -29,6 +31,8 @@ function spoolPct(s)        { const t = spoolTotal(s); return t > 0 ? Math.round
 function spoolAssignedTo(s) { return s.location || null; }
 
 let currentPickerPrinterId = null;
+let currentPickerTrayId    = null; // non-null → picker is in tray-link mode
+let _currentFilePrinterId  = null;
 let _materialDensityMap = {}; // material name → density g/cm³
 
 // ─── Filament metadata (brands + materials from SpoolmanDB) ───────────────────
@@ -109,6 +113,7 @@ function handleMessage(msg) {
       printers[msg.printer.id] = msg.printer;
       renderPrinter(msg.printer);
       syncEmptyState();
+      _checkActiveTrayChange(msg.printer);
       break;
     case "printer_removed":
       delete printers[msg.printer_id];
@@ -137,6 +142,28 @@ function handleMessage(msg) {
       Object.values(printers).forEach(p => renderPrinter(p));
       toast(`Spool low: ${spoolName(msg.spool)} — ${spoolRemaining(msg.spool)}g remaining`);
       break;
+    case "file_list":
+      if (msg.printer_id === _currentFilePrinterId) renderFileList(msg.files, msg.error);
+      break;
+    case "tray_map":
+      trayMap = msg.tray_map || {};
+      Object.values(printers).forEach(p => renderPrinter(p));
+      break;
+  }
+}
+
+function _checkActiveTrayChange(printer) {
+  const ci = printer.status?.canvas_info;
+  if (!ci) return;
+  const trayId = ci.active_tray_id ?? -1;
+  const prev   = _prevActiveTray[printer.id] ?? -2;
+  _prevActiveTray[printer.id] = trayId;
+  if (trayId < 0 || trayId === prev) return;
+  // Active tray changed — auto-assign the linked spool if one is set
+  const linked = (trayMap[printer.id] || {})[String(trayId)];
+  if (linked != null) {
+    console.log(`[Tray] Active tray ${trayId} → auto-assigning spool ${linked}`);
+    assignSpool(printer.id, linked);
   }
 }
 
@@ -196,6 +223,17 @@ function statusClass(s) {
 function isActivelyPrinting(printer) {
   const s = getPrintStatus(printer);
   return ["printing", "homing", "warming up", "leveling", "checking", "recovering"].includes(s);
+}
+
+// Returns the printer object that currently has this spool loaded as its active tray, or null.
+function getSpoolActivePrinter(spoolId) {
+  for (const [pid, trays] of Object.entries(trayMap)) {
+    const p = printers[pid];
+    if (!p) continue;
+    const activeTray = p.status?.canvas_info?.active_tray_id ?? -1;
+    if (activeTray >= 0 && trays[String(activeTray)] === spoolId) return p;
+  }
+  return null;
 }
 
 function isPaused(printer) {
@@ -271,6 +309,10 @@ function renderPrinter(printer) {
     ? `/api/camera/${encodeURIComponent(printer.id)}`
     : null;
 
+  // Preserve the existing camera img element so its MJPEG stream connection
+  // survives innerHTML replacement (every printer_update would kill it otherwise)
+  const prevCameraImg = card.querySelector('.card-camera img');
+
   card.innerHTML = `
     <!-- Header -->
     <div class="card-header">
@@ -280,6 +322,11 @@ function renderPrinter(printer) {
         <div class="card-subtitle">${escHtml(printer.ip)}${printer.attrs?.FirmwareVersion ? ` · fw ${escHtml(printer.attrs.FirmwareVersion)}` : ""}</div>
       </div>
       <span class="status-badge ${sc}">${status}</span>
+      <button class="card-files-btn" onclick="openFileBrowser('${escAttr(printer.id)}')" title="Browse files">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+        </svg>
+      </button>
       <button class="card-settings-btn" onclick="openPrinterSettings('${escAttr(printer.id)}')" title="Printer settings">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -295,10 +342,7 @@ function renderPrinter(printer) {
 
     <!-- Camera -->
     <div class="card-camera">
-      ${cameraUrl
-        ? `<img src="${escAttr(cameraUrl)}" alt="Camera feed" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />`
-        : ""}
-      <div class="camera-placeholder" style="display:${cameraUrl ? "none" : "flex"}">
+      <div class="camera-placeholder" style="display:flex">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
           <path d="M23 7l-7 5 7 5V7z"/>
           <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
@@ -308,7 +352,7 @@ function renderPrinter(printer) {
     </div>
 
     <!-- Progress (only when printing/paused) -->
-    ${(printing || paused || progress !== null) ? `
+    ${(printing || paused) ? `
     <div class="card-progress-wrap">
       <div class="progress-header">
         <span class="progress-filename" title="${escAttr(filename)}">${escHtml(filename || "Unknown file")}</span>
@@ -331,8 +375,8 @@ function renderPrinter(printer) {
     </div>
     ` : ""}
 
-    <!-- Spool -->
-    ${(() => {
+    <!-- Spool (hidden for canvas printers — tray linking handles assignment) -->
+    ${!printer.status?.canvas_info ? (() => {
       const s = spools.find(sp => spoolAssignedTo(sp) === printer.id);
       const pct = s ? spoolPct(s) : 0;
       const isEmpty = s && spoolRemaining(s) === 0;
@@ -353,6 +397,42 @@ function renderPrinter(printer) {
                 onclick="openSpoolPicker('${escAttr(printer.id)}')">
           ${s ? "Change" : "Assign"}
         </button>
+      </div>`;
+    })() : ""}
+
+    <!-- Canvas / multi-material trays (CC2 with canvas unit) -->
+    ${(() => {
+      const ci = printer.status?.canvas_info;
+      if (!ci || !ci.canvas_list?.length) return "";
+      const activeTrayId = ci.active_tray_id ?? -1;
+      const trays = ci.canvas_list.flatMap(c => c.tray_list || []);
+      if (!trays.length) return "";
+      const pid = printer.id;
+      const trayHtml = trays.map(t => {
+        const color      = t.filament_color || "#888888";
+        const active     = t.tray_id === activeTrayId;
+        const label      = t.filament_type || "?";
+        const fullName   = [t.brand, t.filament_name].filter(Boolean).join(" ");
+        const linkedId   = (trayMap[pid] || {})[String(t.tray_id)];
+        const linkedSpool = linkedId != null ? spools.find(s => s.id === linkedId) : null;
+        const linkedChip = linkedSpool
+          ? `<div class="canvas-tray-spool" title="${escAttr(spoolName(linkedSpool))}">
+               <div class="canvas-tray-spool-dot" style="background:${escAttr(spoolColorHex(linkedSpool))}"></div>
+               <span>${escHtml(spoolName(linkedSpool).split(" ").slice(0,2).join(" "))}</span>
+             </div>`
+          : `<div class="canvas-tray-spool canvas-tray-spool-empty">No spool</div>`;
+        return `<div class="canvas-tray${active ? " canvas-tray-active" : ""}"
+                     title="${escAttr(fullName || label)}"
+                     onclick="openTrayPicker('${escAttr(pid)}', ${t.tray_id})">
+          <div class="canvas-tray-num">${t.tray_id + 1}</div>
+          <div class="canvas-tray-dot" style="background:${escAttr(color)}"></div>
+          <div class="canvas-tray-label">${escHtml(label)}</div>
+          ${linkedChip}
+        </div>`;
+      }).join("");
+      return `<div class="card-canvas">
+        <div class="canvas-header">Canvas <span class="canvas-tray-count">${trays.length} slots</span></div>
+        <div class="canvas-trays">${trayHtml}</div>
       </div>`;
     })()}
 
@@ -409,6 +489,23 @@ function renderPrinter(printer) {
       </button>
     </div>
   `;
+
+  const cameraDiv = card.querySelector('.card-camera');
+  const placeholder = cameraDiv.querySelector('.camera-placeholder');
+  if (cameraUrl) {
+    if (prevCameraImg) {
+      cameraDiv.insertBefore(prevCameraImg, cameraDiv.firstChild);
+      placeholder.style.display = 'none';
+      prevCameraImg.style.display = '';
+    } else {
+      const img = document.createElement('img');
+      img.src = cameraUrl;
+      img.alt = 'Camera feed';
+      img.addEventListener('load',  () => { placeholder.style.display = 'none'; });
+      img.addEventListener('error', () => { img.style.display = 'none'; placeholder.style.display = 'flex'; });
+      cameraDiv.insertBefore(img, cameraDiv.firstChild);
+    }
+  }
 }
 
 function syncEmptyState() {
@@ -425,12 +522,12 @@ const _lightPending = {}; // printerId → { on: bool, until: ms timestamp }
 function getLightOn(printer) {
   const p = _lightPending[printer.id];
   if (p && Date.now() < p.until) return p.on;
-  return printer.status?.LightStatus?.SecondLight === 1;
+  return !!printer.status?.LightStatus?.SecondLight;
 }
 
 function printerAction(id, action) {
   if (action === "light_on" || action === "light_off") {
-    _lightPending[id] = { on: action === "light_on", until: Date.now() + 5000 };
+    _lightPending[id] = { on: action === "light_on", until: Date.now() + 3000 };
     if (printers[id]) renderPrinter(printers[id]);
   }
   send({ action, printer_id: id });
@@ -451,28 +548,29 @@ function removePrinter(id) {
 function openPrinterSettings(id) {
   const p = printers[id];
   if (!p) return;
-  document.getElementById("settings-printer-id").value = id;
-  document.getElementById("settings-name").value = p.name || "";
-  document.getElementById("settings-ip").textContent = p.ip || id;
-  document.getElementById("settings-type").textContent =
+  _editingPrinterId = id;
+
+  document.getElementById("input-name").value = p.name || "";
+  document.getElementById("input-ip").value = p.ip || "";
+  inputType.value = p.printer_type || "cc1";
+  inputType.style.display = "none";
+  document.getElementById("input-type-readonly").style.display = "";
+  document.getElementById("input-type-readonly").textContent =
     p.printer_type === "cc2" ? "CC2 – Centauri Carbon 2 (MQTT)" : "CC1 – Centauri Carbon 1 (WebSocket/SDCP)";
-  const accessRow = document.getElementById("settings-access-row");
-  accessRow.style.display = p.printer_type === "cc2" ? "flex" : "none";
-  document.getElementById("settings-access-code").value = p.access_code || "";
-  document.getElementById("modal-printer-settings").style.display = "flex";
-  document.getElementById("settings-name").focus();
+  inputAccessCode.value = "";
+  inputAccessCode.placeholder = p.has_access_code ? "Leave blank to keep current" : "Enter MQTT password";
+  labelAccessCode.style.display = p.printer_type === "cc2" ? "flex" : "none";
+
+  document.getElementById("printer-panel-title").textContent = p.name || "Edit Printer";
+  document.getElementById("printer-discover-section").style.display = "none";
+  document.getElementById("printer-panel-divider").style.display = "none";
+  document.getElementById("printer-form-label").textContent = "Printer details";
+  document.getElementById("btn-modal-confirm").innerHTML = "Save Changes";
+  document.getElementById("btn-remove-printer").style.display = "";
+
+  openPrinters();
+  document.getElementById("input-name").focus();
 }
-document.getElementById("btn-settings-cancel").addEventListener("click", () => {
-  document.getElementById("modal-printer-settings").style.display = "none";
-});
-document.getElementById("btn-settings-save").addEventListener("click", () => {
-  const id   = document.getElementById("settings-printer-id").value;
-  const name = document.getElementById("settings-name").value.trim();
-  const code = document.getElementById("settings-access-code").value.trim();
-  if (!name) { document.getElementById("settings-name").focus(); return; }
-  send({ action: "update_printer", printer_id: id, name, access_code: code });
-  document.getElementById("modal-printer-settings").style.display = "none";
-});
 
 // ─── Sign out ─────────────────────────────────────────────────────────────────
 async function signOut() {
@@ -536,7 +634,6 @@ document.getElementById("btn-app-settings-save")?.addEventListener("click", asyn
   }
 });
 
-// ─── Notifications ────────────────────────────────────────────────────────────
 // ─── Push notifications ───────────────────────────────────────────────────────
 
 async function _subscribePush() {
@@ -662,48 +759,188 @@ document.getElementById("btn-notif-test")?.addEventListener("click", async () =>
   }
 });
 
-// ─── Discover / Add modal ──────────────────────────────────────────────────────
-document.getElementById("btn-discover").addEventListener("click", () => {
-  send({ action: "discover" });
-  toast("Scanning network for printers…");
-});
-
-const modal = document.getElementById("modal-add");
-const openModal  = () => modal.classList.add("open");
-const closeModal = () => modal.classList.remove("open");
+// ─── Printers panel ────────────────────────────────────────────────────────────
+const printersPanel = document.getElementById("panel-printers");
+const btnPrinters   = document.getElementById("btn-printers");
 
 const inputType       = document.getElementById("input-type");
 const labelAccessCode = document.getElementById("label-access-code");
 const inputAccessCode = document.getElementById("input-access-code");
 
-function resetModal() {
+let _editingPrinterId = null;
+
+
+function resetPrinterForm() {
+  _editingPrinterId = null;
   document.getElementById("input-ip").value = "";
   document.getElementById("input-name").value = "";
   inputType.value = "cc1";
+  inputType.style.display = "";
+  document.getElementById("input-type-readonly").style.display = "none";
   inputAccessCode.value = "";
+  inputAccessCode.placeholder = "12345";
   labelAccessCode.style.display = "none";
+
+  document.getElementById("printer-panel-title").textContent = "Add Printer";
+  document.getElementById("printer-discover-section").style.display = "";
+  document.getElementById("printer-panel-divider").style.display = "";
+  document.getElementById("printer-form-label").textContent = "Add manually";
+  document.getElementById("btn-modal-confirm").innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M12 5v14M5 12h14"/>
+  </svg> Add Printer`;
+  document.getElementById("btn-remove-printer").style.display = "none";
 }
 
 inputType.addEventListener("change", () => {
   labelAccessCode.style.display = inputType.value === "cc2" ? "flex" : "none";
 });
 
-document.getElementById("btn-add").addEventListener("click", openModal);
-document.getElementById("btn-modal-cancel").addEventListener("click", () => { closeModal(); resetModal(); });
+const openPrinters = () => {
+  printersPanel.classList.add("open");
+  historyBackdrop.classList.add("open");
+  btnPrinters.classList.add("active");
+};
+const closePrinters = () => {
+  printersPanel.classList.remove("open");
+  historyBackdrop.classList.remove("open");
+  btnPrinters.classList.remove("active");
+  resetPrinterForm();
+};
+
+btnPrinters.addEventListener("click", openPrinters);
+document.getElementById("btn-printers-close").addEventListener("click", closePrinters);
+
+document.getElementById("btn-discover").addEventListener("click", () => {
+  send({ action: "discover" });
+  const btn = document.getElementById("btn-discover");
+  btn.disabled = true;
+  btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+  </svg> Scanning…`;
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+    </svg> Scan for Printers`;
+  }, 4000);
+});
+
 document.getElementById("btn-modal-confirm").addEventListener("click", () => {
   const ip          = document.getElementById("input-ip").value.trim();
   const name        = document.getElementById("input-name").value.trim();
-  const printer_type = inputType.value;
   const access_code = inputAccessCode.value.trim();
   if (!ip) { toast("Enter an IP address", true); return; }
-  send({ action: "add_printer", ip, name: name || undefined, printer_type, access_code });
-  closeModal();
-  resetModal();
+  if (_editingPrinterId) {
+    if (!name) { toast("Enter a printer name", true); return; }
+    send({ action: "update_printer", printer_id: _editingPrinterId, name, ip, access_code });
+  } else {
+    send({ action: "add_printer", ip, name: name || undefined, printer_type: inputType.value, access_code });
+  }
+  closePrinters();
 });
 
-// Close modal on backdrop click or Escape key
-modal.addEventListener("click", (e) => { if (e.target === modal) { closeModal(); resetModal(); } });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeModal(); resetModal(); } });
+document.getElementById("btn-remove-printer").addEventListener("click", () => {
+  if (!_editingPrinterId) return;
+  if (confirm("Remove this printer?")) {
+    send({ action: "remove_printer", printer_id: _editingPrinterId });
+    closePrinters();
+  }
+});
+
+// ─── File browser ─────────────────────────────────────────────────────────────
+function openFileBrowser(printerId) {
+  _currentFilePrinterId = printerId;
+  const p = printers[printerId];
+  document.getElementById("files-modal-title").textContent = `Files – ${p?.name || printerId}`;
+  document.getElementById("files-list").innerHTML = "";
+  document.getElementById("files-loading").style.display = "";
+  document.getElementById("modal-files").classList.add("open");
+  send({ action: "list_files", printer_id: printerId });
+}
+
+function closeFileBrowser() {
+  document.getElementById("modal-files").classList.remove("open");
+  _currentFilePrinterId = null;
+}
+
+function renderFileList(files, error) {
+  document.getElementById("files-loading").style.display = "none";
+  const list = document.getElementById("files-list");
+
+  if (error) {
+    list.innerHTML = `<p class="files-empty" style="color:var(--red)">${escHtml(error)}</p>`;
+    return;
+  }
+  if (!files || files.length === 0) {
+    list.innerHTML = '<p class="files-empty">No files found on this printer.</p>';
+    return;
+  }
+
+  const table = document.createElement("table");
+  table.className = "files-table";
+  const thead = document.createElement("thead");
+  thead.innerHTML = "<tr><th>Name</th><th>Size</th><th></th></tr>";
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  for (const f of files) {
+    const tr = document.createElement("tr");
+
+    const nameTd = document.createElement("td");
+    nameTd.className = "file-name";
+    nameTd.textContent = f.name || f.path || "";
+    nameTd.title = f.path || "";
+    tr.appendChild(nameTd);
+
+    const sizeTd = document.createElement("td");
+    sizeTd.className = "file-size";
+    sizeTd.textContent = f.is_dir ? "—" : formatFileSize(f.size);
+    tr.appendChild(sizeTd);
+
+    const actionTd = document.createElement("td");
+    actionTd.className = "file-actions";
+    if (!f.is_dir) {
+      const btn = document.createElement("button");
+      btn.className = "btn btn-primary btn-sm";
+      btn.textContent = "Print";
+      const filePath = f.path;
+      const fileName = f.name || filePath.split("/").pop() || filePath;
+      btn.addEventListener("click", () => {
+        if (confirm(`Print "${fileName}"?`)) {
+          send({ action: "start_print", printer_id: _currentFilePrinterId, filename: filePath });
+          closeFileBrowser();
+          toast(`Starting: ${fileName}`);
+        }
+      });
+      actionTd.appendChild(btn);
+    }
+    tr.appendChild(actionTd);
+    tbody.appendChild(tr);
+  }
+
+  table.appendChild(tbody);
+  list.innerHTML = "";
+  list.appendChild(table);
+}
+
+function formatFileSize(bytes) {
+  if (!bytes) return "—";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1073741824) return `${(bytes / 1048576).toFixed(1)} MB`;
+  return `${(bytes / 1073741824).toFixed(2)} GB`;
+}
+
+document.getElementById("btn-files-close").addEventListener("click", closeFileBrowser);
+document.getElementById("btn-files-refresh").addEventListener("click", () => {
+  if (!_currentFilePrinterId) return;
+  document.getElementById("files-list").innerHTML = "";
+  document.getElementById("files-loading").style.display = "";
+  send({ action: "list_files", printer_id: _currentFilePrinterId });
+});
+document.getElementById("modal-files").addEventListener("click", (e) => {
+  if (e.target === document.getElementById("modal-files")) closeFileBrowser();
+});
 
 // ─── Toast ─────────────────────────────────────────────────────────────────────
 function toast(msg, isError = false) {
@@ -787,7 +1024,7 @@ const closeHistory = () => {
 
 btnHistory.addEventListener("click", openHistory);
 document.getElementById("btn-history-close").addEventListener("click", closeHistory);
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeHistory(); closeSpools(); } });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeHistory(); closeSpools(); closePrinters(); closeFileBrowser(); } });
 
 // ─── Spoolman / Spools ────────────────────────────────────────────────────────
 async function fetchSpools() {
@@ -854,6 +1091,7 @@ function renderSpoolPanel() {
 
 function openSpoolPicker(printerId) {
   currentPickerPrinterId = printerId;
+  currentPickerTrayId    = null;
   const printer = printers[printerId];
   document.getElementById("spool-picker-title").textContent =
     `Assign Spool – ${printer?.name || printerId}`;
@@ -861,32 +1099,77 @@ function openSpoolPicker(printerId) {
   document.getElementById("modal-spool-picker").classList.add("open");
 }
 
+function openTrayPicker(printerId, trayId) {
+  currentPickerPrinterId = printerId;
+  currentPickerTrayId    = trayId;
+  const printer = printers[printerId];
+  document.getElementById("spool-picker-title").textContent =
+    `Link Spool – ${printer?.name || printerId} · Slot ${trayId + 1}`;
+  renderPickerList(printerId);
+  document.getElementById("modal-spool-picker").classList.add("open");
+}
+
 function renderPickerList(printerId) {
-  const list = document.getElementById("spool-picker-list");
-  const currentSpool = spools.find(s => spoolAssignedTo(s) === printerId);
-  // Show unassigned spools + the one currently on this printer
-  const available = spools.filter(s => !spoolAssignedTo(s) || spoolAssignedTo(s) === printerId);
-  const noneSelected = !currentSpool;
-  list.innerHTML = `
-    <div class="spool-pick-item${noneSelected ? " selected" : ""}" onclick="assignSpool('${escAttr(printerId)}', null)">
-      <div class="spool-dot" style="background:var(--border)"></div>
+  const list   = document.getElementById("spool-picker-list");
+  const isTray = currentPickerTrayId != null;
+
+  // Classify each spool relative to the current context
+  const currentLinked = isTray
+    ? (trayMap[printerId] || {})[String(currentPickerTrayId)]
+    : spools.find(s => spoolAssignedTo(s) === printerId)?.id;
+
+  function spoolRow(s, onClickFn, isSelected) {
+    const loc          = spoolAssignedTo(s);
+    const otherPrinter = loc && loc !== printerId ? printers[loc] : null;
+    const activePrinter = getSpoolActivePrinter(s.id);  // printer currently printing with this spool
+    const inUse        = activePrinter != null;
+    const pct          = spoolPct(s);
+    const badge        = inUse
+      ? `<span class="spool-pick-badge in-use">Active · ${escHtml(activePrinter.name)}</span>`
+      : otherPrinter
+        ? `<span class="spool-pick-badge elsewhere">On · ${escHtml(otherPrinter.name)}</span>`
+        : "";
+    if (inUse) {
+      return `<div class="spool-pick-item spool-pick-blocked" title="Currently loaded on ${escAttr(activePrinter.name)} — unload filament before reassigning">
+        <div class="spool-dot" style="background:${escAttr(spoolColorHex(s))};opacity:.4"></div>
+        <div class="spool-pick-info">
+          <div class="spool-pick-name" style="opacity:.5">${escHtml(spoolName(s))}</div>
+          <div class="spool-pick-meta">${escHtml(s.filament?.material || "")} · ${spoolRemaining(s)}g (${pct}%) ${badge}</div>
+        </div>
+      </div>`;
+    }
+    return `<div class="spool-pick-item${isSelected ? " selected" : ""}${otherPrinter ? " spool-pick-elsewhere" : ""}"
+                 onclick="${onClickFn}">
+      <div class="spool-dot" style="background:${escAttr(spoolColorHex(s))}"></div>
       <div class="spool-pick-info">
-        <div class="spool-pick-name">None – unassign</div>
+        <div class="spool-pick-name">${escHtml(spoolName(s))}</div>
+        <div class="spool-pick-meta">${escHtml(s.filament?.material || "")} · ${spoolRemaining(s)}g (${pct}%) ${badge}</div>
       </div>
+      ${isSelected ? '<span class="spool-check">✓</span>' : ""}
+    </div>`;
+  }
+
+  const noneLabel  = isTray ? "None – unlink" : "None – unassign";
+  const noneClick  = isTray
+    ? `linkTray('${escAttr(printerId)}', ${currentPickerTrayId}, null)`
+    : `assignSpool('${escAttr(printerId)}', null)`;
+  const noneSelected = currentLinked == null;
+
+  const rows = spools.map(s => {
+    const isSelected = s.id === currentLinked || (!isTray && spoolAssignedTo(s) === printerId);
+    const click = isTray
+      ? `linkTray('${escAttr(printerId)}', ${currentPickerTrayId}, ${s.id})`
+      : `assignSpool('${escAttr(printerId)}', '${escAttr(s.id)}')`;
+    return spoolRow(s, click, isSelected);
+  });
+
+  list.innerHTML = `
+    <div class="spool-pick-item${noneSelected ? " selected" : ""}" onclick="${noneClick}">
+      <div class="spool-dot" style="background:var(--border)"></div>
+      <div class="spool-pick-info"><div class="spool-pick-name">${noneLabel}</div></div>
       ${noneSelected ? '<span class="spool-check">✓</span>' : ""}
     </div>
-    ${available.map(s => {
-      const sel = spoolAssignedTo(s) === printerId;
-      const pct = spoolPct(s);
-      return `<div class="spool-pick-item${sel ? " selected" : ""}" onclick="assignSpool('${escAttr(printerId)}', '${escAttr(s.id)}')">
-        <div class="spool-dot" style="background:${escAttr(spoolColorHex(s))}"></div>
-        <div class="spool-pick-info">
-          <div class="spool-pick-name">${escHtml(spoolName(s))}</div>
-          <div class="spool-pick-meta">${escHtml(s.filament?.material || "")} · ${spoolRemaining(s)}g (${pct}%)</div>
-        </div>
-        ${sel ? '<span class="spool-check">✓</span>' : ""}
-      </div>`;
-    }).join("")}
+    ${rows.join("")}
   `;
 }
 
@@ -914,6 +1197,19 @@ async function assignSpool(printerId, spoolId) {
   } catch (e) {
     toast("Failed to assign spool", true);
   }
+}
+
+function linkTray(printerId, trayId, spoolId) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      action:     "link_tray",
+      printer_id: printerId,
+      tray_id:    trayId,
+      spool_id:   spoolId,
+    }));
+  }
+  document.getElementById("modal-spool-picker").classList.remove("open");
+  toast(spoolId != null ? `Slot ${trayId + 1} linked` : `Slot ${trayId + 1} unlinked`);
 }
 
 async function deleteSpool(spoolId) {
@@ -993,7 +1289,7 @@ document.getElementById("btn-import-filaments").addEventListener("click", async 
 });
 
 // Close all panels on backdrop click
-historyBackdrop.addEventListener("click", () => { closeHistory(); closeSpools(); });
+historyBackdrop.addEventListener("click", () => { closeHistory(); closeSpools(); closePrinters(); });
 
 // Add Spool modal
 const addSpoolModal = document.getElementById("modal-add-spool");
@@ -1161,35 +1457,74 @@ document.getElementById("spool-input-ean").addEventListener("input", (e) => {
 // Camera scanner
 let _liveScanner = null;
 
+function _setScannerError(msg, opts = {}) {
+  const { sub, photo = false } = opts;
+  document.getElementById("scanner-region").style.display = "none";
+  document.getElementById("scanner-hint").style.display = "none";
+  document.getElementById("scanner-error-msg").textContent = msg;
+  if (sub !== undefined) document.getElementById("scanner-error-sub").textContent = sub;
+  document.getElementById("scanner-error").style.display = "flex";
+  document.getElementById("btn-scanner-photo").style.display = photo ? "" : "none";
+}
+
+function _resetScannerError() {
+  document.getElementById("scanner-region").style.display = "";
+  document.getElementById("scanner-hint").style.display = "";
+  document.getElementById("scanner-error").style.display = "none";
+  document.getElementById("scanner-error-sub").textContent = "Enter the EAN code manually instead.";
+  document.getElementById("btn-scanner-photo").style.display = "none";
+}
+
 async function openScanner() {
-  if (window.isSecureContext) {
-    // HTTPS / localhost → live video scanner
-    document.getElementById("modal-scanner").classList.add("open");
-    try {
-      _liveScanner = new Html5Qrcode("scanner-region", { verbose: false });
-      await _liveScanner.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 280, height: 100 } },
-        (text) => { closeScanner(); lookupEan(text); },
-        () => {}
-      );
-    } catch (e) {
-      closeScanner();
-      toast("Camera unavailable: " + e.message, true);
-    }
-  } else {
-    // HTTP on local network → take photo, decode from image
-    document.getElementById("barcode-file-input").click();
+  _resetScannerError();
+  document.getElementById("modal-scanner").classList.add("open");
+
+  if (!window.isSecureContext) {
+    _setScannerError("Live scanner requires HTTPS", {
+      sub: "Tap 'Take Photo' to scan a barcode with your camera, or enter the code manually.",
+      photo: true
+    });
+    return;
+  }
+
+  // Guard against start() hanging indefinitely (e.g. PC with no camera attached)
+  let timedOut = false;
+  const giveUpTimer = setTimeout(() => {
+    timedOut = true;
+    const s = _liveScanner;
+    _liveScanner = null;
+    s?.stop().catch(() => {}).finally(() => { try { s.clear(); } catch {} });
+    _setScannerError("No camera found on this device");
+  }, 5000);
+
+  try {
+    _liveScanner = new Html5Qrcode("scanner-region", { verbose: false });
+    await _liveScanner.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 280, height: 100 } },
+      (text) => { clearTimeout(giveUpTimer); closeScanner(); lookupEan(text); },
+      () => {}
+    );
+    clearTimeout(giveUpTimer);
+  } catch (e) {
+    clearTimeout(giveUpTimer);
+    if (timedOut) return;
+    const s = _liveScanner;
+    _liveScanner = null;
+    s?.stop().catch(() => {}).finally(() => { try { s.clear(); } catch {} });
+    _setScannerError(e.name === "NotFoundError" ? "No camera found on this device" : "Camera not available");
   }
 }
 
 function closeScanner() {
-  if (_liveScanner) {
-    _liveScanner.stop().catch(() => {});
-    _liveScanner.clear();
-    _liveScanner = null;
-  }
   document.getElementById("modal-scanner").classList.remove("open");
+  if (_liveScanner) {
+    const s = _liveScanner;
+    _liveScanner = null;
+    s.stop()
+      .catch(() => {})
+      .finally(() => { try { s.clear(); } catch {} });
+  }
 }
 
 // File input: decode image from camera photo
@@ -1208,6 +1543,10 @@ document.getElementById("barcode-file-input").addEventListener("change", async (
 
 document.getElementById("btn-scan-ean").addEventListener("click", openScanner);
 document.getElementById("btn-scanner-cancel").addEventListener("click", closeScanner);
+document.getElementById("btn-scanner-photo").addEventListener("click", () => {
+  closeScanner();
+  document.getElementById("barcode-file-input").click();
+});
 document.getElementById("modal-scanner").addEventListener("click", (e) => {
   if (e.target === document.getElementById("modal-scanner")) closeScanner();
 });
@@ -1245,7 +1584,7 @@ function openChangelog() {
         <span class="cl-date">${entry.date}</span>
       </div>
       <ul class="cl-list">
-        ${entry.changes.map(c => `<li>${c}</li>`).join("")}
+        ${entry.changes.map(c => `<li>${escHtml(c)}</li>`).join("")}
       </ul>
     </div>`).join("");
   document.getElementById("modal-changelog")?.classList.add("open");
@@ -1260,6 +1599,11 @@ document.getElementById("modal-changelog")?.addEventListener("click", e => {
 });
 
 // ─── Boot ──────────────────────────────────────────────────────────────────────
-document.getElementById("btn-spoolman-ui").href = `http://${location.hostname}:7912`;
+fetch("/api/auth-status")
+  .then(r => r.json())
+  .then(({ spoolman_url }) => {
+    if (spoolman_url) document.getElementById("btn-spoolman-ui").href = spoolman_url;
+  })
+  .catch(() => {});
 loadChangelog();
 connect();

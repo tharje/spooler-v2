@@ -42,6 +42,12 @@
   <div class="app-body">
 
   <nav class="sidenav">
+    <button id="btn-printers" class="sidenav-item" title="Add printer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 5v14M5 12h14"/>
+      </svg>
+      <span>Add Printer</span>
+    </button>
     <button id="btn-history" class="sidenav-item" title="Filament history">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
@@ -87,62 +93,60 @@
     <div id="printer-grid" class="printer-grid" style="display:none"></div>
   </main>
 
-  <!-- Add Printer Modal -->
-  <div id="modal-add" class="modal">
-    <div class="modal-box">
-      <h3>Add Printer</h3>
-      <label>
-        Printer Name
-        <input id="input-name" type="text" placeholder="Centauri Carbon 1" />
-      </label>
-      <label>
-        IP Address
-        <input id="input-ip" type="text" placeholder="192.168.1.100" />
-      </label>
-      <label>
-        Printer Type
-        <select id="input-type">
-          <option value="cc1">CC1 – Centauri Carbon 1 (WebSocket/SDCP)</option>
-          <option value="cc2">CC2 – Centauri Carbon 2 (MQTT)</option>
-        </select>
-      </label>
-      <label id="label-access-code" style="display:none">
-        MQTT Passord
-        <input id="input-access-code" type="text" placeholder="12345" maxlength="10" />
-        <span class="input-hint">Finn koden på skriveren under Settings → Network. Kamera fungerer uten passord.</span>
-      </label>
-      <div class="modal-actions">
-        <button id="btn-modal-cancel" class="btn btn-secondary">Cancel</button>
-        <button id="btn-modal-confirm" class="btn btn-primary">Add</button>
+  <!-- Printers panel (add + edit) -->
+  <div id="panel-printers" class="side-panel">
+    <div class="side-panel-header">
+      <div class="title-row">
+        <h3 id="printer-panel-title">Add Printer</h3>
+        <button id="btn-printers-close" class="btn btn-secondary btn-sm">Close</button>
       </div>
     </div>
-  </div>
-
-  <!-- Printer Settings Modal -->
-  <div id="modal-printer-settings" class="modal" style="display:none">
-    <div class="modal-box">
-      <h3>Printer Settings</h3>
-      <input type="hidden" id="settings-printer-id" />
-      <label>
-        Name
-        <input id="settings-name" type="text" placeholder="My Printer" maxlength="40" />
-      </label>
-      <label>
-        IP Address
-        <span id="settings-ip" class="settings-readonly"></span>
-      </label>
-      <label>
-        Type
-        <span id="settings-type" class="settings-readonly"></span>
-      </label>
-      <label id="settings-access-row" style="display:none">
-        MQTT Password
-        <input id="settings-access-code" type="text" placeholder="12345" maxlength="10" />
-        <span class="input-hint">Under Settings → Network on the printer. Changing this reconnects.</span>
-      </label>
-      <div class="modal-actions">
-        <button id="btn-settings-cancel" class="btn btn-secondary">Cancel</button>
-        <button id="btn-settings-save" class="btn btn-primary">Save</button>
+    <div class="side-panel-body">
+      <div id="printer-discover-section" class="printer-panel-section">
+        <p class="section-label">Discover on network</p>
+        <button id="btn-discover" class="btn btn-secondary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          Scan for Printers
+        </button>
+        <p class="section-hint">Automatically finds Elegoo Centauri Carbon printers on your local network.</p>
+      </div>
+      <div id="printer-panel-divider" class="panel-divider"></div>
+      <div class="printer-panel-section panel-form">
+        <p id="printer-form-label" class="section-label">Add manually</p>
+        <label>
+          Printer Name
+          <input id="input-name" type="text" placeholder="Centauri Carbon 1" />
+        </label>
+        <label>
+          IP Address
+          <input id="input-ip" type="text" placeholder="192.168.1.100" />
+        </label>
+        <label id="label-printer-type">
+          Printer Type
+          <select id="input-type">
+            <option value="cc1">CC1 – Centauri Carbon 1 (WebSocket/SDCP)</option>
+            <option value="cc2">CC2 – Centauri Carbon 2 (MQTT)</option>
+          </select>
+          <span id="input-type-readonly" class="settings-readonly" style="display:none"></span>
+        </label>
+        <label id="label-access-code" style="display:none">
+          MQTT Password
+          <input id="input-access-code" type="password" placeholder="12345" maxlength="10" />
+          <span class="input-hint">Found on the printer under Settings → Network.</span>
+        </label>
+        <div class="printer-panel-actions">
+          <button id="btn-modal-confirm" class="btn btn-primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+            Add Printer
+          </button>
+          <button id="btn-remove-printer" class="btn btn-danger" style="display:none">
+            Remove
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -150,9 +154,11 @@
   <!-- History panel -->
   <div id="panel-history" class="side-panel">
     <div class="side-panel-header">
-      <h3>Filament History</h3>
-      <div class="history-totals" id="history-totals"></div>
-      <button id="btn-history-close" class="btn btn-secondary btn-sm">Close</button>
+      <div class="title-row">
+        <h3>Filament History</h3>
+        <div class="history-totals" id="history-totals"></div>
+        <button id="btn-history-close" class="btn btn-secondary btn-sm">Close</button>
+      </div>
     </div>
     <div class="side-panel-body">
       <table class="history-table" id="history-table">
@@ -173,21 +179,25 @@
   <!-- Spools panel -->
   <div id="panel-spools" class="side-panel">
     <div class="side-panel-header">
-      <h3>Filament Spools</h3>
-      <button id="btn-add-spool" class="btn btn-primary btn-sm">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 5v14M5 12h14"/>
-        </svg>
-        Add Spool
-      </button>
-      <button id="btn-import-filaments" class="btn btn-secondary btn-sm" title="Import Elegoo filament catalogue from SpoolmanDB">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-        </svg>
-        Import Elegoo
-      </button>
-      <a id="btn-spoolman-ui" href="#" target="_blank" class="btn btn-secondary btn-sm" title="Open Spoolman web UI">Spoolman UI</a>
-      <button id="btn-spools-close" class="btn btn-secondary btn-sm">Close</button>
+      <div class="title-row">
+        <h3>Filament Spools</h3>
+        <button id="btn-spools-close" class="btn btn-secondary btn-sm">Close</button>
+      </div>
+      <div class="action-row">
+        <button id="btn-add-spool" class="btn btn-primary btn-sm">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+          Add Spool
+        </button>
+        <button id="btn-import-filaments" class="btn btn-secondary btn-sm" title="Import Elegoo filament catalogue from SpoolmanDB">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Import Elegoo
+        </button>
+        <a id="btn-spoolman-ui" href="#" target="_blank" class="btn btn-secondary btn-sm" title="Open Spoolman web UI">Spoolman UI</a>
+      </div>
     </div>
     <div class="side-panel-body">
       <div id="spools-list"></div>
@@ -196,6 +206,24 @@
   </div>
 
   <div id="panel-backdrop" class="panel-backdrop"></div>
+
+  <!-- File browser modal -->
+  <div id="modal-files" class="modal">
+    <div class="modal-box modal-box-wide">
+      <h3 id="files-modal-title">Files</h3>
+      <div id="files-loading" class="files-loading">Loading…</div>
+      <div id="files-list"></div>
+      <div class="modal-actions">
+        <button id="btn-files-refresh" class="btn btn-secondary btn-sm">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          </svg>
+          Refresh
+        </button>
+        <button id="btn-files-close" class="btn btn-secondary">Close</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Spool picker modal -->
   <div id="modal-spool-picker" class="modal">
@@ -213,9 +241,17 @@
     <div class="modal-box modal-box-wide">
       <h3>Scan barcode</h3>
       <div id="scanner-region"></div>
-      <p class="scanner-hint">Hold the barcode steady in the frame</p>
+      <p class="scanner-hint" id="scanner-hint">Hold the barcode steady in the frame</p>
+      <div id="scanner-error" class="scanner-error" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <p id="scanner-error-msg">Camera not available</p>
+        <p id="scanner-error-sub" class="scanner-error-sub">Enter the EAN code manually instead.</p>
+      </div>
       <div class="modal-actions">
-        <button id="btn-scanner-cancel" class="btn btn-secondary">Cancel</button>
+        <button id="btn-scanner-photo" class="btn btn-primary" style="display:none">Take Photo</button>
+        <button id="btn-scanner-cancel" class="btn btn-secondary">Close</button>
       </div>
     </div>
   </div>
@@ -232,7 +268,7 @@
         <label style="flex:1">EAN
           <input id="spool-input-ean" type="text" placeholder="Scan or enter EAN" inputmode="numeric" />
         </label>
-        <button id="btn-scan-ean" class="btn btn-secondary btn-sm" title="Scan with camera" style="align-self:flex-end">
+        <button id="btn-scan-ean" class="btn btn-secondary" title="Scan with camera">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M3 9V5a2 2 0 0 1 2-2h4M3 15v4a2 2 0 0 0 2 2h4M21 9V5a2 2 0 0 0-2-2h-4M21 15v4a2 2 0 0 1-2 2h-4"/>
             <line x1="8" y1="12" x2="8" y2="12"/><line x1="12" y1="12" x2="16" y2="12"/>
@@ -409,7 +445,7 @@
   <div id="toast-area"></div>
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-  <script src="app.js?v=17"></script>
+  <script src="app.js?v=20"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
