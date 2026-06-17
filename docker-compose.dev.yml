@@ -1,8 +1,7 @@
-# Spooler + Spoolman  (production — uses pre-built image)
+# Spooler + Spoolman  (dev — builds from local source)
 #
-# Quick start (no git clone needed):
-#   curl -fsSL https://raw.githubusercontent.com/tharje/spooler-v2/main/docker-compose.yml -o docker-compose.yml
-#   docker compose up -d
+# Usage:
+#   docker compose -f docker-compose.dev.yml up --build
 #
 # network_mode: host is required on Linux so Spooler can:
 #   - send UDP broadcast on port 3000 (printer discovery)
@@ -21,8 +20,6 @@ services:
 
   spooler:
     build: .
-    # To use pre-built image instead:
-    #   replace the build line above with:  image: ghcr.io/tharje/spooler-v2:latest
     network_mode: host
     env_file:
       - path: .env

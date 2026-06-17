@@ -4,3 +4,4 @@ __pycache__/
 printers.json
 history.json
 /tmp/
+.env

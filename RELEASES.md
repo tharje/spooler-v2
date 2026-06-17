@@ -1,5 +1,27 @@
 # Releases
 
+## v2.2.0 — 2026-06-17
+
+### Backend (contributed by [snazy2000](https://github.com/snazy2000))
+- Modular refactor: server.py split into auth, state, persistence, discovery, spoolman, ws_handler, http_handler and printers/ modules
+- AMS/Canvas multi-material hub support — active tray change auto-assigns the linked Spoolman spool
+
+### Networking
+- WSS WebSocket server on port 8766 — PWA and HTTPS users connect securely without mixed-content errors
+- Fixed auth-status API endpoint crashing on unauthenticated requests
+
+### Notifications
+- Web Push / VAPID push notifications delivered to phone even when app is closed
+- Notification types: print complete, layer checkpoint, nozzle still hot, nozzle overheat
+- Settings → Notifications subpage with toggles and threshold inputs; Send test button
+
+### UI
+- Settings modal now has subpages: Change Password and Notifications
+- Discover and Add Printer consolidated in header; + button removed from sidenav
+- Camera stream excluded from service worker fetch interception (fixes MJPEG on iOS PWA)
+
+---
+
 ## v2.1.1 — 2026-06-16
 
 ### UI
