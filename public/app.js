@@ -522,12 +522,12 @@ const _lightPending = {}; // printerId → { on: bool, until: ms timestamp }
 function getLightOn(printer) {
   const p = _lightPending[printer.id];
   if (p && Date.now() < p.until) return p.on;
-  return printer.status?.LightStatus?.SecondLight === 1;
+  return !!printer.status?.LightStatus?.SecondLight;
 }
 
 function printerAction(id, action) {
   if (action === "light_on" || action === "light_off") {
-    _lightPending[id] = { on: action === "light_on", until: Date.now() + 5000 };
+    _lightPending[id] = { on: action === "light_on", until: Date.now() + 3000 };
     if (printers[id]) renderPrinter(printers[id]);
   }
   send({ action, printer_id: id });

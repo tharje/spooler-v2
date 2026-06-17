@@ -19,6 +19,32 @@ from printers.protocol import (
 
 MAX_WS_MSG = 1 * 1024 * 1024  # 1 MB
 
+# One pending light-refresh task per printer — cancelled when a new light command arrives
+_light_refresh_tasks: dict = {}
+
+
+async def _run_light_refresh(printer) -> None:
+    try:
+        if printer.printer_type == "cc2":
+            await asyncio.sleep(0.5)
+            await printer._send_mqtt_cmd(1002)
+            await asyncio.sleep(1.5)
+            await printer._send_mqtt_cmd(1002)
+        else:
+            await asyncio.sleep(0.4)
+            await printer.send_cmd(CMD_STATUS, {})
+    except asyncio.CancelledError:
+        pass
+    finally:
+        _light_refresh_tasks.pop(printer.id, None)
+
+
+def _schedule_light_refresh(printer) -> None:
+    old = _light_refresh_tasks.pop(printer.id, None)
+    if old:
+        old.cancel()
+    _light_refresh_tasks[printer.id] = asyncio.create_task(_run_light_refresh(printer))
+
 
 def _valid_ip_or_host(value: str) -> bool:
     try:
@@ -218,8 +244,4 @@ async def handle_browser_message(ws, raw: str) -> None:
         if not ok:
             await ws.send(json.dumps({"type": "error", "message": "Printer not connected"}))
         elif action in ("light_on", "light_off"):
-            await asyncio.sleep(0.4)
-            if printer.printer_type == "cc2":
-                await printer._send_mqtt_cmd(1002)  # full state refresh → updates led.status
-            else:
-                await printer.send_cmd(CMD_STATUS, {})
+            _schedule_light_refresh(printer)
