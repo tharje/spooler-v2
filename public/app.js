@@ -7,6 +7,13 @@ const WS_URL  = location.protocol === "https:"
 const SPOOLMAN_URL = "/api/spoolman/api/v1";
 const RECONNECT_DELAY = 3000;
 
+// ─── Theme ────────────────────────────────────────────────────────────────────
+(function () {
+  if (localStorage.getItem("theme") === "light") {
+    document.body.classList.add("light-mode");
+  }
+})();
+
 // Redirect to login on any 401 from our own API
 const _fetch = window.fetch.bind(window);
 window.fetch = async function(url, options) {
@@ -591,6 +598,8 @@ const _settingsNotifPage = document.getElementById("settings-notifications");
 function _openSettings() {
   [_settingsPwPage, _settingsNotifPage].forEach(p => p && (p.style.display = "none"));
   _settingsMenu.style.display = "";
+  const tog = document.getElementById("toggle-light-mode");
+  if (tog) tog.checked = document.body.classList.contains("light-mode");
   _settingsModal?.classList.add("open");
 }
 function _showSettingsPage(pageEl) {
@@ -609,6 +618,17 @@ document.getElementById("btn-app-settings-cancel")?.addEventListener("click", ()
 _settingsModal?.addEventListener("click", e => {
   if (e.target === _settingsModal) _settingsModal.classList.remove("open");
 });
+
+// Light mode toggle
+(function () {
+  const toggle = document.getElementById("toggle-light-mode");
+  if (!toggle) return;
+  toggle.checked = document.body.classList.contains("light-mode");
+  toggle.addEventListener("change", () => {
+    document.body.classList.toggle("light-mode", toggle.checked);
+    localStorage.setItem("theme", toggle.checked ? "light" : "dark");
+  });
+})();
 
 // Password sub-page
 document.getElementById("btn-settings-goto-password")?.addEventListener("click", () => {

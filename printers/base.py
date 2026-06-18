@@ -12,6 +12,7 @@ import time
 import state
 from persistence import append_history, filament_mm_to_grams, save_printers
 from printers.protocol import decode_printinfo
+from push import load_notif_settings, send_push_all
 from spoolman import spoolman_deduct
 
 
@@ -38,6 +39,12 @@ class PrinterConnection:
         self._task: asyncio.Task | None = None
         self._last_print_status = None
         self._print_start_time: float | None = None
+        self._notif_state: dict = {
+            "last_status":      None,
+            "nozzle_idle_fired": False,
+            "layer_fired":      False,
+            "nozzle_hot_fired": False,
+        }
 
     # ── Public interface ───────────────────────────────────────────────────────
 
@@ -94,7 +101,58 @@ class PrinterConnection:
 
     # ── Internal helpers ───────────────────────────────────────────────────────
 
+    def _check_notifications(self) -> None:
+        s = load_notif_settings()
+        if not s:
+            return
+        ns = self._notif_state
+        pi = decode_printinfo(self.status.get("PrintInfo", {}))
+        status      = pi.get("Status", 0)
+        nozzle      = self.status.get("TempOfNozzle") or self.status.get("NozzleTemp") or 0
+        layer       = pi.get("CurrentLayer", 0)
+        is_idle     = status == 0
+        is_printing = status in (3, 6)
+        is_done     = status in (9, 8)
+        last        = ns["last_status"]
+
+        if s.get("finished", {}).get("enabled") and is_done and last is not None and last not in (9, 8):
+            label = "complete" if status == 9 else "cancelled"
+            send_push_all(f"{self.name} — Print {label}", f"Your print has {label}.")
+
+        if s.get("nozzle_idle", {}).get("enabled") and is_idle:
+            thr = s["nozzle_idle"].get("threshold", 50)
+            if nozzle > thr and not ns["nozzle_idle_fired"]:
+                send_push_all(f"{self.name} — Nozzle hot", f"Nozzle is {round(nozzle)}°C while idle.")
+                ns["nozzle_idle_fired"] = True
+            elif nozzle <= thr:
+                ns["nozzle_idle_fired"] = False
+        elif not is_idle:
+            ns["nozzle_idle_fired"] = False
+
+        if s.get("layer", {}).get("enabled") and is_printing:
+            target = s["layer"].get("layer", 1)
+            if layer >= target and not ns["layer_fired"]:
+                send_push_all(f"{self.name} — Layer {target} reached", f"Currently on layer {layer}.")
+                ns["layer_fired"] = True
+            if layer < target:
+                ns["layer_fired"] = False
+        if not is_printing:
+            ns["layer_fired"] = False
+
+        if s.get("nozzle_printing", {}).get("enabled") and is_printing:
+            thr = s["nozzle_printing"].get("threshold", 260)
+            if nozzle > thr and not ns["nozzle_hot_fired"]:
+                send_push_all(f"{self.name} — Nozzle overheat", f"Nozzle is {round(nozzle)}°C during print.")
+                ns["nozzle_hot_fired"] = True
+            elif nozzle <= thr:
+                ns["nozzle_hot_fired"] = False
+        elif not is_printing:
+            ns["nozzle_hot_fired"] = False
+
+        ns["last_status"] = status
+
     async def _broadcast_state(self) -> None:
+        self._check_notifications()
         await state.broadcast_to_browsers({
             "type":    "printer_update",
             "printer": self.to_dict(),

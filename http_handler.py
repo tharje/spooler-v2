@@ -20,6 +20,10 @@ from auth import (
     _has_password, _invalidate_session, _parse_sid, _reset_rate_limit, _save_auth,
 )
 from persistence import DATA_DIR, load_history, save_printers
+from push import (
+    WEBPUSH_AVAILABLE, add_subscription, get_public_key, has_subscriptions,
+    load_notif_settings, remove_subscription, save_notif_settings, send_push_all,
+)
 from spoolman import get_spoolman_db, get_spoolman_url
 
 try:
@@ -317,6 +321,21 @@ class SPHandler(SimpleHTTPRequestHandler):
             self._json(resp)
             return
 
+        if self.path == "/api/push-public-key":
+            if not self._check_auth():
+                return
+            if WEBPUSH_AVAILABLE and get_public_key():
+                self._json({"publicKey": get_public_key()})
+            else:
+                self._json({"error": "Web Push not available"}, 503)
+            return
+
+        if self.path == "/api/notification-settings":
+            if not self._check_auth():
+                return
+            self._json(load_notif_settings())
+            return
+
         if not self._check_auth():
             return
 
@@ -388,6 +407,14 @@ class SPHandler(SimpleHTTPRequestHandler):
 
         if self.path == "/api/change-password":
             self._handle_change_password()
+        elif self.path == "/api/push-subscribe":
+            self._handle_push_subscribe()
+        elif self.path == "/api/push-unsubscribe":
+            self._handle_push_unsubscribe()
+        elif self.path == "/api/notification-settings":
+            self._handle_notif_settings()
+        elif self.path == "/api/push-test":
+            self._handle_push_test()
         elif self.path == "/api/import-filaments":
             self._handle_import_filaments()
         elif self.path.startswith("/api/spoolman"):
@@ -405,6 +432,48 @@ class SPHandler(SimpleHTTPRequestHandler):
         self.end_headers()
 
     # ── Complex POST handlers ─────────────────────────────────────────────────
+
+    def _handle_push_subscribe(self):
+        try:
+            sub = json.loads(self._read_body() or b"{}")
+        except Exception:
+            self._json({"error": "Bad request"}, 400)
+            return
+        endpoint = sub.get("endpoint", "")
+        if not endpoint:
+            self._json({"error": "Missing endpoint"}, 400)
+            return
+        add_subscription(sub)
+        self._json({"ok": True})
+
+    def _handle_push_unsubscribe(self):
+        try:
+            body = json.loads(self._read_body() or b"{}")
+        except Exception:
+            self._json({"error": "Bad request"}, 400)
+            return
+        remove_subscription(body.get("endpoint", ""))
+        self._json({"ok": True})
+
+    def _handle_notif_settings(self):
+        try:
+            s = json.loads(self._read_body() or b"{}")
+        except Exception:
+            self._json({"error": "Bad request"}, 400)
+            return
+        save_notif_settings(s)
+        self._json({"ok": True})
+
+    def _handle_push_test(self):
+        self._read_body()
+        if not WEBPUSH_AVAILABLE:
+            self._json({"error": "Web Push not available on server"}, 503)
+            return
+        if not has_subscriptions():
+            self._json({"error": "No push subscriptions registered"}, 400)
+            return
+        send_push_all("Spooler — Test notification", "Push notifications are working!")
+        self._json({"ok": True})
 
     def _handle_import_filaments(self):
         try:
