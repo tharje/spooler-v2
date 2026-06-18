@@ -658,22 +658,29 @@ document.getElementById("btn-app-settings-save")?.addEventListener("click", asyn
 
 // ─── Push notifications ───────────────────────────────────────────────────────
 
+function _urlBase64ToUint8Array(b64) {
+  const pad = "=".repeat((4 - b64.length % 4) % 4);
+  const raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(raw, c => c.charCodeAt(0));
+}
+
 async function _subscribePush() {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
   try {
     const reg = await navigator.serviceWorker.ready;
     const keyResp = await fetch("/api/push-public-key");
-    if (!keyResp.ok) return null;
+    if (!keyResp.ok) { console.warn("Push: could not get public key", keyResp.status); return null; }
     const { publicKey } = await keyResp.json();
     const sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: publicKey,
+      applicationServerKey: _urlBase64ToUint8Array(publicKey),
     });
-    await fetch("/api/push-subscribe", {
+    const r = await fetch("/api/push-subscribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(sub.toJSON()),
     });
+    if (!r.ok) { console.warn("Push: server rejected subscription", r.status); return null; }
     return sub;
   } catch (e) {
     console.warn("Push subscribe failed:", e);

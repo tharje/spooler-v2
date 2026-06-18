@@ -3,10 +3,10 @@ Web Push (VAPID) support — key management, subscriptions, and send helpers.
 """
 
 import json
-from pathlib import Path
 
 try:
     from pywebpush import webpush, WebPushException
+    from py_vapid import Vapid02
     from cryptography.hazmat.primitives.asymmetric.ec import generate_private_key, SECP256R1
     from cryptography.hazmat.backends import default_backend
     from cryptography.hazmat.primitives.serialization import (
@@ -23,33 +23,37 @@ VAPID_FILE          = DATA_DIR / "vapid_keys.json"
 PUSH_SUBS_FILE      = DATA_DIR / "push_subscriptions.json"
 NOTIF_SETTINGS_FILE = DATA_DIR / "notification_settings.json"
 
-_vapid_private_pem: str = ""
-_vapid_public_key:  str = ""
+_vapid: "Vapid02 | None" = None
+_vapid_public_key: str = ""
 _push_subs: list = []
 
 
 def init_vapid() -> None:
-    global _vapid_private_pem, _vapid_public_key, _push_subs
+    global _vapid, _vapid_public_key, _push_subs
     if not WEBPUSH_AVAILABLE:
         print("[Push] pywebpush not installed — push notifications disabled")
         return
     try:
         if VAPID_FILE.exists():
             d = json.loads(VAPID_FILE.read_text())
-            _vapid_private_pem = d["private_pem"]
-            _vapid_public_key  = d["public_key"]
+            private_pem    = d["private_pem"]
+            _vapid_public_key = d["public_key"]
         else:
             pk = generate_private_key(SECP256R1(), default_backend())
-            _vapid_private_pem = pk.private_bytes(
+            private_pem = pk.private_bytes(
                 Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()
             ).decode()
             pub = pk.public_key().public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
             _vapid_public_key = _b64.urlsafe_b64encode(pub).rstrip(b"=").decode()
             VAPID_FILE.write_text(json.dumps({
-                "private_pem": _vapid_private_pem,
+                "private_pem": private_pem,
                 "public_key":  _vapid_public_key,
             }))
             print("[Push] Generated new VAPID key pair")
+
+        # pywebpush 2.x requires a Vapid02 object, not a raw PEM string
+        _vapid = Vapid02.from_pem(private_pem.encode())
+
         if PUSH_SUBS_FILE.exists():
             _push_subs = json.loads(PUSH_SUBS_FILE.read_text())
         print(f"[Push] VAPID ready — public key: {_vapid_public_key[:20]}…")
@@ -93,7 +97,7 @@ def save_notif_settings(s: dict) -> None:
 
 
 def send_push_all(title: str, body: str) -> None:
-    if not WEBPUSH_AVAILABLE or not _vapid_private_pem or not _push_subs:
+    if not WEBPUSH_AVAILABLE or _vapid is None or not _push_subs:
         return
     dead = []
     for sub in list(_push_subs):
@@ -101,8 +105,8 @@ def send_push_all(title: str, body: str) -> None:
             webpush(
                 subscription_info=sub,
                 data=json.dumps({"title": title, "body": body}),
-                vapid_private_key=_vapid_private_pem,
-                vapid_claims={"sub": "mailto:spooler@local"},
+                vapid_private_key=_vapid,
+                vapid_claims={"sub": "mailto:spooler@localhost"},
             )
         except WebPushException as e:
             status = getattr(e.response, "status_code", None) if e.response else None
