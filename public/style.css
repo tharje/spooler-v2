@@ -36,7 +36,7 @@ header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 24px;
+  padding: 0 24px 0 0;
   height: 60px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -48,12 +48,16 @@ header {
 .logo {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 18px;
+  justify-content: center;
+  gap: 8px;
+  font-size: 16px;
   font-weight: 700;
   letter-spacing: -0.3px;
+  width: 160px;
+  flex-shrink: 0;
 }
 .logo svg { width: 24px; height: 24px; color: var(--accent); }
+.logo-icon { width: 22px; height: 22px; border-radius: 5px; }
 
 .header-actions { display: flex; gap: 8px; }
 
@@ -1192,6 +1196,8 @@ main {
   .sidenav { width: 52px; }
   .sidenav-item span { display: none; }
   .sidenav-item { justify-content: center; padding: 10px; }
+  .logo { width: auto; padding-left: 12px; justify-content: flex-start; }
+  .logo-icon { width: 24px; height: 24px; border-radius: 5px; }
 }
 @media (max-width: 560px) {
   main { padding: 12px; }

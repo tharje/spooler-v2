@@ -35,7 +35,7 @@
       letter-spacing: -0.02em;
       color: #fff;
     }
-    .logo svg { width: 28px; height: 28px; color: #6c8cff; }
+    .logo img { width: 32px; height: 32px; border-radius: 7px; }
     h1 { font-size: 1rem; font-weight: 500; color: #9aa0b8; margin-bottom: 4px; }
     .subtitle { font-size: 0.82rem; color: #5a5f78; margin-bottom: 24px; }
     label { display: block; margin-bottom: 14px; }
@@ -51,12 +51,12 @@
       outline: none;
       transition: border-color 0.15s;
     }
-    input:focus { border-color: #6c8cff; }
+    input:focus { border-color: #ff6b2b; }
     button[type="submit"] {
       width: 100%;
       padding: 11px;
       margin-top: 8px;
-      background: #6c8cff;
+      background: #ff6b2b;
       color: #fff;
       border: none;
       border-radius: 8px;
@@ -65,8 +65,8 @@
       cursor: pointer;
       transition: background 0.15s;
     }
-    button[type="submit"]:hover { background: #5a7bff; }
-    button[type="submit"]:disabled { background: #3a4060; cursor: default; }
+    button[type="submit"]:hover { background: #e85a1e; }
+    button[type="submit"]:disabled { background: #5a3020; cursor: default; }
     .error {
       display: none;
       margin-top: 14px;
@@ -83,11 +83,7 @@
 <body>
   <div class="card">
     <div class="logo">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-        <path d="M2 17l10 5 10-5"/>
-        <path d="M2 12l10 5 10-5"/>
-      </svg>
+      <img src="/icon.svg" alt="Spooler" />
       Spooler
     </div>
 
