@@ -433,6 +433,16 @@ main {
   flex-wrap: wrap;
 }
 .controls-spacer { flex: 1; }
+.card-speed {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 6px;
+  font-size: 13px;
+}
+.speed-label { color: var(--text-muted); white-space: nowrap; min-width: 90px; }
+.speed-slider { flex: 1; accent-color: var(--accent); cursor: pointer; height: 4px; }
 
 /* Status Badge */
 .status-badge {

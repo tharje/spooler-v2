@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css?v=19" />
+  <link rel="stylesheet" href="style.css?v=20" />
 </head>
 <body>
   <header>
@@ -401,6 +401,20 @@
             <label>Temperature (°C)<input type="number" id="notif-nozzle-printing-threshold" value="260" min="1" max="400" /></label>
           </div>
 
+          <div class="notif-row">
+            <div class="notif-info">
+              <span class="notif-label">Spool almost empty</span>
+              <span class="notif-desc">When a spool drops below a set amount of filament</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="notif-spool-low-on" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="notif-param" id="notif-spool-low-param" style="display:none">
+            <label>Remaining (g)<input type="number" id="notif-spool-low-threshold" value="100" min="1" max="5000" /></label>
+          </div>
+
         </div>
         <div class="modal-actions">
           <button id="btn-notif-test" class="btn btn-secondary">Send test</button>
@@ -445,7 +459,7 @@
   <div id="toast-area"></div>
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-  <script src="app.js?v=24"></script>
+  <script src="app.js?v=26"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});

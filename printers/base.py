@@ -115,8 +115,12 @@ class PrinterConnection:
         is_done     = status in (9, 8)
         last        = ns["last_status"]
 
-        if s.get("finished", {}).get("enabled") and is_done and last is not None and last not in (9, 8):
-            label = "complete" if status == 9 else "cancelled"
+        # CC2 typically goes 3→0 on completion (no 9/8 reported).
+        # Fire "finished" on any transition away from an active print state.
+        _was_printing = last in (2, 3, 4, 5, 6, 7)
+        _print_ended  = (is_done or is_idle) and _was_printing
+        if s.get("finished", {}).get("enabled") and _print_ended:
+            label = "cancelled" if status == 8 else "complete"
             send_push_all(f"{self.name} — Print {label}", f"Your print has {label}.")
 
         if s.get("nozzle_idle", {}).get("enabled") and is_idle:

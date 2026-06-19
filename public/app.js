@@ -496,6 +496,16 @@ function renderPrinter(printer) {
           <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
         </svg>
       </button>
+      ${(printing || paused) && printer.printer_type === "cc2" ? (() => {
+        const sf = printer.status?.SpeedFactor ?? 100;
+        const sid = `speed-val-${printer.id}`;
+        return `<div class="card-speed">
+          <span class="speed-label">Speed: <span id="${escAttr(sid)}">${sf}%</span></span>
+          <input type="range" class="speed-slider" min="10" max="200" step="5" value="${sf}"
+                 oninput="document.getElementById('${escAttr(sid)}').textContent=this.value+'%'"
+                 onchange="setSpeed('${escAttr(printer.id)}',+this.value)">
+        </div>`;
+      })() : ""}
     </div>
   `;
 
@@ -540,6 +550,10 @@ function printerAction(id, action) {
     if (printers[id]) renderPrinter(printers[id]);
   }
   send({ action, printer_id: id });
+}
+
+function setSpeed(id, speed) {
+  send({ action: "set_speed", printer_id: id, speed });
 }
 
 function confirmStop(id) {
@@ -721,6 +735,8 @@ async function _populateNotifForm() {
   set("notif-nozzle-idle-threshold",     s.nozzle_idle?.threshold   ?? 50);
   set("notif-nozzle-printing-on",        s.nozzle_printing?.enabled ?? false);
   set("notif-nozzle-printing-threshold", s.nozzle_printing?.threshold ?? 260);
+  set("notif-spool-low-on",              s.spool_low?.enabled       ?? false);
+  set("notif-spool-low-threshold",       s.spool_low?.threshold     ?? 100);
   _syncNotifParams();
 }
 
@@ -733,9 +749,10 @@ function _syncNotifParams() {
   show("notif-layer-param",           "notif-layer-on");
   show("notif-nozzle-idle-param",     "notif-nozzle-idle-on");
   show("notif-nozzle-printing-param", "notif-nozzle-printing-on");
+  show("notif-spool-low-param",       "notif-spool-low-on");
 }
 
-["notif-layer-on","notif-nozzle-idle-on","notif-nozzle-printing-on"].forEach(id =>
+["notif-layer-on","notif-nozzle-idle-on","notif-nozzle-printing-on","notif-spool-low-on"].forEach(id =>
   document.getElementById(id)?.addEventListener("change", _syncNotifParams));
 
 document.getElementById("btn-settings-goto-notifications")?.addEventListener("click", () => {
@@ -751,6 +768,7 @@ document.getElementById("btn-notif-save")?.addEventListener("click", async () =>
     layer:           { enabled: gb("notif-layer-on"),           layer:     gv("notif-layer-number") },
     nozzle_idle:     { enabled: gb("notif-nozzle-idle-on"),     threshold: gv("notif-nozzle-idle-threshold") },
     nozzle_printing: { enabled: gb("notif-nozzle-printing-on"), threshold: gv("notif-nozzle-printing-threshold") },
+    spool_low:       { enabled: gb("notif-spool-low-on"),       threshold: gv("notif-spool-low-threshold") },
   };
   const anyEnabled = Object.values(s).some(v => v.enabled);
   if (anyEnabled) {
@@ -934,11 +952,12 @@ function renderFileList(files, error) {
     const actionTd = document.createElement("td");
     actionTd.className = "file-actions";
     if (!f.is_dir) {
+      const filePath = f.path;
+      const fileName = f.name || filePath.split("/").pop() || filePath;
+
       const btn = document.createElement("button");
       btn.className = "btn btn-primary btn-sm";
       btn.textContent = "Print";
-      const filePath = f.path;
-      const fileName = f.name || filePath.split("/").pop() || filePath;
       btn.addEventListener("click", () => {
         if (confirm(`Print "${fileName}"?`)) {
           send({ action: "start_print", printer_id: _currentFilePrinterId, filename: filePath });
@@ -947,6 +966,22 @@ function renderFileList(files, error) {
         }
       });
       actionTd.appendChild(btn);
+
+      const delBtn = document.createElement("button");
+      delBtn.className = "btn btn-danger btn-sm";
+      delBtn.textContent = "Delete";
+      delBtn.addEventListener("click", () => {
+        if (confirm(`Delete "${fileName}"?`)) {
+          send({ action: "delete_file", printer_id: _currentFilePrinterId, filename: filePath });
+          toast(`Deleting: ${fileName}`);
+          setTimeout(() => {
+            document.getElementById("files-list").innerHTML = "";
+            document.getElementById("files-loading").style.display = "";
+            send({ action: "list_files", printer_id: _currentFilePrinterId });
+          }, 600);
+        }
+      });
+      actionTd.appendChild(delBtn);
     }
     tr.appendChild(actionTd);
     tbody.appendChild(tr);

@@ -192,7 +192,7 @@ See [CC2_INTEGRATION.md](CC2_INTEGRATION.md) for full CC2 protocol notes.
 
 CC2 support would not have been possible without these projects:
 
-- [CentauriCarbon2](https://github.com/elegooofficial/CentauriCarbon2) by Elegoo (official) — firmware source; method codes, print state strings and sub_status codes
+- [CentauriCarbon2](https://github.com/elegooofficial/CentauriCarbon2) by Elegoo (official) — firmware source; full MQTT method table (`method.h`), print state strings (`print_stats.cpp`), Canvas/AMS RFID filament struct (`canvas_dev.h`), sub_status codes, `gcode_move` speed/extrude factor fields
 - [centauri-sentinel](https://github.com/LegalMarc/centauri-sentinel) by LegalMarc — MQTT client details, topic structure, partial-status deep-merge, MJPEG grabber
 - [elegoo-homeassistant](https://github.com/danielcherubini/elegoo-homeassistant) by danielcherubini — CC2 MQTT transport, access-code config and sub_status constants
 - [sdcp-centauri-carbon](https://github.com/WalkerFrederick/sdcp-centauri-carbon) by WalkerFrederick — SDCP v3.0 protocol documentation (CC1)

@@ -10,6 +10,7 @@ import urllib.request
 
 import os
 
+from push import load_notif_settings, send_push_all
 from state import broadcast_to_browsers
 
 SPOOLMAN_URL    = os.getenv("SPOOLMAN_URL", "http://localhost:7912").rstrip("/")
@@ -113,5 +114,16 @@ def spoolman_deduct(printer_id: str, amount_g: float, loop: asyncio.AbstractEven
 
         if msg:
             asyncio.run_coroutine_threadsafe(broadcast_to_browsers(msg), loop)
+
+        # Push notification for configurable low-spool threshold
+        notif = load_notif_settings()
+        spool_low_cfg = notif.get("spool_low", {})
+        if spool_low_cfg.get("enabled") and remaining > 0:
+            threshold = float(spool_low_cfg.get("threshold", 100))
+            if remaining <= threshold:
+                send_push_all(
+                    f"Spool almost empty — {name}",
+                    f"{round(remaining)}g remaining on {printer_id}.",
+                )
     except Exception as e:
         print(f"[Spoolman] Deduct skipped ({e})")

@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.3.0",
+    "date": "2026-06-19",
+    "changes": [
+      "Print speed slider for CC2 — adjust speed factor while printing or paused",
+      "Dynamic camera URL for CC2 — fetched via MQTT on connect instead of hardcoded",
+      "Delete file button in the file browser (CC1 and CC2)",
+      "Spool almost empty push notification — configurable gram threshold in Notification settings",
+      "Light mode toggle in Settings",
+      "CC2 print-complete notification now fires reliably (CC2 goes directly to standby, not 'complete' state)",
+      "Fixed push notification errors after modular backend refactor"
+    ]
+  },
+  {
     "version": "2.2.0",
     "date": "2026-06-17",
     "changes": [

@@ -27,9 +27,9 @@ async def _run_light_refresh(printer) -> None:
     try:
         if printer.printer_type == "cc2":
             await asyncio.sleep(0.5)
-            await printer._send_mqtt_cmd(1002)
+            await printer.send_cmd(1002)
             await asyncio.sleep(1.5)
-            await printer._send_mqtt_cmd(1002)
+            await printer.send_cmd(1002)
         else:
             await asyncio.sleep(0.4)
             await printer.send_cmd(CMD_STATUS, {})
@@ -236,6 +236,25 @@ async def handle_browser_message(ws, raw: str) -> None:
         if (isinstance(files, list) and len(files) <= 50
                 and all(isinstance(f, str) and f for f in files)):
             await printer.send_cmd(CMD_DELETE_FILES, {"FileList": files})
+        return
+
+    if action == "delete_file":
+        filename = msg.get("filename", "").strip()
+        parts = filename.replace("\\", "/").split("/")
+        if not filename or ".." in parts:
+            await ws.send(json.dumps({"type": "error", "message": "Invalid filename"}))
+            return
+        if printer.printer_type == "cc2":
+            await printer.send_cmd(1047, {"filename": filename, "storage_media": "local"})
+        else:
+            await printer.send_cmd(CMD_DELETE_FILES, {"FileList": [filename]})
+        return
+
+    if action == "set_speed":
+        speed = msg.get("speed")
+        if isinstance(speed, (int, float)) and 10 <= int(speed) <= 200:
+            if printer.printer_type == "cc2":
+                await printer.send_cmd(1031, {"speed": int(speed)})
         return
 
     if action in cmd_map:
