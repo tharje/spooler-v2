@@ -141,8 +141,10 @@ class PrinterConnection:
         _was_printing = last in (2, 3, 4, 5, 6, 7)
         _print_ended  = (is_done or is_idle) and _was_printing
         if s.get("finished", {}).get("enabled") and _print_ended:
-            label = "cancelled" if status == 8 else "complete"
-            send_push_all(f"{self.name} — Print {label}", f"Your print has {label}.")
+            if status == 8:
+                send_push_all(f"{self.name} — Print cancelled", "Your print was cancelled.")
+            else:
+                send_push_all(f"{self.name} — Print complete", "Your print is complete.")
 
         if s.get("nozzle_idle", {}).get("enabled") and is_idle:
             thr = s["nozzle_idle"].get("threshold", 50)

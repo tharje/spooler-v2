@@ -417,7 +417,8 @@ class CC2Connection(PrinterConnection):
         led    = s.get("led", {})
         led_on = 1 if (led.get("status", 0) or 0) > 0 else 0
 
-        speed_factor = gm.get("speed_factor", 1.0) or 1.0
+        sf = gm.get("speed_factor")
+        speed_factor = sf if sf is not None else 1.0
 
         self.status = {
             "PrintInfo": {

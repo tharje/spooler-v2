@@ -360,17 +360,6 @@ function renderPrinter(printer) {
           <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
         </svg>
       </button>
-      <button class="card-settings-btn" onclick="openPrinterSettings('${escAttr(printer.id)}')" title="Printer settings">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-        </svg>
-      </button>
-      <button class="card-remove-btn" onclick="removePrinter('${escAttr(printer.id)}')" title="Remove printer">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
-        </svg>
-      </button>
     </div>
 
     <!-- Camera -->
@@ -635,13 +624,17 @@ document.getElementById("btn-signout")?.addEventListener("click", signOut);
 document.getElementById("btn-signout-nav")?.addEventListener("click", signOut);
 
 // ─── App settings ─────────────────────────────────────────────────────────────
-const _settingsModal    = document.getElementById("modal-app-settings");
-const _settingsMenu     = document.getElementById("settings-menu");
-const _settingsPwPage   = document.getElementById("settings-change-password");
-const _settingsNotifPage = document.getElementById("settings-notifications");
+const _settingsModal          = document.getElementById("modal-app-settings");
+const _settingsMenu           = document.getElementById("settings-menu");
+const _settingsPwPage         = document.getElementById("settings-change-password");
+const _settingsNotifPage      = document.getElementById("settings-notifications");
+const _settingsPrintersPage   = document.getElementById("settings-printers");
+const _settingsPrinterEditPage = document.getElementById("settings-printer-edit");
+
+const _allSettingsPages = () => [_settingsPwPage, _settingsNotifPage, _settingsPrintersPage, _settingsPrinterEditPage];
 
 function _openSettings() {
-  [_settingsPwPage, _settingsNotifPage].forEach(p => p && (p.style.display = "none"));
+  _allSettingsPages().forEach(p => p && (p.style.display = "none"));
   _settingsMenu.style.display = "";
   const tog = document.getElementById("toggle-light-mode");
   if (tog) tog.checked = document.body.classList.contains("light-mode");
@@ -649,12 +642,69 @@ function _openSettings() {
 }
 function _showSettingsPage(pageEl) {
   _settingsMenu.style.display = "none";
-  [_settingsPwPage, _settingsNotifPage].forEach(p => p && (p.style.display = "none"));
+  _allSettingsPages().forEach(p => p && (p.style.display = "none"));
   pageEl.style.display = "";
 }
 function _backToSettingsMenu() {
-  [_settingsPwPage, _settingsNotifPage].forEach(p => p && (p.style.display = "none"));
+  _allSettingsPages().forEach(p => p && (p.style.display = "none"));
   _settingsMenu.style.display = "";
+}
+
+function _renderSettingsPrinters() {
+  const list = document.getElementById("settings-printer-list");
+  if (!list) return;
+  const items = Object.values(printers);
+  if (!items.length) {
+    list.innerHTML = '<p class="settings-printer-empty">No printers added yet.</p>';
+    return;
+  }
+  list.innerHTML = items.map(p => `
+    <div class="settings-printer-row">
+      <div class="settings-printer-info">
+        <span class="settings-printer-name">${escHtml(p.name)}</span>
+        <span class="settings-printer-meta">${escHtml(p.ip)} &nbsp;·&nbsp; ${p.printer_type?.toUpperCase() || "CC1"}</span>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="_settingsEditPrinter('${escAttr(p.id)}')">Edit</button>
+    </div>
+  `).join("");
+}
+
+let _settingsEditingPrinterId = null;
+
+function _settingsEditPrinter(id) {
+  _settingsEditingPrinterId = id || null;
+  const p = id ? printers[id] : null;
+  const isNew = !p;
+
+  document.getElementById("settings-printer-edit-title").textContent = isNew ? "Add Printer" : "Edit Printer";
+  document.getElementById("settings-edit-name").value = p?.name || "";
+  document.getElementById("settings-edit-ip").value = p?.ip || "";
+
+  const typeSelect = document.getElementById("settings-edit-type");
+  const typeReadonly = document.getElementById("settings-edit-type-readonly");
+  if (isNew) {
+    typeSelect.value = "cc1";
+    typeSelect.style.display = "";
+    typeReadonly.style.display = "none";
+  } else {
+    typeSelect.value = p.printer_type || "cc1";
+    typeSelect.style.display = "none";
+    typeReadonly.style.display = "";
+    typeReadonly.textContent = p.printer_type === "cc2"
+      ? "CC2 – Centauri Carbon 2 (MQTT)"
+      : "CC1 – Centauri Carbon 1 (WebSocket/SDCP)";
+  }
+
+  const isCC2 = p ? p.printer_type === "cc2" : typeSelect.value === "cc2";
+  document.getElementById("settings-edit-access-code-label").style.display = isCC2 ? "" : "none";
+  const ac = document.getElementById("settings-edit-access-code");
+  ac.value = "";
+  ac.placeholder = (!isNew && p?.has_access_code) ? "Leave blank to keep current" : "Enter MQTT password";
+
+  document.getElementById("btn-settings-printer-remove").style.display = isNew ? "none" : "";
+  document.getElementById("btn-settings-printer-save").textContent = isNew ? "Add Printer" : "Save";
+
+  _showSettingsPage(_settingsPrinterEditPage);
 }
 
 document.getElementById("btn-app-settings")?.addEventListener("click", _openSettings);
@@ -674,6 +724,51 @@ _settingsModal?.addEventListener("click", e => {
     localStorage.setItem("theme", toggle.checked ? "light" : "dark");
   });
 })();
+
+// Printers sub-page
+document.getElementById("btn-settings-goto-printers")?.addEventListener("click", () => {
+  _renderSettingsPrinters();
+  _showSettingsPage(_settingsPrintersPage);
+});
+document.getElementById("btn-settings-back-printers")?.addEventListener("click", _backToSettingsMenu);
+document.getElementById("btn-settings-add-printer")?.addEventListener("click", () => {
+  _settingsEditPrinter(null);
+});
+document.getElementById("btn-settings-scan-printers")?.addEventListener("click", () => {
+  send({ action: "discover" });
+  toast("Scanning for printers…");
+});
+
+// Printer edit sub-page
+document.getElementById("btn-settings-back-printer-edit")?.addEventListener("click", () => {
+  _renderSettingsPrinters();
+  _showSettingsPage(_settingsPrintersPage);
+});
+document.getElementById("settings-edit-type")?.addEventListener("change", function () {
+  document.getElementById("settings-edit-access-code-label").style.display =
+    this.value === "cc2" ? "" : "none";
+});
+document.getElementById("btn-settings-printer-save")?.addEventListener("click", () => {
+  const name = document.getElementById("settings-edit-name").value.trim();
+  const ip   = document.getElementById("settings-edit-ip").value.trim();
+  const access_code = document.getElementById("settings-edit-access-code").value.trim();
+  if (!ip) { toast("IP address is required"); return; }
+  if (_settingsEditingPrinterId) {
+    send({ action: "update_printer", printer_id: _settingsEditingPrinterId, name, ip, access_code });
+  } else {
+    const printer_type = document.getElementById("settings-edit-type").value;
+    send({ action: "add_printer", ip, name: name || undefined, printer_type, access_code });
+  }
+  _renderSettingsPrinters();
+  _showSettingsPage(_settingsPrintersPage);
+});
+document.getElementById("btn-settings-printer-remove")?.addEventListener("click", () => {
+  if (!_settingsEditingPrinterId) return;
+  if (!confirm("Remove this printer?")) return;
+  send({ action: "remove_printer", printer_id: _settingsEditingPrinterId });
+  _renderSettingsPrinters();
+  _showSettingsPage(_settingsPrintersPage);
+});
 
 // Password sub-page
 document.getElementById("btn-settings-goto-password")?.addEventListener("click", () => {

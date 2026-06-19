@@ -126,7 +126,7 @@ def spoolman_deduct(printer_id: str, amount_g: float, loop: asyncio.AbstractEven
         name      = result.get("filament", {}).get("name") or f"Spool {spool_id}"
         print(f"[Spoolman] {amount_g}g deducted from '{name}' → {remaining}g left")
 
-        if remaining == 0:
+        if remaining <= 0:
             msg: dict | None = {"type": "spool_empty", "spool": result, "printer_id": printer_id}
         elif total > 0 and (remaining / total) < 0.1:
             msg = {"type": "spool_low", "spool": result, "printer_id": printer_id}
