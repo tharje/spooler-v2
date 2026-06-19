@@ -106,7 +106,7 @@ def send_push_all(title: str, body: str) -> None:
                 subscription_info=sub,
                 data=json.dumps({"title": title, "body": body}),
                 vapid_private_key=_vapid,
-                vapid_claims={"sub": "mailto:spooler@localhost"},
+                vapid_claims={"sub": "mailto:tharje@gmail.com"},
             )
         except WebPushException as e:
             status = getattr(e.response, "status_code", None) if e.response else None
