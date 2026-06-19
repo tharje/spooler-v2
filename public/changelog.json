@@ -9,7 +9,9 @@
       "Spool almost empty push notification — configurable gram threshold in Notification settings",
       "Light mode toggle in Settings",
       "CC2 print-complete notification now fires reliably (CC2 goes directly to standby, not 'complete' state)",
-      "Fixed push notification errors after modular backend refactor"
+      "Fixed push notification errors after modular backend refactor",
+      "Fixed CC1 print time display (CurrentTicks/TotalTicks normalisation, contributed by snazy2000)",
+      "Fixed fractional seconds showing in time display (contributed by snazy2000)"
     ]
   },
   {

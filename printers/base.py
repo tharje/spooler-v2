@@ -49,8 +49,25 @@ class PrinterConnection:
 
     # ── Public interface ───────────────────────────────────────────────────────
 
-    def to_dict(self) -> dict:
+    def _decoded_printinfo(self) -> dict:
+        """Decode PrintInfo hex keys and normalise CC1 time fields.
+
+        CC1 SDCP firmware exposes elapsed/total time as CurrentTicks/TotalTicks
+        (both in seconds) instead of PrintTime/RemainTime.  Normalise here so the
+        browser and history recording can use the same field names regardless of
+        printer type.
+        """
         pi = decode_printinfo(self.status.get("PrintInfo", {}))
+        if self.printer_type == "cc1" and not pi.get("PrintTime"):
+            ct = pi.get("CurrentTicks") or 0
+            tt = pi.get("TotalTicks") or 0
+            if ct:
+                pi["PrintTime"]  = ct
+                pi["RemainTime"] = max(0, tt - ct)
+        return pi
+
+    def to_dict(self) -> dict:
+        pi = self._decoded_printinfo()
         filament_mm = pi.get("TotalExtrusion", 0) or 0
         # Replace raw PrintInfo (may have hex-encoded SDCP keys) with decoded version
         # so the browser can read plain field names like Filename directly.
@@ -110,7 +127,7 @@ class PrinterConnection:
         if not s:
             return
         ns = self._notif_state
-        pi = decode_printinfo(self.status.get("PrintInfo", {}))
+        pi = self._decoded_printinfo()
         status      = pi.get("Status", 0)
         nozzle      = self.status.get("TempOfNozzle") or self.status.get("NozzleTemp") or 0
         layer       = pi.get("CurrentLayer", 0)
@@ -124,8 +141,10 @@ class PrinterConnection:
         _was_printing = last in (2, 3, 4, 5, 6, 7)
         _print_ended  = (is_done or is_idle) and _was_printing
         if s.get("finished", {}).get("enabled") and _print_ended:
-            label = "cancelled" if status == 8 else "complete"
-            send_push_all(f"{self.name} — Print {label}", f"Your print has {label}.")
+            if status == 8:
+                send_push_all(f"{self.name} — Print cancelled", "Your print was cancelled.")
+            else:
+                send_push_all(f"{self.name} — Print complete", "Your print is complete.")
 
         if s.get("nozzle_idle", {}).get("enabled") and is_idle:
             thr = s["nozzle_idle"].get("threshold", 50)
@@ -167,7 +186,7 @@ class PrinterConnection:
         })
 
     async def _check_print_transition(self) -> None:
-        pi = decode_printinfo(self.status.get("PrintInfo", {}))
+        pi = self._decoded_printinfo()
         cur_status = pi.get("Status")
 
         ACTIVE   = {1, 2, 3, 4, 7, 9, 10, 12, 13, 15, 16, 18, 19, 20, 21}

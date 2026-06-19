@@ -52,14 +52,14 @@ def discover_cc2_printers(known_ips: set, timeout: float = 3.0) -> list:
     with concurrent.futures.ThreadPoolExecutor(max_workers=64) as ex:
         futures = {ex.submit(_probe_mqtt, ip, probe_timeout): ip for ip in candidates}
         for fut in concurrent.futures.as_completed(futures):
-            if time.time() > deadline:
-                break
             ip = futures[fut]
             try:
                 if fut.result():
                     found.append(ip)
             except Exception:
                 pass
+            if time.time() > deadline:
+                break
     return found
 
 

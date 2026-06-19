@@ -434,10 +434,10 @@ class SPHandler(SimpleHTTPRequestHandler):
             super().do_GET()
 
     def do_PATCH(self):
+        if not self._check_auth():
+            return
         if self.path.startswith("/api/v1/"):
             self._proxy_spoolman_ui("PATCH", self.path, self._read_body())
-            return
-        if not self._check_auth():
             return
         if self.path.startswith("/api/spoolman"):
             self._proxy_spoolman("PATCH", self.path[len("/api/spoolman"):], self._read_body())
@@ -445,10 +445,10 @@ class SPHandler(SimpleHTTPRequestHandler):
             self._json({"error": "Not found"}, 404)
 
     def do_DELETE(self):
+        if not self._check_auth():
+            return
         if self.path.startswith("/api/v1/"):
             self._proxy_spoolman_ui("DELETE", self.path)
-            return
-        if not self._check_auth():
             return
         if self.path.startswith("/api/spoolman"):
             self._proxy_spoolman("DELETE", self.path[len("/api/spoolman"):], None)
