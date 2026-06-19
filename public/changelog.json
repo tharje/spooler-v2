@@ -1,6 +1,6 @@
 [
   {
-    "version": "2.3.0",
+    "version": "2.2.1",
     "date": "2026-06-19",
     "changes": [
       "Print speed slider for CC2 — adjust speed factor while printing or paused",
