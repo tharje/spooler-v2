@@ -317,7 +317,13 @@ class SPHandler(SimpleHTTPRequestHandler):
         if self.path == "/api/auth-status":
             resp = {"setup_required": not _has_password()}
             if _auth_ok(self):
-                resp["spoolman_url"] = get_spoolman_url()
+                spoolman_url = get_spoolman_url()
+                # Replace localhost with the server's actual host so the link
+                # works when the browser is on a different device (PWA/HTTPS).
+                server_host = self.headers.get("Host", "").split(":")[0]
+                if server_host and server_host not in ("localhost", "127.0.0.1", "::1"):
+                    spoolman_url = spoolman_url.replace("localhost", server_host, 1)
+                resp["spoolman_url"] = spoolman_url
             self._json(resp)
             return
 
