@@ -42,6 +42,7 @@ function spoolAssignedTo(s) { return s.location || null; }
 let currentPickerPrinterId = null;
 let currentPickerTrayId    = null; // non-null → picker is in tray-link mode
 let _currentFilePrinterId  = null;
+let _currentFileList       = []; // cached file objects for the open file browser
 let _materialDensityMap = {}; // material name → density g/cm³
 
 // ─── Filament metadata (brands + materials from SpoolmanDB) ───────────────────
@@ -287,6 +288,15 @@ function formatTime(secs) {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
+function formatTimeLong(secs) {
+  if (!secs || secs < 0) return "--";
+  secs = Math.round(secs);
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  return `${String(h).padStart(2, "0")}h${String(m).padStart(2, "0")}m${String(s).padStart(2, "0")}s`;
+}
+
 function tempColor(t) {
   if (!t) return "";
   if (t > 150) return "hot";
@@ -328,7 +338,7 @@ function renderPrinter(printer) {
   const filamentG  = printer.filament_g  ?? 0;
   const lightOn    = getLightOn(printer);
 
-  const cameraUrl = printer.camera_url
+  const cameraUrl = printer.connected && printer.camera_url
     ? `/api/camera/${encodeURIComponent(printer.id)}`
     : null;
 
@@ -527,6 +537,12 @@ function renderPrinter(printer) {
   const placeholder = cameraDiv.querySelector('.camera-placeholder');
   if (cameraUrl) {
     if (prevCameraImg) {
+      // Re-attach preserved stream; clear src first if printer just came back online
+      // to force reconnect (avoids stale broken stream from a prior disconnect)
+      if (!prevCameraImg._connected && connected) {
+        prevCameraImg.src = cameraUrl;
+      }
+      prevCameraImg._connected = connected;
       cameraDiv.insertBefore(prevCameraImg, cameraDiv.firstChild);
       placeholder.style.display = 'none';
       prevCameraImg.style.display = '';
@@ -534,6 +550,7 @@ function renderPrinter(printer) {
       const img = document.createElement('img');
       img.src = cameraUrl;
       img.alt = 'Camera feed';
+      img._connected = connected;
       img.addEventListener('load',  () => { placeholder.style.display = 'none'; });
       img.addEventListener('error', () => { img.style.display = 'none'; placeholder.style.display = 'flex'; });
       cameraDiv.insertBefore(img, cameraDiv.firstChild);
@@ -930,6 +947,7 @@ function closeFileBrowser() {
 }
 
 function renderFileList(files, error) {
+  _currentFileList = files || [];
   document.getElementById("files-loading").style.display = "none";
   const list = document.getElementById("files-list");
 
@@ -973,11 +991,8 @@ function renderFileList(files, error) {
       btn.className = "btn btn-primary btn-sm";
       btn.textContent = "Print";
       btn.addEventListener("click", () => {
-        if (confirm(`Print "${fileName}"?`)) {
-          send({ action: "start_print", printer_id: _currentFilePrinterId, filename: filePath });
-          closeFileBrowser();
-          toast(`Starting: ${fileName}`);
-        }
+        const meta = _currentFileList.find(x => x.path === filePath) || {};
+        openPrintOpts(filePath, fileName, meta);
       });
       actionTd.appendChild(btn);
 
@@ -1013,6 +1028,98 @@ function formatFileSize(bytes) {
   if (bytes < 1073741824) return `${(bytes / 1048576).toFixed(1)} MB`;
   return `${(bytes / 1073741824).toFixed(2)} GB`;
 }
+
+// ─── Print Options modal (CC1 + CC2) ──────────────────────────────────────────
+let _printOptsFile = null;
+let _printOptsName = null;
+
+function openPrintOpts(filePath, fileName, meta = {}) {
+  _printOptsFile = filePath;
+  _printOptsName = fileName;
+  const printerType = printers[_currentFilePrinterId]?.printer_type;
+  const isCC1 = printerType === "cc1";
+
+  // Stats bar
+  const statsEl = document.getElementById("print-opts-stats");
+  const hasStats = meta.print_time || meta.layers || meta.filament_g || meta.filament_mm;
+  statsEl.style.display = hasStats ? "" : "none";
+  if (hasStats) {
+    document.getElementById("print-opts-stat-time-val").textContent =
+      meta.print_time ? formatTimeLong(meta.print_time) : "--";
+
+    let filamentText = "--";
+    if (meta.filament_g != null)
+      filamentText = `${parseFloat(meta.filament_g).toFixed(2)}g`;
+    else if (meta.filament_mm != null)
+      filamentText = `${Math.round(meta.filament_mm)}mm`;
+    document.getElementById("print-opts-stat-filament-val").textContent = filamentText;
+
+    document.getElementById("print-opts-stat-layers-val").textContent =
+      meta.layers != null ? meta.layers : "--";
+  }
+
+  document.getElementById("print-opts-filename").textContent = fileName;
+  document.getElementById("print-opt-timelapse").checked = false;
+  document.getElementById("print-opt-leveling").checked  = false;
+  _setPrintPlate(0);
+
+
+  // Load thumbnail (CC2 has no accessible thumbnail endpoint)
+  const thumbImg  = document.getElementById("print-opts-thumb");
+  const thumbWrap = document.getElementById("print-opts-thumb-wrap");
+  thumbImg.style.display = "none";
+  thumbImg.src = "";
+  const isCC2 = printers[_currentFilePrinterId]?.printer_type === "cc2";
+  if (isCC2) {
+    thumbWrap.style.display = "none";
+  } else {
+    const bare = fileName.endsWith(".png") ? fileName : fileName + ".png";
+    thumbImg.onload  = () => { thumbImg.style.display = ""; };
+    thumbImg.onerror = () => { thumbImg.style.display = "none"; thumbWrap.style.display = "none"; };
+    thumbWrap.style.display = "";
+    thumbImg.src = `/api/thumbnail/${encodeURIComponent(_currentFilePrinterId)}/${encodeURIComponent(bare)}`;
+  }
+
+  document.getElementById("modal-print-opts").classList.add("open");
+}
+
+function closePrintOpts() {
+  document.getElementById("modal-print-opts").classList.remove("open");
+  _printOptsFile = null;
+  _printOptsName = null;
+}
+
+function _setPrintPlate(plateId) {
+  document.getElementById("print-plate-textured").className =
+    "btn print-plate-btn " + (plateId === 0 ? "btn-primary" : "btn-secondary");
+  document.getElementById("print-plate-smooth").className =
+    "btn print-plate-btn " + (plateId === 1 ? "btn-primary" : "btn-secondary");
+  document.getElementById("print-plate-textured").dataset.selected = plateId === 0 ? "1" : "";
+  document.getElementById("print-plate-smooth").dataset.selected   = plateId === 1 ? "1" : "";
+}
+
+document.getElementById("print-plate-textured").addEventListener("click", () => _setPrintPlate(0));
+document.getElementById("print-plate-smooth").addEventListener("click",   () => _setPrintPlate(1));
+
+document.getElementById("btn-print-opts-cancel").addEventListener("click", closePrintOpts);
+
+document.getElementById("btn-print-opts-send").addEventListener("click", () => {
+  if (!_printOptsFile) return;
+  const opts = {
+    timelapse:    document.getElementById("print-opt-timelapse").checked,
+    leveling:     document.getElementById("print-opt-leveling").checked,
+    smooth_plate: document.getElementById("print-plate-smooth").dataset.selected === "1",
+  };
+  send({
+    action:     "start_print",
+    printer_id: _currentFilePrinterId,
+    filename:   _printOptsFile,
+    print_opts: opts,
+  });
+  closePrintOpts();
+  closeFileBrowser();
+  toast(`Starting: ${_printOptsName}`);
+});
 
 document.getElementById("btn-files-close").addEventListener("click", closeFileBrowser);
 document.getElementById("btn-files-refresh").addEventListener("click", () => {

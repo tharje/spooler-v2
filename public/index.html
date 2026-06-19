@@ -215,6 +215,61 @@
     </div>
   </div>
 
+  <!-- CC1 Print options modal -->
+  <div id="modal-print-opts" class="modal">
+    <div class="modal-box modal-box-wide">
+      <h3>Send Print Task</h3>
+      <div id="print-opts-thumb-wrap" class="print-opts-thumb-wrap">
+        <img id="print-opts-thumb" class="print-opts-thumb" alt="" />
+        <p id="print-opts-filename" class="print-opts-filename"></p>
+      </div>
+      <div id="print-opts-stats" class="print-opts-stats" style="display:none">
+        <div class="print-opts-stat" id="print-opts-stat-time">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span id="print-opts-stat-time-val">--</span>
+        </div>
+        <div class="print-opts-stat" id="print-opts-stat-filament">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          <span id="print-opts-stat-filament-val">--</span>
+        </div>
+        <div class="print-opts-stat" id="print-opts-stat-layers">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+          <span id="print-opts-stat-layers-val">--</span>
+        </div>
+      </div>
+      <div class="print-opts-group">
+        <div class="print-opts-group-label">Build Plate</div>
+        <div class="print-plate-row">
+          <button id="print-plate-textured" class="btn btn-primary print-plate-btn" data-plate="0">Textured (Side A)</button>
+          <button id="print-plate-smooth"   class="btn btn-secondary print-plate-btn" data-plate="1">Smooth (Side B)</button>
+        </div>
+      </div>
+      <div class="print-opts-group">
+        <div class="print-opts-group-label">Options</div>
+        <div class="print-opts-rows">
+          <div class="print-opts-row">
+            <span>Time-lapse</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="print-opt-timelapse">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="print-opts-row">
+            <span>Heated Bed Leveling</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="print-opt-leveling">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="btn-print-opts-cancel" class="btn btn-secondary">Cancel</button>
+        <button id="btn-print-opts-send"   class="btn btn-primary">Send</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Spool picker modal -->
   <div id="modal-spool-picker" class="modal">
     <div class="modal-box modal-box-wide">

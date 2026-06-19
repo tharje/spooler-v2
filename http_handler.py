@@ -257,6 +257,61 @@ class SPHandler(SimpleHTTPRequestHandler):
                 except Exception:
                     pass
 
+    # ── Thumbnail proxy ───────────────────────────────────────────────────────
+    # CC1: http://{ip}:80/thumbnail/{bare_filename}  (no auth needed)
+    # CC2: no accessible thumbnail endpoint — skipped client-side
+
+    def _proxy_thumbnail(self):
+        rest = self.path[len("/api/thumbnail/"):]
+        parts = rest.split("/", 1)
+        if len(parts) != 2:
+            self._json({"error": "Bad request"}, 400)
+            return
+        printer_id = urllib.parse.unquote(parts[0])
+        bare_name  = urllib.parse.unquote(parts[1])
+        p = state.printers.get(printer_id)
+        if not p:
+            self._json({"error": "Printer not found"}, 404)
+            return
+
+        token = p.access_code or "123456"
+
+        # CC2 has no accessible thumbnail endpoint — caller should not request one
+        if p.printer_type == "cc2":
+            self._json({"error": "Thumbnail unavailable"}, 404)
+            return
+
+        # CC1: dedicated /thumbnail/{bare_filename} endpoint (no auth required)
+        conn = None
+        try:
+            path = f"/thumbnail/{urllib.parse.quote(bare_name)}"
+            conn = http.client.HTTPConnection(p.ip, 80, timeout=5)
+            conn.request("GET", path, headers={})
+            resp = conn.getresponse()
+            if resp.status == 200:
+                data = resp.read(2 * 1024 * 1024)
+                ct   = resp.getheader("Content-Type", "image/png")
+                self.send_response(200)
+                self.send_header("Content-Type", ct)
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Cache-Control", "max-age=300")
+                self.end_headers()
+                self.wfile.write(data)
+                return
+            if state.DEBUG:
+                print(f"[thumb] cc1 /thumbnail/ → {resp.status} for {bare_name!r}")
+        except Exception as e:
+            if state.DEBUG:
+                print(f"[thumb] cc1 /thumbnail/ exception: {e}")
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+        self._json({"error": "Thumbnail unavailable"}, 404)
+
     # ── Spoolman proxy ────────────────────────────────────────────────────────
 
     def _proxy_spoolman(self, method: str, path: str, body: bytes | None):
@@ -400,6 +455,8 @@ class SPHandler(SimpleHTTPRequestHandler):
 
         if self.path.startswith("/api/camera/"):
             self._proxy_camera()
+        elif self.path.startswith("/api/thumbnail/"):
+            self._proxy_thumbnail()
         elif self.path == "/api/printers":
             self._json([p.to_dict() for p in state.printers.values()])
         elif self.path == "/api/history":
