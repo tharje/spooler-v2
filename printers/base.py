@@ -10,10 +10,10 @@ import asyncio
 import time
 
 import state
-from persistence import append_history, filament_mm_to_grams, save_printers
+from persistence import FILAMENT_DENSITY, append_history, filament_mm_to_grams, save_printers
 from printers.protocol import decode_printinfo
 from push import load_notif_settings, send_push_all
-from spoolman import spoolman_deduct
+from spoolman import get_spool_density, spoolman_deduct
 
 
 class PrinterConnection:
@@ -36,6 +36,7 @@ class PrinterConnection:
         self.status: dict = {}
         self.attrs: dict  = {}
         self.camera_url: str | None = None
+        self.filament_density: float = FILAMENT_DENSITY
         self._task: asyncio.Task | None = None
         self._last_print_status = None
         self._print_start_time: float | None = None
@@ -66,7 +67,7 @@ class PrinterConnection:
             "attrs":           self.attrs,
             "camera_url":      self.camera_url,
             "filament_mm":     round(filament_mm, 1),
-            "filament_g":      filament_mm_to_grams(filament_mm),
+            "filament_g":      filament_mm_to_grams(filament_mm, self.filament_density),
         }
 
     def stop(self) -> None:
@@ -90,6 +91,9 @@ class PrinterConnection:
 
     async def send_cmd(self, cmd: int, data: dict) -> bool:
         raise NotImplementedError
+
+    def _update_filament_density(self) -> None:
+        self.filament_density = get_spool_density(self.id)
 
     async def request_file_list(self) -> bool:
         from printers.protocol import CMD_LIST_FILES
@@ -178,28 +182,31 @@ class PrinterConnection:
             print_time  = pi.get("PrintTime", 0) or 0
             completed   = cur_status == 9
             if filament_mm > 0 or filename:
+                loop = asyncio.get_running_loop()
+                density    = await loop.run_in_executor(None, get_spool_density, self.id)
+                self.filament_density = density
+                filament_g = filament_mm_to_grams(filament_mm, density)
                 entry = {
                     "timestamp":    time.strftime("%Y-%m-%dT%H:%M:%S"),
                     "printer_id":   self.id,
                     "printer_name": self.name,
                     "filename":     filename,
                     "filament_mm":  round(filament_mm, 1),
-                    "filament_g":   filament_mm_to_grams(filament_mm),
+                    "filament_g":   filament_g,
                     "print_time_s": int(print_time),
                     "completed":    completed,
                 }
-                loop = asyncio.get_running_loop()
                 await loop.run_in_executor(None, append_history, entry)
                 label = "Completed" if completed else "Cancelled"
-                print(f"[History] {label}: {filename} – {filament_mm:.0f}mm / "
-                      f"{filament_mm_to_grams(filament_mm)}g")
+                print(f"[History] {label}: {filename} – {filament_mm:.0f}mm / {filament_g}g"
+                      f" (density {density} g/cm³)")
                 await state.broadcast_to_browsers({"type": "history_entry", "entry": entry})
                 if filament_mm > 0:
                     loop.run_in_executor(
                         None,
                         spoolman_deduct,
                         self.id,
-                        filament_mm_to_grams(filament_mm),
+                        filament_g,
                         loop,
                     )
 

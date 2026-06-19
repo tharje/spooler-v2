@@ -196,6 +196,9 @@ async def handle_browser_message(ws, raw: str) -> None:
             state.tray_map[pid][key] = spool_id
         await loop.run_in_executor(None, save_tray_map, state.tray_map)
         await state.broadcast_to_browsers({"type": "tray_map", "tray_map": state.tray_map})
+        p = state.printers.get(pid)
+        if p:
+            loop.run_in_executor(None, p._update_filament_density)
         return
 
     if not printer:

@@ -431,4 +431,5 @@ class CC2Connection(PrinterConnection):
                 spool_id = (state.tray_map.get(self.id) or {}).get(str(active_tray)) if active_tray >= 0 else None
                 loop = asyncio.get_running_loop()
                 loop.run_in_executor(None, spoolman_assign, self.id, spool_id)
+                loop.run_in_executor(None, self._update_filament_density)
                 print(f"[Printer {self.name}] Active tray changed → {active_tray}, spool {spool_id}")
