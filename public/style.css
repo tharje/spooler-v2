@@ -557,6 +557,19 @@ main {
   animation: toast-in .2s ease;
 }
 .toast.error { border-color: var(--red); background: rgba(239,68,68,.1); }
+.toast.toast-action { display: flex; align-items: center; gap: 12px; max-width: 380px; }
+.toast-btn {
+  flex-shrink: 0;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.toast-btn:hover { opacity: .85; }
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }

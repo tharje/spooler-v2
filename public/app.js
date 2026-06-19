@@ -158,6 +158,19 @@ function handleMessage(msg) {
       trayMap = msg.tray_map || {};
       Object.values(printers).forEach(p => renderPrinter(p));
       break;
+    case "cc2_discovered":
+      for (const ip of (msg.ips || [])) {
+        toastAction(`CC2 found at ${ip} — enter access code to add`, "Add", () => {
+          resetPrinterForm();
+          document.getElementById("input-ip").value = ip;
+          document.getElementById("input-name").value = `CC2 (${ip})`;
+          inputType.value = "cc2";
+          labelAccessCode.style.display = "flex";
+          openPrinters();
+          inputAccessCode.focus();
+        }, 12000);
+      }
+      break;
   }
 }
 
@@ -868,7 +881,7 @@ function _triggerDiscover(btn) {
     btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
     </svg> Scan for Printers`;
-  }, 4000);
+  }, 7000);
 }
 document.getElementById("btn-discover")?.addEventListener("click", e => {
   openPrinters();
@@ -1019,6 +1032,22 @@ function toast(msg, isError = false) {
   el.textContent = msg;
   area.appendChild(el);
   setTimeout(() => el.remove(), 3500);
+}
+
+function toastAction(msg, btnLabel, onClick, duration = 8000) {
+  const area = document.getElementById("toast-area");
+  const el = document.createElement("div");
+  el.className = "toast toast-action";
+  const span = document.createElement("span");
+  span.textContent = msg;
+  const btn = document.createElement("button");
+  btn.className = "toast-btn";
+  btn.textContent = btnLabel;
+  btn.addEventListener("click", () => { el.remove(); onClick(); });
+  el.appendChild(span);
+  el.appendChild(btn);
+  area.appendChild(el);
+  setTimeout(() => el.remove(), duration);
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
