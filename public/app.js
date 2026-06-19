@@ -618,13 +618,16 @@ document.getElementById("btn-signout")?.addEventListener("click", signOut);
 document.getElementById("btn-signout-nav")?.addEventListener("click", signOut);
 
 // ─── App settings ─────────────────────────────────────────────────────────────
-const _settingsModal    = document.getElementById("modal-app-settings");
-const _settingsMenu     = document.getElementById("settings-menu");
-const _settingsPwPage   = document.getElementById("settings-change-password");
-const _settingsNotifPage = document.getElementById("settings-notifications");
+const _settingsModal      = document.getElementById("modal-app-settings");
+const _settingsMenu       = document.getElementById("settings-menu");
+const _settingsPwPage     = document.getElementById("settings-change-password");
+const _settingsNotifPage  = document.getElementById("settings-notifications");
+const _settingsPrintersPage = document.getElementById("settings-printers");
+
+const _allSettingsPages = () => [_settingsPwPage, _settingsNotifPage, _settingsPrintersPage];
 
 function _openSettings() {
-  [_settingsPwPage, _settingsNotifPage].forEach(p => p && (p.style.display = "none"));
+  _allSettingsPages().forEach(p => p && (p.style.display = "none"));
   _settingsMenu.style.display = "";
   const tog = document.getElementById("toggle-light-mode");
   if (tog) tog.checked = document.body.classList.contains("light-mode");
@@ -632,12 +635,36 @@ function _openSettings() {
 }
 function _showSettingsPage(pageEl) {
   _settingsMenu.style.display = "none";
-  [_settingsPwPage, _settingsNotifPage].forEach(p => p && (p.style.display = "none"));
+  _allSettingsPages().forEach(p => p && (p.style.display = "none"));
   pageEl.style.display = "";
 }
 function _backToSettingsMenu() {
-  [_settingsPwPage, _settingsNotifPage].forEach(p => p && (p.style.display = "none"));
+  _allSettingsPages().forEach(p => p && (p.style.display = "none"));
   _settingsMenu.style.display = "";
+}
+
+function _renderSettingsPrinters() {
+  const list = document.getElementById("settings-printer-list");
+  if (!list) return;
+  const items = Object.values(printers);
+  if (!items.length) {
+    list.innerHTML = '<p class="settings-printer-empty">No printers added yet.</p>';
+    return;
+  }
+  list.innerHTML = items.map(p => `
+    <div class="settings-printer-row">
+      <div class="settings-printer-info">
+        <span class="settings-printer-name">${escHtml(p.name)}</span>
+        <span class="settings-printer-meta">${escHtml(p.ip)} &nbsp;·&nbsp; ${p.printer_type?.toUpperCase() || "CC1"}</span>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="_settingsEditPrinter('${escAttr(p.id)}')">Edit</button>
+    </div>
+  `).join("");
+}
+
+function _settingsEditPrinter(id) {
+  _settingsModal?.classList.remove("open");
+  openPrinterSettings(id);
 }
 
 document.getElementById("btn-app-settings")?.addEventListener("click", _openSettings);
@@ -657,6 +684,24 @@ _settingsModal?.addEventListener("click", e => {
     localStorage.setItem("theme", toggle.checked ? "light" : "dark");
   });
 })();
+
+// Printers sub-page
+document.getElementById("btn-settings-goto-printers")?.addEventListener("click", () => {
+  _renderSettingsPrinters();
+  _showSettingsPage(_settingsPrintersPage);
+});
+document.getElementById("btn-settings-back-printers")?.addEventListener("click", _backToSettingsMenu);
+document.getElementById("btn-settings-add-printer")?.addEventListener("click", () => {
+  _settingsModal?.classList.remove("open");
+  resetPrinterForm();
+  openPrinters();
+});
+document.getElementById("btn-settings-scan-printers")?.addEventListener("click", e => {
+  _settingsModal?.classList.remove("open");
+  resetPrinterForm();
+  openPrinters();
+  _triggerDiscover(document.getElementById("btn-discover-panel"));
+});
 
 // Password sub-page
 document.getElementById("btn-settings-goto-password")?.addEventListener("click", () => {
