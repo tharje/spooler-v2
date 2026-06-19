@@ -279,6 +279,7 @@ function getFilename(printer) {
 
 function formatTime(secs) {
   if (!secs || secs < 0) return "--:--";
+  secs = Math.round(secs);
   const h = Math.floor(secs / 3600);
   const m = Math.floor((secs % 3600) / 60);
   const s = secs % 60;
