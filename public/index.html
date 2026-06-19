@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css?v=23" />
+  <link rel="stylesheet" href="style.css?v=24" />
 </head>
 <body>
   <header>
@@ -372,6 +372,40 @@
           </button>
         </div>
       </div>
+      <!-- Printer edit sub-page -->
+      <div id="settings-printer-edit" style="display:none">
+        <div class="settings-subpage-header">
+          <button id="btn-settings-back-printer-edit" class="settings-back-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+          <h3 id="settings-printer-edit-title">Edit Printer</h3>
+        </div>
+        <label>
+          Printer Name
+          <input id="settings-edit-name" type="text" placeholder="Centauri Carbon 1" />
+        </label>
+        <label>
+          IP Address
+          <input id="settings-edit-ip" type="text" placeholder="192.168.1.100" />
+        </label>
+        <label id="settings-edit-type-label">
+          Printer Type
+          <select id="settings-edit-type">
+            <option value="cc1">CC1 – Centauri Carbon 1 (WebSocket/SDCP)</option>
+            <option value="cc2">CC2 – Centauri Carbon 2 (MQTT)</option>
+          </select>
+          <span id="settings-edit-type-readonly" class="settings-readonly" style="display:none"></span>
+        </label>
+        <label id="settings-edit-access-code-label" style="display:none">
+          MQTT Password
+          <input id="settings-edit-access-code" type="password" placeholder="12345" maxlength="10" />
+          <span class="input-hint">Found on the printer under Settings → Network.</span>
+        </label>
+        <div class="modal-actions">
+          <button id="btn-settings-printer-remove" class="btn btn-danger" style="display:none">Remove</button>
+          <button id="btn-settings-printer-save" class="btn btn-primary">Save</button>
+        </div>
+      </div>
       <!-- Notifications sub-page -->
       <div id="settings-notifications" style="display:none">
         <div class="settings-subpage-header">
@@ -493,7 +527,7 @@
   <div id="toast-area"></div>
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-  <script src="app.js?v=30"></script>
+  <script src="app.js?v=31"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});

@@ -607,13 +607,14 @@ document.getElementById("btn-signout")?.addEventListener("click", signOut);
 document.getElementById("btn-signout-nav")?.addEventListener("click", signOut);
 
 // ─── App settings ─────────────────────────────────────────────────────────────
-const _settingsModal      = document.getElementById("modal-app-settings");
-const _settingsMenu       = document.getElementById("settings-menu");
-const _settingsPwPage     = document.getElementById("settings-change-password");
-const _settingsNotifPage  = document.getElementById("settings-notifications");
-const _settingsPrintersPage = document.getElementById("settings-printers");
+const _settingsModal          = document.getElementById("modal-app-settings");
+const _settingsMenu           = document.getElementById("settings-menu");
+const _settingsPwPage         = document.getElementById("settings-change-password");
+const _settingsNotifPage      = document.getElementById("settings-notifications");
+const _settingsPrintersPage   = document.getElementById("settings-printers");
+const _settingsPrinterEditPage = document.getElementById("settings-printer-edit");
 
-const _allSettingsPages = () => [_settingsPwPage, _settingsNotifPage, _settingsPrintersPage];
+const _allSettingsPages = () => [_settingsPwPage, _settingsNotifPage, _settingsPrintersPage, _settingsPrinterEditPage];
 
 function _openSettings() {
   _allSettingsPages().forEach(p => p && (p.style.display = "none"));
@@ -651,9 +652,42 @@ function _renderSettingsPrinters() {
   `).join("");
 }
 
+let _settingsEditingPrinterId = null;
+
 function _settingsEditPrinter(id) {
-  _settingsModal?.classList.remove("open");
-  openPrinterSettings(id);
+  _settingsEditingPrinterId = id || null;
+  const p = id ? printers[id] : null;
+  const isNew = !p;
+
+  document.getElementById("settings-printer-edit-title").textContent = isNew ? "Add Printer" : "Edit Printer";
+  document.getElementById("settings-edit-name").value = p?.name || "";
+  document.getElementById("settings-edit-ip").value = p?.ip || "";
+
+  const typeSelect = document.getElementById("settings-edit-type");
+  const typeReadonly = document.getElementById("settings-edit-type-readonly");
+  if (isNew) {
+    typeSelect.value = "cc1";
+    typeSelect.style.display = "";
+    typeReadonly.style.display = "none";
+  } else {
+    typeSelect.value = p.printer_type || "cc1";
+    typeSelect.style.display = "none";
+    typeReadonly.style.display = "";
+    typeReadonly.textContent = p.printer_type === "cc2"
+      ? "CC2 – Centauri Carbon 2 (MQTT)"
+      : "CC1 – Centauri Carbon 1 (WebSocket/SDCP)";
+  }
+
+  const isCC2 = p ? p.printer_type === "cc2" : typeSelect.value === "cc2";
+  document.getElementById("settings-edit-access-code-label").style.display = isCC2 ? "" : "none";
+  const ac = document.getElementById("settings-edit-access-code");
+  ac.value = "";
+  ac.placeholder = (!isNew && p?.has_access_code) ? "Leave blank to keep current" : "Enter MQTT password";
+
+  document.getElementById("btn-settings-printer-remove").style.display = isNew ? "none" : "";
+  document.getElementById("btn-settings-printer-save").textContent = isNew ? "Add Printer" : "Save";
+
+  _showSettingsPage(_settingsPrinterEditPage);
 }
 
 document.getElementById("btn-app-settings")?.addEventListener("click", _openSettings);
@@ -681,15 +715,42 @@ document.getElementById("btn-settings-goto-printers")?.addEventListener("click",
 });
 document.getElementById("btn-settings-back-printers")?.addEventListener("click", _backToSettingsMenu);
 document.getElementById("btn-settings-add-printer")?.addEventListener("click", () => {
-  _settingsModal?.classList.remove("open");
-  resetPrinterForm();
-  openPrinters();
+  _settingsEditPrinter(null);
 });
-document.getElementById("btn-settings-scan-printers")?.addEventListener("click", e => {
-  _settingsModal?.classList.remove("open");
-  resetPrinterForm();
-  openPrinters();
-  _triggerDiscover(document.getElementById("btn-discover-panel"));
+document.getElementById("btn-settings-scan-printers")?.addEventListener("click", () => {
+  send({ action: "discover" });
+  toast("Scanning for printers…");
+});
+
+// Printer edit sub-page
+document.getElementById("btn-settings-back-printer-edit")?.addEventListener("click", () => {
+  _renderSettingsPrinters();
+  _showSettingsPage(_settingsPrintersPage);
+});
+document.getElementById("settings-edit-type")?.addEventListener("change", function () {
+  document.getElementById("settings-edit-access-code-label").style.display =
+    this.value === "cc2" ? "" : "none";
+});
+document.getElementById("btn-settings-printer-save")?.addEventListener("click", () => {
+  const name = document.getElementById("settings-edit-name").value.trim();
+  const ip   = document.getElementById("settings-edit-ip").value.trim();
+  const access_code = document.getElementById("settings-edit-access-code").value.trim();
+  if (!ip) { toast("IP address is required"); return; }
+  if (_settingsEditingPrinterId) {
+    send({ action: "update_printer", printer_id: _settingsEditingPrinterId, name, ip, access_code });
+  } else {
+    const printer_type = document.getElementById("settings-edit-type").value;
+    send({ action: "add_printer", ip, name: name || undefined, printer_type, access_code });
+  }
+  _renderSettingsPrinters();
+  _showSettingsPage(_settingsPrintersPage);
+});
+document.getElementById("btn-settings-printer-remove")?.addEventListener("click", () => {
+  if (!_settingsEditingPrinterId) return;
+  if (!confirm("Remove this printer?")) return;
+  send({ action: "remove_printer", printer_id: _settingsEditingPrinterId });
+  _renderSettingsPrinters();
+  _showSettingsPage(_settingsPrintersPage);
 });
 
 // Password sub-page
