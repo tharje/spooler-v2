@@ -11,16 +11,12 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css?v=16" />
+  <link rel="stylesheet" href="style.css?v=21" />
 </head>
 <body>
   <header>
     <div class="logo">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-        <path d="M2 17l10 5 10-5"/>
-        <path d="M2 12l10 5 10-5"/>
-      </svg>
+      <img src="/icon.svg" alt="Spooler" class="logo-icon" />
       <span>Spooler</span>
     </div>
     <div class="header-actions">
@@ -327,6 +323,16 @@
             <span>Notifications</span>
             <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
           </button>
+          <div class="settings-menu-item settings-toggle-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+            </svg>
+            <span>Light mode</span>
+            <label class="toggle-switch" style="margin-left:auto">
+              <input type="checkbox" id="toggle-light-mode" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
         </div>
         <div class="modal-actions">
           <button id="btn-app-settings-cancel" class="btn btn-secondary">Close</button>
@@ -395,6 +401,20 @@
             <label>Temperature (°C)<input type="number" id="notif-nozzle-printing-threshold" value="260" min="1" max="400" /></label>
           </div>
 
+          <div class="notif-row">
+            <div class="notif-info">
+              <span class="notif-label">Spool almost empty</span>
+              <span class="notif-desc">When a spool drops below a set amount of filament</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="notif-spool-low-on" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="notif-param" id="notif-spool-low-param" style="display:none">
+            <label>Remaining (g)<input type="number" id="notif-spool-low-threshold" value="100" min="1" max="5000" /></label>
+          </div>
+
         </div>
         <div class="modal-actions">
           <button id="btn-notif-test" class="btn btn-secondary">Send test</button>
@@ -439,7 +459,7 @@
   <div id="toast-area"></div>
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-  <script src="app.js?v=22"></script>
+  <script src="app.js?v=27"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});

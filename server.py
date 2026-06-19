@@ -53,6 +53,7 @@ from auth import AUTH_ENABLED, BCRYPT_AVAILABLE, session_cleanup_loop
 from http_handler import run_http, run_https
 from persistence import DATA_DIR, load_printers, load_tray_map
 from printers import PRINTER_TYPES, make_printer
+from push import init_vapid
 from ws_handler import browser_handler
 
 # Suppress the noisy-but-harmless "did not receive a valid HTTP request"
@@ -97,6 +98,8 @@ async def main() -> None:
         print("[Auth] No password configured – first-time setup required via the web UI")
     else:
         print(f"[Auth] Authentication enabled (user: {auth._get_username()})")
+
+    init_vapid()
 
     # Load saved printers
     for entry in load_printers():

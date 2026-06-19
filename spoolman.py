@@ -10,6 +10,8 @@ import urllib.request
 
 import os
 
+from persistence import FILAMENT_DENSITY
+from push import load_notif_settings, send_push_all
 from state import broadcast_to_browsers
 
 SPOOLMAN_URL    = os.getenv("SPOOLMAN_URL", "http://localhost:7912").rstrip("/")
@@ -38,6 +40,26 @@ def get_spoolman_db() -> list:
         if _spoolman_db is None:
             _spoolman_db = []
     return _spoolman_db
+
+
+def get_spool_density(printer_id: str) -> float:
+    """Return the filament density (g/cm³) for the spool assigned to this printer.
+
+    Falls back to the PLA default if Spoolman is unreachable or no spool is assigned.
+    Designed to run in a thread pool executor.
+    """
+    try:
+        base = get_spoolman_url()
+        url = f"{base}/api/v1/spool?location={urllib.parse.quote(printer_id)}"
+        with urllib.request.urlopen(url, timeout=3) as resp:
+            data = json.loads(resp.read())
+        if data:
+            density = data[0].get("filament", {}).get("density")
+            if density and float(density) > 0:
+                return float(density)
+    except Exception:
+        pass
+    return FILAMENT_DENSITY
 
 
 def spoolman_assign(printer_id: str, spool_id: int | None) -> None:
@@ -113,5 +135,16 @@ def spoolman_deduct(printer_id: str, amount_g: float, loop: asyncio.AbstractEven
 
         if msg:
             asyncio.run_coroutine_threadsafe(broadcast_to_browsers(msg), loop)
+
+        # Push notification for configurable low-spool threshold
+        notif = load_notif_settings()
+        spool_low_cfg = notif.get("spool_low", {})
+        if spool_low_cfg.get("enabled") and remaining > 0:
+            threshold = float(spool_low_cfg.get("threshold", 100))
+            if remaining <= threshold:
+                send_push_all(
+                    f"Spool almost empty — {name}",
+                    f"{round(remaining)}g remaining on {printer_id}.",
+                )
     except Exception as e:
         print(f"[Spoolman] Deduct skipped ({e})")

@@ -20,6 +20,10 @@ from auth import (
     _has_password, _invalidate_session, _parse_sid, _reset_rate_limit, _save_auth,
 )
 from persistence import DATA_DIR, load_history, save_printers
+from push import (
+    WEBPUSH_AVAILABLE, add_subscription, get_public_key, has_subscriptions,
+    load_notif_settings, remove_subscription, save_notif_settings, send_push_all,
+)
 from spoolman import get_spoolman_db, get_spoolman_url
 
 try:
@@ -285,6 +289,50 @@ class SPHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             self._json({"error": f"Spoolman unreachable: {e}"}, 502)
 
+    def _proxy_spoolman_ui(self, method: str, sm_path: str, body: bytes | None = None):
+        """Proxy Spoolman's own web UI through our server.
+
+        Rewrites absolute asset paths in HTML responses so they stay within our
+        /spoolman/ prefix (required because Spoolman uses paths like /assets/...).
+        """
+        try:
+            headers = {"Content-Type": "application/json"} if body else {}
+            req = urllib.request.Request(
+                f"{get_spoolman_url()}{sm_path}",
+                data=body,
+                headers=headers,
+                method=method,
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = resp.read()
+                status = resp.status
+                ct = resp.headers.get("Content-Type", "application/octet-stream")
+
+            # Rewrite absolute paths in HTML so assets load through our proxy
+            if "text/html" in ct:
+                html = data.decode("utf-8", errors="replace")
+                html = html.replace('src="/', 'src="/spoolman/')
+                html = html.replace("src='/", "src='/spoolman/")
+                html = html.replace('href="/', 'href="/spoolman/')
+                html = html.replace("href='/", "href='/spoolman/")
+                data = html.encode("utf-8")
+                ct = "text/html; charset=utf-8"
+
+            self.send_response(status)
+            self.send_header("Content-Type", ct)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        except urllib.error.HTTPError as e:
+            body_err = e.read()
+            self.send_response(e.code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body_err)))
+            self.end_headers()
+            self.wfile.write(body_err)
+        except Exception as e:
+            self._json({"error": f"Spoolman unreachable: {e}"}, 502)
+
     # ── HTTP verbs ────────────────────────────────────────────────────────────
 
     def do_GET(self):
@@ -310,11 +358,41 @@ class SPHandler(SimpleHTTPRequestHandler):
         if self.path in ("/manifest.json", "/icon.svg", "/sw.js", "/favicon.ico"):
             super().do_GET()
             return
+        # Spoolman UI proxy — must come before auth gate so the browser can
+        # load assets without cookie (crossorigin script tags don't send cookies)
+        if self.path == "/spoolman":
+            self.send_response(302)
+            self.send_header("Location", "/spoolman/")
+            self.end_headers()
+            return
+        if self.path.startswith("/spoolman/"):
+            sm_path = self.path[len("/spoolman"):]  # e.g. "/assets/..."
+            self._proxy_spoolman_ui("GET", sm_path or "/")
+            return
+        # Spoolman's own JS calls /api/v1/ directly — proxy those through
+        if self.path.startswith("/api/v1/"):
+            self._proxy_spoolman_ui("GET", self.path)
+            return
         if self.path == "/api/auth-status":
             resp = {"setup_required": not _has_password()}
             if _auth_ok(self):
-                resp["spoolman_url"] = get_spoolman_url()
+                resp["spoolman_url"] = "/spoolman/"
             self._json(resp)
+            return
+
+        if self.path == "/api/push-public-key":
+            if not self._check_auth():
+                return
+            if WEBPUSH_AVAILABLE and get_public_key():
+                self._json({"publicKey": get_public_key()})
+            else:
+                self._json({"error": "Web Push not available"}, 503)
+            return
+
+        if self.path == "/api/notification-settings":
+            if not self._check_auth():
+                return
+            self._json(load_notif_settings())
             return
 
         if not self._check_auth():
@@ -356,6 +434,9 @@ class SPHandler(SimpleHTTPRequestHandler):
             super().do_GET()
 
     def do_PATCH(self):
+        if self.path.startswith("/api/v1/"):
+            self._proxy_spoolman_ui("PATCH", self.path, self._read_body())
+            return
         if not self._check_auth():
             return
         if self.path.startswith("/api/spoolman"):
@@ -364,6 +445,9 @@ class SPHandler(SimpleHTTPRequestHandler):
             self._json({"error": "Not found"}, 404)
 
     def do_DELETE(self):
+        if self.path.startswith("/api/v1/"):
+            self._proxy_spoolman_ui("DELETE", self.path)
+            return
         if not self._check_auth():
             return
         if self.path.startswith("/api/spoolman"):
@@ -388,8 +472,18 @@ class SPHandler(SimpleHTTPRequestHandler):
 
         if self.path == "/api/change-password":
             self._handle_change_password()
+        elif self.path == "/api/push-subscribe":
+            self._handle_push_subscribe()
+        elif self.path == "/api/push-unsubscribe":
+            self._handle_push_unsubscribe()
+        elif self.path == "/api/notification-settings":
+            self._handle_notif_settings()
+        elif self.path == "/api/push-test":
+            self._handle_push_test()
         elif self.path == "/api/import-filaments":
             self._handle_import_filaments()
+        elif self.path.startswith("/api/v1/"):
+            self._proxy_spoolman_ui("POST", self.path, self._read_body())
         elif self.path.startswith("/api/spoolman"):
             self._proxy_spoolman("POST", self.path[len("/api/spoolman"):], self._read_body())
         elif self.path.startswith("/api/upload/"):
@@ -405,6 +499,48 @@ class SPHandler(SimpleHTTPRequestHandler):
         self.end_headers()
 
     # ── Complex POST handlers ─────────────────────────────────────────────────
+
+    def _handle_push_subscribe(self):
+        try:
+            sub = json.loads(self._read_body() or b"{}")
+        except Exception:
+            self._json({"error": "Bad request"}, 400)
+            return
+        endpoint = sub.get("endpoint", "")
+        if not endpoint:
+            self._json({"error": "Missing endpoint"}, 400)
+            return
+        add_subscription(sub)
+        self._json({"ok": True})
+
+    def _handle_push_unsubscribe(self):
+        try:
+            body = json.loads(self._read_body() or b"{}")
+        except Exception:
+            self._json({"error": "Bad request"}, 400)
+            return
+        remove_subscription(body.get("endpoint", ""))
+        self._json({"ok": True})
+
+    def _handle_notif_settings(self):
+        try:
+            s = json.loads(self._read_body() or b"{}")
+        except Exception:
+            self._json({"error": "Bad request"}, 400)
+            return
+        save_notif_settings(s)
+        self._json({"ok": True})
+
+    def _handle_push_test(self):
+        self._read_body()
+        if not WEBPUSH_AVAILABLE:
+            self._json({"error": "Web Push not available on server"}, 503)
+            return
+        if not has_subscriptions():
+            self._json({"error": "No push subscriptions registered"}, 400)
+            return
+        send_push_all("Spooler — Test notification", "Push notifications are working!")
+        self._json({"ok": True})
 
     def _handle_import_filaments(self):
         try:

@@ -159,7 +159,7 @@ class CC2Connection(PrinterConnection):
         if cmd == CMD_LIGHT and data:
             light_on = data.get("LightStatus", {}).get("SecondLight", False)
             payload["params"] = {"power": 1 if light_on else 0}
-        elif method in (1020, 1044) and data:  # START_PRINT, GET_FILE_LIST
+        elif method in (1020, 1031, 1044, 1047) and data:
             payload["params"] = data
         try:
             await self._mqtt_client.publish(topic, json.dumps(payload))
@@ -191,6 +191,7 @@ class CC2Connection(PrinterConnection):
                     await self._broadcast_state()
                     await self.send_cmd(1002)  # full state
                     await self.send_cmd(1003)  # machine_status
+                    await self.send_cmd(1042)  # camera URL
                     await self.send_cmd(2005)  # canvas channel info
                     await self.send_cmd(1056)  # extruder filament info
                 else:
@@ -222,6 +223,15 @@ class CC2Connection(PrinterConnection):
                 await state.broadcast_to_browsers({
                     "type": "file_list", "printer_id": self.id, "files": files,
                 })
+                return
+
+            # Camera URL response (method 1042 GET_MONITOR_VIDENO_URL)
+            _method = payload.get("method")
+            if _method == 1042 and isinstance(inner, dict):
+                url = inner.get("url") or inner.get("video_url") or inner.get("mjpeg_url")
+                if url:
+                    self.camera_url = url
+                    await self._broadcast_state()
                 return
 
             source = inner if isinstance(inner, dict) else payload
@@ -388,6 +398,8 @@ class CC2Connection(PrinterConnection):
         led    = s.get("led", {})
         led_on = 1 if (led.get("status", 0) or 0) > 0 else 0
 
+        speed_factor = gm.get("speed_factor", 1.0) or 1.0
+
         self.status = {
             "PrintInfo": {
                 "Status":         status_code,
@@ -406,6 +418,7 @@ class CC2Connection(PrinterConnection):
             "TempTargetHotbed": bed.get("target", 0),
             "TempOfBox":        ztemp.get("temperature", 0),
             "LightStatus":      {"SecondLight": led_on},
+            "SpeedFactor":      round(speed_factor * 100),
         }
 
         # Expose canvas tray info so the browser can render filament slots
@@ -418,4 +431,5 @@ class CC2Connection(PrinterConnection):
                 spool_id = (state.tray_map.get(self.id) or {}).get(str(active_tray)) if active_tray >= 0 else None
                 loop = asyncio.get_running_loop()
                 loop.run_in_executor(None, spoolman_assign, self.id, spool_id)
+                loop.run_in_executor(None, self._update_filament_density)
                 print(f"[Printer {self.name}] Active tray changed → {active_tray}, spool {spool_id}")

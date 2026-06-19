@@ -7,6 +7,13 @@ const WS_URL  = location.protocol === "https:"
 const SPOOLMAN_URL = "/api/spoolman/api/v1";
 const RECONNECT_DELAY = 3000;
 
+// ─── Theme ────────────────────────────────────────────────────────────────────
+(function () {
+  if (localStorage.getItem("theme") === "light") {
+    document.body.classList.add("light-mode");
+  }
+})();
+
 // Redirect to login on any 401 from our own API
 const _fetch = window.fetch.bind(window);
 window.fetch = async function(url, options) {
@@ -150,6 +157,19 @@ function handleMessage(msg) {
     case "tray_map":
       trayMap = msg.tray_map || {};
       Object.values(printers).forEach(p => renderPrinter(p));
+      break;
+    case "cc2_discovered":
+      for (const ip of (msg.ips || [])) {
+        toastAction(`CC2 found at ${ip} — enter access code to add`, "Add", () => {
+          resetPrinterForm();
+          document.getElementById("input-ip").value = ip;
+          document.getElementById("input-name").value = `CC2 (${ip})`;
+          inputType.value = "cc2";
+          labelAccessCode.style.display = "flex";
+          openPrinters();
+          inputAccessCode.focus();
+        }, 12000);
+      }
       break;
   }
 }
@@ -489,6 +509,16 @@ function renderPrinter(printer) {
           <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
         </svg>
       </button>
+      ${(printing || paused) && printer.printer_type === "cc2" ? (() => {
+        const sf = printer.status?.SpeedFactor ?? 100;
+        const sid = `speed-val-${printer.id}`;
+        return `<div class="card-speed">
+          <span class="speed-label">Speed: <span id="${escAttr(sid)}">${sf}%</span></span>
+          <input type="range" class="speed-slider" min="10" max="200" step="5" value="${sf}"
+                 oninput="document.getElementById('${escAttr(sid)}').textContent=this.value+'%'"
+                 onchange="setSpeed('${escAttr(printer.id)}',+this.value)">
+        </div>`;
+      })() : ""}
     </div>
   `;
 
@@ -533,6 +563,10 @@ function printerAction(id, action) {
     if (printers[id]) renderPrinter(printers[id]);
   }
   send({ action, printer_id: id });
+}
+
+function setSpeed(id, speed) {
+  send({ action: "set_speed", printer_id: id, speed });
 }
 
 function confirmStop(id) {
@@ -591,6 +625,8 @@ const _settingsNotifPage = document.getElementById("settings-notifications");
 function _openSettings() {
   [_settingsPwPage, _settingsNotifPage].forEach(p => p && (p.style.display = "none"));
   _settingsMenu.style.display = "";
+  const tog = document.getElementById("toggle-light-mode");
+  if (tog) tog.checked = document.body.classList.contains("light-mode");
   _settingsModal?.classList.add("open");
 }
 function _showSettingsPage(pageEl) {
@@ -609,6 +645,17 @@ document.getElementById("btn-app-settings-cancel")?.addEventListener("click", ()
 _settingsModal?.addEventListener("click", e => {
   if (e.target === _settingsModal) _settingsModal.classList.remove("open");
 });
+
+// Light mode toggle
+(function () {
+  const toggle = document.getElementById("toggle-light-mode");
+  if (!toggle) return;
+  toggle.checked = document.body.classList.contains("light-mode");
+  toggle.addEventListener("change", () => {
+    document.body.classList.toggle("light-mode", toggle.checked);
+    localStorage.setItem("theme", toggle.checked ? "light" : "dark");
+  });
+})();
 
 // Password sub-page
 document.getElementById("btn-settings-goto-password")?.addEventListener("click", () => {
@@ -638,22 +685,29 @@ document.getElementById("btn-app-settings-save")?.addEventListener("click", asyn
 
 // ─── Push notifications ───────────────────────────────────────────────────────
 
+function _urlBase64ToUint8Array(b64) {
+  const pad = "=".repeat((4 - b64.length % 4) % 4);
+  const raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(raw, c => c.charCodeAt(0));
+}
+
 async function _subscribePush() {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
   try {
     const reg = await navigator.serviceWorker.ready;
     const keyResp = await fetch("/api/push-public-key");
-    if (!keyResp.ok) return null;
+    if (!keyResp.ok) { console.warn("Push: could not get public key", keyResp.status); return null; }
     const { publicKey } = await keyResp.json();
     const sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: publicKey,
+      applicationServerKey: _urlBase64ToUint8Array(publicKey),
     });
-    await fetch("/api/push-subscribe", {
+    const r = await fetch("/api/push-subscribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(sub.toJSON()),
     });
+    if (!r.ok) { console.warn("Push: server rejected subscription", r.status); return null; }
     return sub;
   } catch (e) {
     console.warn("Push subscribe failed:", e);
@@ -694,6 +748,8 @@ async function _populateNotifForm() {
   set("notif-nozzle-idle-threshold",     s.nozzle_idle?.threshold   ?? 50);
   set("notif-nozzle-printing-on",        s.nozzle_printing?.enabled ?? false);
   set("notif-nozzle-printing-threshold", s.nozzle_printing?.threshold ?? 260);
+  set("notif-spool-low-on",              s.spool_low?.enabled       ?? false);
+  set("notif-spool-low-threshold",       s.spool_low?.threshold     ?? 100);
   _syncNotifParams();
 }
 
@@ -706,9 +762,10 @@ function _syncNotifParams() {
   show("notif-layer-param",           "notif-layer-on");
   show("notif-nozzle-idle-param",     "notif-nozzle-idle-on");
   show("notif-nozzle-printing-param", "notif-nozzle-printing-on");
+  show("notif-spool-low-param",       "notif-spool-low-on");
 }
 
-["notif-layer-on","notif-nozzle-idle-on","notif-nozzle-printing-on"].forEach(id =>
+["notif-layer-on","notif-nozzle-idle-on","notif-nozzle-printing-on","notif-spool-low-on"].forEach(id =>
   document.getElementById(id)?.addEventListener("change", _syncNotifParams));
 
 document.getElementById("btn-settings-goto-notifications")?.addEventListener("click", () => {
@@ -724,6 +781,7 @@ document.getElementById("btn-notif-save")?.addEventListener("click", async () =>
     layer:           { enabled: gb("notif-layer-on"),           layer:     gv("notif-layer-number") },
     nozzle_idle:     { enabled: gb("notif-nozzle-idle-on"),     threshold: gv("notif-nozzle-idle-threshold") },
     nozzle_printing: { enabled: gb("notif-nozzle-printing-on"), threshold: gv("notif-nozzle-printing-threshold") },
+    spool_low:       { enabled: gb("notif-spool-low-on"),       threshold: gv("notif-spool-low-threshold") },
   };
   const anyEnabled = Object.values(s).some(v => v.enabled);
   if (anyEnabled) {
@@ -823,7 +881,7 @@ function _triggerDiscover(btn) {
     btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
     </svg> Scan for Printers`;
-  }, 4000);
+  }, 7000);
 }
 document.getElementById("btn-discover")?.addEventListener("click", e => {
   openPrinters();
@@ -907,11 +965,12 @@ function renderFileList(files, error) {
     const actionTd = document.createElement("td");
     actionTd.className = "file-actions";
     if (!f.is_dir) {
+      const filePath = f.path;
+      const fileName = f.name || filePath.split("/").pop() || filePath;
+
       const btn = document.createElement("button");
       btn.className = "btn btn-primary btn-sm";
       btn.textContent = "Print";
-      const filePath = f.path;
-      const fileName = f.name || filePath.split("/").pop() || filePath;
       btn.addEventListener("click", () => {
         if (confirm(`Print "${fileName}"?`)) {
           send({ action: "start_print", printer_id: _currentFilePrinterId, filename: filePath });
@@ -920,6 +979,22 @@ function renderFileList(files, error) {
         }
       });
       actionTd.appendChild(btn);
+
+      const delBtn = document.createElement("button");
+      delBtn.className = "btn btn-danger btn-sm";
+      delBtn.textContent = "Delete";
+      delBtn.addEventListener("click", () => {
+        if (confirm(`Delete "${fileName}"?`)) {
+          send({ action: "delete_file", printer_id: _currentFilePrinterId, filename: filePath });
+          toast(`Deleting: ${fileName}`);
+          setTimeout(() => {
+            document.getElementById("files-list").innerHTML = "";
+            document.getElementById("files-loading").style.display = "";
+            send({ action: "list_files", printer_id: _currentFilePrinterId });
+          }, 600);
+        }
+      });
+      actionTd.appendChild(delBtn);
     }
     tr.appendChild(actionTd);
     tbody.appendChild(tr);
@@ -957,6 +1032,22 @@ function toast(msg, isError = false) {
   el.textContent = msg;
   area.appendChild(el);
   setTimeout(() => el.remove(), 3500);
+}
+
+function toastAction(msg, btnLabel, onClick, duration = 8000) {
+  const area = document.getElementById("toast-area");
+  const el = document.createElement("div");
+  el.className = "toast toast-action";
+  const span = document.createElement("span");
+  span.textContent = msg;
+  const btn = document.createElement("button");
+  btn.className = "toast-btn";
+  btn.textContent = btnLabel;
+  btn.addEventListener("click", () => { el.remove(); onClick(); });
+  el.appendChild(span);
+  el.appendChild(btn);
+  area.appendChild(el);
+  setTimeout(() => el.remove(), duration);
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────

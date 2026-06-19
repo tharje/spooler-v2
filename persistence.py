@@ -19,9 +19,9 @@ FILAMENT_RADIUS_CM  = 0.175 / 2  # 1.75 mm → cm
 HISTORY_MAX_ENTRIES = 1000
 
 
-def filament_mm_to_grams(mm: float) -> float:
+def filament_mm_to_grams(mm: float, density: float = FILAMENT_DENSITY) -> float:
     vol_cm3 = math.pi * FILAMENT_RADIUS_CM ** 2 * (mm / 10)
-    return round(vol_cm3 * FILAMENT_DENSITY, 1)
+    return round(vol_cm3 * density, 1)
 
 
 def _atomic_write(path: Path, text: str) -> None:

@@ -9,7 +9,7 @@ import uuid
 
 import state
 from auth import AUTH_ENABLED, _parse_sid, _validate_session
-from discovery import discover_printers
+from discovery import discover_cc2_printers, discover_printers
 from persistence import save_printers, save_tray_map
 from printers import PRINTER_TYPES, make_printer
 from printers.protocol import (
@@ -27,9 +27,9 @@ async def _run_light_refresh(printer) -> None:
     try:
         if printer.printer_type == "cc2":
             await asyncio.sleep(0.5)
-            await printer._send_mqtt_cmd(1002)
+            await printer.send_cmd(1002)
             await asyncio.sleep(1.5)
-            await printer._send_mqtt_cmd(1002)
+            await printer.send_cmd(1002)
         else:
             await asyncio.sleep(0.4)
             await printer.send_cmd(CMD_STATUS, {})
@@ -106,9 +106,16 @@ async def handle_browser_message(ws, raw: str) -> None:
 
     if action == "discover":
         await ws.send(json.dumps({"type": "info", "message": "Scanning network…"}))
-        found = await loop.run_in_executor(None, discover_printers)
+        known_ips = {p.ip for p in state.printers.values()}
+
+        # CC1 (UDP broadcast) and CC2 (MQTT port scan) run in parallel
+        cc1_found, cc2_ips = await asyncio.gather(
+            loop.run_in_executor(None, discover_printers),
+            loop.run_in_executor(None, discover_cc2_printers, known_ips),
+        )
+
         new_count = 0
-        for dev in found:
+        for dev in cc1_found:
             pid = dev.get("MainboardID") or dev.get("SerialNumber") or dev.get("_ip")
             if pid not in state.printers:
                 name = dev.get("Name") or dev.get("MachineName") or f"Printer {len(state.printers)+1}"
@@ -119,7 +126,11 @@ async def handle_browser_message(ws, raw: str) -> None:
                 new_count += 1
         if new_count:
             await loop.run_in_executor(None, save_printers, state.printers)
-        await ws.send(json.dumps({"type": "info", "message": f"Found {len(found)} printer(s)"}))
+
+        total = len(cc1_found) + len(cc2_ips)
+        await ws.send(json.dumps({"type": "info", "message": f"Found {total} device(s)"}))
+        if cc2_ips:
+            await ws.send(json.dumps({"type": "cc2_discovered", "ips": cc2_ips}))
         return
 
     if action == "add_printer":
@@ -196,6 +207,9 @@ async def handle_browser_message(ws, raw: str) -> None:
             state.tray_map[pid][key] = spool_id
         await loop.run_in_executor(None, save_tray_map, state.tray_map)
         await state.broadcast_to_browsers({"type": "tray_map", "tray_map": state.tray_map})
+        p = state.printers.get(pid)
+        if p:
+            loop.run_in_executor(None, p._update_filament_density)
         return
 
     if not printer:
@@ -236,6 +250,25 @@ async def handle_browser_message(ws, raw: str) -> None:
         if (isinstance(files, list) and len(files) <= 50
                 and all(isinstance(f, str) and f for f in files)):
             await printer.send_cmd(CMD_DELETE_FILES, {"FileList": files})
+        return
+
+    if action == "delete_file":
+        filename = msg.get("filename", "").strip()
+        parts = filename.replace("\\", "/").split("/")
+        if not filename or ".." in parts:
+            await ws.send(json.dumps({"type": "error", "message": "Invalid filename"}))
+            return
+        if printer.printer_type == "cc2":
+            await printer.send_cmd(1047, {"filename": filename, "storage_media": "local"})
+        else:
+            await printer.send_cmd(CMD_DELETE_FILES, {"FileList": [filename]})
+        return
+
+    if action == "set_speed":
+        speed = msg.get("speed")
+        if isinstance(speed, (int, float)) and 10 <= int(speed) <= 200:
+            if printer.printer_type == "cc2":
+                await printer.send_cmd(1031, {"speed": int(speed)})
         return
 
     if action in cmd_map:

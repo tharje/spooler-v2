@@ -10,9 +10,10 @@ import asyncio
 import time
 
 import state
-from persistence import append_history, filament_mm_to_grams, save_printers
+from persistence import FILAMENT_DENSITY, append_history, filament_mm_to_grams, save_printers
 from printers.protocol import decode_printinfo
-from spoolman import spoolman_deduct
+from push import load_notif_settings, send_push_all
+from spoolman import get_spool_density, spoolman_deduct
 
 
 class PrinterConnection:
@@ -35,9 +36,16 @@ class PrinterConnection:
         self.status: dict = {}
         self.attrs: dict  = {}
         self.camera_url: str | None = None
+        self.filament_density: float = FILAMENT_DENSITY
         self._task: asyncio.Task | None = None
         self._last_print_status = None
         self._print_start_time: float | None = None
+        self._notif_state: dict = {
+            "last_status":      None,
+            "nozzle_idle_fired": False,
+            "layer_fired":      False,
+            "nozzle_hot_fired": False,
+        }
 
     # ── Public interface ───────────────────────────────────────────────────────
 
@@ -59,7 +67,7 @@ class PrinterConnection:
             "attrs":           self.attrs,
             "camera_url":      self.camera_url,
             "filament_mm":     round(filament_mm, 1),
-            "filament_g":      filament_mm_to_grams(filament_mm),
+            "filament_g":      filament_mm_to_grams(filament_mm, self.filament_density),
         }
 
     def stop(self) -> None:
@@ -84,6 +92,9 @@ class PrinterConnection:
     async def send_cmd(self, cmd: int, data: dict) -> bool:
         raise NotImplementedError
 
+    def _update_filament_density(self) -> None:
+        self.filament_density = get_spool_density(self.id)
+
     async def request_file_list(self) -> bool:
         from printers.protocol import CMD_LIST_FILES
         return await self.send_cmd(CMD_LIST_FILES, {"Url": "/", "IsDir": True})
@@ -94,7 +105,62 @@ class PrinterConnection:
 
     # ── Internal helpers ───────────────────────────────────────────────────────
 
+    def _check_notifications(self) -> None:
+        s = load_notif_settings()
+        if not s:
+            return
+        ns = self._notif_state
+        pi = decode_printinfo(self.status.get("PrintInfo", {}))
+        status      = pi.get("Status", 0)
+        nozzle      = self.status.get("TempOfNozzle") or self.status.get("NozzleTemp") or 0
+        layer       = pi.get("CurrentLayer", 0)
+        is_idle     = status == 0
+        is_printing = status in (3, 6)
+        is_done     = status in (9, 8)
+        last        = ns["last_status"]
+
+        # CC2 typically goes 3→0 on completion (no 9/8 reported).
+        # Fire "finished" on any transition away from an active print state.
+        _was_printing = last in (2, 3, 4, 5, 6, 7)
+        _print_ended  = (is_done or is_idle) and _was_printing
+        if s.get("finished", {}).get("enabled") and _print_ended:
+            label = "cancelled" if status == 8 else "complete"
+            send_push_all(f"{self.name} — Print {label}", f"Your print has {label}.")
+
+        if s.get("nozzle_idle", {}).get("enabled") and is_idle:
+            thr = s["nozzle_idle"].get("threshold", 50)
+            if nozzle > thr and not ns["nozzle_idle_fired"]:
+                send_push_all(f"{self.name} — Nozzle hot", f"Nozzle is {round(nozzle)}°C while idle.")
+                ns["nozzle_idle_fired"] = True
+            elif nozzle <= thr:
+                ns["nozzle_idle_fired"] = False
+        elif not is_idle:
+            ns["nozzle_idle_fired"] = False
+
+        if s.get("layer", {}).get("enabled") and is_printing:
+            target = s["layer"].get("layer", 1)
+            if layer >= target and not ns["layer_fired"]:
+                send_push_all(f"{self.name} — Layer {target} reached", f"Currently on layer {layer}.")
+                ns["layer_fired"] = True
+            if layer < target:
+                ns["layer_fired"] = False
+        if not is_printing:
+            ns["layer_fired"] = False
+
+        if s.get("nozzle_printing", {}).get("enabled") and is_printing:
+            thr = s["nozzle_printing"].get("threshold", 260)
+            if nozzle > thr and not ns["nozzle_hot_fired"]:
+                send_push_all(f"{self.name} — Nozzle overheat", f"Nozzle is {round(nozzle)}°C during print.")
+                ns["nozzle_hot_fired"] = True
+            elif nozzle <= thr:
+                ns["nozzle_hot_fired"] = False
+        elif not is_printing:
+            ns["nozzle_hot_fired"] = False
+
+        ns["last_status"] = status
+
     async def _broadcast_state(self) -> None:
+        self._check_notifications()
         await state.broadcast_to_browsers({
             "type":    "printer_update",
             "printer": self.to_dict(),
@@ -116,28 +182,31 @@ class PrinterConnection:
             print_time  = pi.get("PrintTime", 0) or 0
             completed   = cur_status == 9
             if filament_mm > 0 or filename:
+                loop = asyncio.get_running_loop()
+                density    = await loop.run_in_executor(None, get_spool_density, self.id)
+                self.filament_density = density
+                filament_g = filament_mm_to_grams(filament_mm, density)
                 entry = {
                     "timestamp":    time.strftime("%Y-%m-%dT%H:%M:%S"),
                     "printer_id":   self.id,
                     "printer_name": self.name,
                     "filename":     filename,
                     "filament_mm":  round(filament_mm, 1),
-                    "filament_g":   filament_mm_to_grams(filament_mm),
+                    "filament_g":   filament_g,
                     "print_time_s": int(print_time),
                     "completed":    completed,
                 }
-                loop = asyncio.get_running_loop()
                 await loop.run_in_executor(None, append_history, entry)
                 label = "Completed" if completed else "Cancelled"
-                print(f"[History] {label}: {filename} – {filament_mm:.0f}mm / "
-                      f"{filament_mm_to_grams(filament_mm)}g")
+                print(f"[History] {label}: {filename} – {filament_mm:.0f}mm / {filament_g}g"
+                      f" (density {density} g/cm³)")
                 await state.broadcast_to_browsers({"type": "history_entry", "entry": entry})
                 if filament_mm > 0:
                     loop.run_in_executor(
                         None,
                         spoolman_deduct,
                         self.id,
-                        filament_mm_to_grams(filament_mm),
+                        filament_g,
                         loop,
                     )
 
