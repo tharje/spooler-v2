@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css?v=24" />
+  <link rel="stylesheet" href="style.css?v=25" />
 </head>
 <body>
   <header>
@@ -237,29 +237,31 @@
           <span id="print-opts-stat-layers-val">--</span>
         </div>
       </div>
-      <div class="print-opts-group">
-        <div class="print-opts-group-label">Build Plate</div>
-        <div class="print-plate-row">
-          <button id="print-plate-textured" class="btn btn-primary print-plate-btn" data-plate="0">Textured (Side A)</button>
-          <button id="print-plate-smooth"   class="btn btn-secondary print-plate-btn" data-plate="1">Smooth (Side B)</button>
-        </div>
-      </div>
-      <div class="print-opts-group">
-        <div class="print-opts-group-label">Options</div>
-        <div class="print-opts-rows">
-          <div class="print-opts-row">
-            <span>Time-lapse</span>
-            <label class="toggle-switch">
-              <input type="checkbox" id="print-opt-timelapse">
-              <span class="toggle-slider"></span>
-            </label>
+      <div id="print-opts-cc1-only">
+        <div class="print-opts-group">
+          <div class="print-opts-group-label">Build Plate</div>
+          <div class="print-plate-row">
+            <button id="print-plate-textured" class="btn btn-primary print-plate-btn" data-plate="0">Textured (Side A)</button>
+            <button id="print-plate-smooth"   class="btn btn-secondary print-plate-btn" data-plate="1">Smooth (Side B)</button>
           </div>
-          <div class="print-opts-row">
-            <span>Heated Bed Leveling</span>
-            <label class="toggle-switch">
-              <input type="checkbox" id="print-opt-leveling">
-              <span class="toggle-slider"></span>
-            </label>
+        </div>
+        <div class="print-opts-group">
+          <div class="print-opts-group-label">Options</div>
+          <div class="print-opts-rows">
+            <div class="print-opts-row">
+              <span>Time-lapse</span>
+              <label class="toggle-switch">
+                <input type="checkbox" id="print-opt-timelapse">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="print-opts-row">
+              <span>Heated Bed Leveling</span>
+              <label class="toggle-switch">
+                <input type="checkbox" id="print-opt-leveling">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
           </div>
         </div>
       </div>
@@ -582,7 +584,7 @@
   <div id="toast-area"></div>
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-  <script src="app.js?v=31"></script>
+  <script src="app.js?v=32"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});

@@ -1131,8 +1131,7 @@ let _printOptsName = null;
 function openPrintOpts(filePath, fileName, meta = {}) {
   _printOptsFile = filePath;
   _printOptsName = fileName;
-  const printerType = printers[_currentFilePrinterId]?.printer_type;
-  const isCC1 = printerType === "cc1";
+  const isCC2 = printers[_currentFilePrinterId]?.printer_type === "cc2";
 
   // Stats bar
   const statsEl = document.getElementById("print-opts-stats");
@@ -1159,12 +1158,14 @@ function openPrintOpts(filePath, fileName, meta = {}) {
   _setPrintPlate(0);
 
 
+  // Hide CC1-only options for CC2 (plate, timelapse, leveling are SDCP-only)
+  document.getElementById("print-opts-cc1-only").style.display = isCC2 ? "none" : "";
+
   // Load thumbnail (CC2 has no accessible thumbnail endpoint)
   const thumbImg  = document.getElementById("print-opts-thumb");
   const thumbWrap = document.getElementById("print-opts-thumb-wrap");
   thumbImg.style.display = "none";
   thumbImg.src = "";
-  const isCC2 = printers[_currentFilePrinterId]?.printer_type === "cc2";
   if (isCC2) {
     thumbWrap.style.display = "none";
   } else {
@@ -1197,6 +1198,9 @@ document.getElementById("print-plate-textured").addEventListener("click", () => 
 document.getElementById("print-plate-smooth").addEventListener("click",   () => _setPrintPlate(1));
 
 document.getElementById("btn-print-opts-cancel").addEventListener("click", closePrintOpts);
+document.getElementById("modal-print-opts").addEventListener("click", e => {
+  if (e.target === document.getElementById("modal-print-opts")) closePrintOpts();
+});
 
 document.getElementById("btn-print-opts-send").addEventListener("click", () => {
   if (!_printOptsFile) return;
@@ -1325,7 +1329,7 @@ const closeHistory = () => {
 
 btnHistory.addEventListener("click", openHistory);
 document.getElementById("btn-history-close").addEventListener("click", closeHistory);
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeHistory(); closeSpools(); closePrinters(); closeFileBrowser(); } });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeHistory(); closeSpools(); closePrinters(); closeFileBrowser(); closePrintOpts(); } });
 
 // ─── Spoolman / Spools ────────────────────────────────────────────────────────
 async function fetchSpools() {
