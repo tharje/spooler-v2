@@ -201,7 +201,9 @@ CC2 support would not have been possible without these projects:
 
 - [CentauriCarbon2](https://github.com/elegooofficial/CentauriCarbon2) by Elegoo (official) — firmware source; full MQTT method table (`method.h`), print state strings (`print_stats.cpp`), Canvas/AMS RFID filament struct (`canvas_dev.h`), sub_status codes, `gcode_move` speed/extrude factor fields
 - [centauri-sentinel](https://github.com/LegalMarc/centauri-sentinel) by LegalMarc — MQTT client details, topic structure, partial-status deep-merge, MJPEG grabber
-- [elegoo-homeassistant](https://github.com/danielcherubini/elegoo-homeassistant) by danielcherubini — CC2 MQTT transport, access-code config and sub_status constants
+- [elegoo-homeassistant](https://github.com/danielcherubini/elegoo-homeassistant) by danielcherubini — CC2 MQTT transport, access-code config, sub_status constants and method 1046 file metadata
+- [elegoo-link](https://github.com/ELEGOO-3D/elegoo-link) by ELEGOO-3D — CC2 MQTT method reference (method 1045 thumbnail, method 1046 file detail)
 - [sdcp-centauri-carbon](https://github.com/WalkerFrederick/sdcp-centauri-carbon) by WalkerFrederick — SDCP v3.0 protocol documentation (CC1)
+- centauri-carbon-dashboard (open source) — CC1 print speed control reference (SDCP Cmd 403 / PrintSpeedPct)
 - [Spoolman](https://github.com/Donkie/Spoolman) by Donkie — open-source filament spool manager
 - [SpoolmanDB](https://github.com/Donkie/SpoolmanDB) by Donkie — filament database for EAN lookup and catalogue import
