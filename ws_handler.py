@@ -12,6 +12,7 @@ from auth import AUTH_ENABLED, _parse_sid, _validate_session
 from discovery import discover_cc2_printers, discover_printers
 from persistence import save_printers, save_tray_map
 from printers import PRINTER_TYPES, make_printer
+from spoolman import spoolman_assign
 from printers.protocol import (
     CMD_CAMERA, CMD_DELETE_FILES, CMD_LIGHT, CMD_LIST_FILES,
     CMD_PAUSE, CMD_RESUME, CMD_STATUS, CMD_STOP,
@@ -210,6 +211,14 @@ async def handle_browser_message(ws, raw: str) -> None:
         p = state.printers.get(pid)
         if p:
             loop.run_in_executor(None, p._update_filament_density)
+            canvas_info = p.status.get("canvas_info")
+            if not canvas_info:
+                # No AMS/Canvas: single filament, assign this spool to the printer now
+                loop.run_in_executor(None, spoolman_assign, pid, spool_id)
+            else:
+                active_tray = canvas_info.get("active_tray_id", -1)
+                if active_tray >= 0 and active_tray == tray_id:
+                    loop.run_in_executor(None, spoolman_assign, pid, spool_id)
         return
 
     if not printer:
