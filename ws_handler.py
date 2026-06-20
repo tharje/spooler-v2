@@ -240,7 +240,10 @@ async def handle_browser_message(ws, raw: str) -> None:
         if ".." in filename.replace("\\", "/").split("/"):
             await ws.send(json.dumps({"type": "error", "message": "Invalid filename"}))
             return
-        ok = await printer.start_print_file(filename)
+        print_opts = msg.get("print_opts")
+        if not isinstance(print_opts, (dict, type(None))):
+            print_opts = None
+        ok = await printer.start_print_file(filename, print_opts=print_opts)
         if not ok:
             await ws.send(json.dumps({"type": "error", "message": "Could not start print"}))
         return

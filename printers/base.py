@@ -116,7 +116,7 @@ class PrinterConnection:
         from printers.protocol import CMD_LIST_FILES
         return await self.send_cmd(CMD_LIST_FILES, {"Url": "/", "IsDir": True})
 
-    async def start_print_file(self, filename: str) -> bool:
+    async def start_print_file(self, filename: str, print_opts: dict | None = None) -> bool:
         from printers.protocol import CMD_START
         return await self.send_cmd(CMD_START, {"Filename": filename})
 

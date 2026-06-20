@@ -4,6 +4,7 @@ CC1 printer connection via WebSocket (SDCP protocol).
 
 import asyncio
 import json
+import re
 
 import state
 from printers.base import PrinterConnection
@@ -19,6 +20,19 @@ except ImportError:
     from websockets.client import connect as ws_connect
 
 PRINTER_PORT = 3030
+
+_TIME_RE = re.compile(r'_(?:(\d+)h)?(\d+)m(?:(\d+)s)?\.[^.]+$')
+
+def _parse_print_time(filename: str) -> int | None:
+    """Extract estimated print time in seconds from Elegoo slicer filename."""
+    m = _TIME_RE.search(filename)
+    if m:
+        h    = int(m.group(1) or 0)
+        mins = int(m.group(2))
+        secs = int(m.group(3) or 0)
+        total = h * 3600 + mins * 60 + secs
+        return total if total > 0 else None
+    return None
 
 
 class CC1Connection(PrinterConnection):
@@ -70,7 +84,7 @@ class CC1Connection(PrinterConnection):
             if self.connected and self.status.get("AmsConnectStatus"):
                 await self.send_cmd(CMD_CANVAS, {})
 
-    async def start_print_file(self, filename: str) -> bool:
+    async def start_print_file(self, filename: str, print_opts: dict | None = None) -> bool:
         if filename.startswith("/usb/"):
             prefix, bare = "/usb", filename[5:]
         elif filename.startswith("/local/"):
@@ -78,13 +92,14 @@ class CC1Connection(PrinterConnection):
         else:
             prefix, bare = "/local", filename
         self._cached_filename = bare
-        print(f"[Printer {self.name}] CC1 start print: prefix={prefix!r} file={bare!r}")
+        opts = print_opts or {}
+        print(f"[Printer {self.name}] CC1 start print: prefix={prefix!r} file={bare!r} opts={opts}")
         return await self.send_cmd(CMD_START, {
             "Filename":           bare,
             "StartLayer":         0,
-            "Calibration_switch": 1,
-            "PrintPlatformType":  0,
-            "Tlp_Switch":         0,
+            "Calibration_switch": 1 if opts.get("leveling")     else 0,
+            "PrintPlatformType":  1 if opts.get("smooth_plate") else 0,
+            "Tlp_Switch":         1 if opts.get("timelapse")    else 0,
             "slot_map":           [],
             "path_prefix":        prefix,
         })
@@ -182,17 +197,26 @@ class CC1Connection(PrinterConnection):
             if file_list and all(f.get("type") == 0 for f in file_list):
                 await self.send_cmd(CMD_LIST_FILES, {"Url": "/local", "IsDir": True})
                 return
+            if state.DEBUG and file_list:
+                print(f"[CC1 file_list] first item keys: {list(file_list[0].keys())}")
+                print(f"[CC1 file_list] first item: {json.dumps(file_list[0])[:400]}")
             files = []
             for f in file_list:
                 if not isinstance(f, dict) or not f.get("name"):
                     continue
                 raw_name  = f["name"]
                 full_path = raw_name if raw_name.startswith("/") else f"/local/{raw_name}"
+                filament_mm = f.get("EstFilamentLength") or 0
+                bare_name   = full_path.rsplit("/", 1)[-1]
                 files.append({
-                    "name":   full_path.rsplit("/", 1)[-1],
-                    "path":   full_path,
-                    "size":   f.get("size", 0),
-                    "is_dir": f.get("type") == 0,
+                    "name":        bare_name,
+                    "path":        full_path,
+                    "size":        f.get("FileSize", 0),
+                    "is_dir":      f.get("type") == 0,
+                    "print_time":  _parse_print_time(bare_name),
+                    "layers":      f.get("TotalLayers"),
+                    "filament_mm": filament_mm if filament_mm else None,
+                    "filament_g":  None,
                 })
             await state.broadcast_to_browsers({
                 "type":       "file_list",

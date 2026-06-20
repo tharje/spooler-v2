@@ -210,14 +210,24 @@ class CC2Connection(PrinterConnection):
 
             if self._awaiting_file_list and isinstance(inner, dict) and "file_list" in inner:
                 self._awaiting_file_list = False
+                raw_list = inner.get("file_list") or []
+                if state.DEBUG and raw_list:
+                    print(f"[CC2 file_list] first item keys: {list(raw_list[0].keys())}")
+                    print(f"[CC2 file_list] first item: {json.dumps(raw_list[0])[:400]}")
+                from printers.cc1 import _parse_print_time
                 files = [
                     {
-                        "name":   f.get("filename", ""),
-                        "path":   f.get("filename", ""),
-                        "size":   f.get("size", 0),
-                        "is_dir": f.get("type") == "dir",
+                        "name":       f.get("filename", ""),
+                        "path":       f.get("filename", ""),
+                        "size":       f.get("size", 0),
+                        "is_dir":     f.get("type") == "dir",
+                        "print_time": f.get("print_time") or _parse_print_time(f.get("filename", "")),
+                        "layers":     f.get("layer"),
+                        "filament_g": f.get("total_filament_used"),
+                        "color_map":  f.get("color_map"),
+                        "printed":    f.get("total_print_times", 0),
                     }
-                    for f in (inner.get("file_list") or [])
+                    for f in raw_list
                     if isinstance(f, dict)
                 ]
                 await state.broadcast_to_browsers({
@@ -320,9 +330,18 @@ class CC2Connection(PrinterConnection):
                 "error": "File list request timed out.",
             })
 
-    async def start_print_file(self, filename: str) -> bool:
+    async def start_print_file(self, filename: str, print_opts: dict | None = None) -> bool:
         self._current_filename = filename
-        return await self.send_cmd(1020, {"filename": filename, "storage_media": "local"})
+        opts = print_opts or {}
+        return await self.send_cmd(1020, {
+            "filename":      filename,
+            "storage_media": "local",
+            "config": {
+                "delay_video":   bool(opts.get("timelapse")),
+                "bedlevel_force": bool(opts.get("leveling")),
+                "print_layout":  "B" if opts.get("smooth_plate") else "A",
+            },
+        })
 
     def _apply_cc2_status(self) -> None:
         s     = self._cc2_state

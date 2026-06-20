@@ -853,6 +853,73 @@ main {
 }
 .spool-printer-badge svg { width: 10px; height: 10px; flex-shrink: 0; }
 
+/* ─── CC1 Print options modal ─────────────────────────────────────────────── */
+.print-opts-thumb-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.print-opts-thumb {
+  max-width: 100%;
+  max-height: 180px;
+  border-radius: 8px;
+  background: var(--surface2);
+  object-fit: contain;
+}
+.print-opts-filename {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  word-break: break-all;
+  margin: 0;
+  line-height: 1.4;
+}
+.print-opts-stats {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  background: var(--surface2);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+.print-opts-stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.print-opts-stat svg { width: 15px; height: 15px; color: var(--accent); flex-shrink: 0; }
+.print-opts-group {
+  background: var(--surface2);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+.print-opts-group-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+.print-plate-row  { display: flex; gap: 8px; }
+.print-plate-btn  { flex: 1; font-size: 13px; padding: 8px 4px; }
+.print-opts-rows  { display: flex; flex-direction: column; gap: 0; }
+.print-opts-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--surface3, rgba(255,255,255,0.06));
+  font-size: 14px;
+}
+.print-opts-row:last-child { border-bottom: none; padding-bottom: 2px; }
+
 /* ─── Spool picker modal ──────────────────────────────────────────────────── */
 .modal-box-wide { width: min(500px, 92vw); }
 
