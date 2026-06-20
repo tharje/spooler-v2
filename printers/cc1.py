@@ -44,6 +44,7 @@ class CC1Connection(PrinterConnection):
         self._canvas_poll_task    = None
 
     async def connect(self) -> None:
+        self._prev_active_tray_id = -2
         url = f"ws://{self.ip}:{PRINTER_PORT}/websocket"
         try:
             print(f"[Printer {self.name}] Connecting to {url} …")

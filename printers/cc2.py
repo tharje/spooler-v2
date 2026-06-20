@@ -81,6 +81,7 @@ class CC2Connection(PrinterConnection):
         self._pending_meta_fut:  asyncio.Future | None = None
 
     async def connect(self) -> None:
+        self._prev_active_tray_id = -2
         if not AIOMQTT_AVAILABLE:
             print(f"[Printer {self.name}] aiomqtt not installed — CC2 unavailable")
             await self._broadcast_state()
