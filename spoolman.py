@@ -10,9 +10,16 @@ import urllib.request
 
 import os
 
+import state as _state
 from persistence import FILAMENT_DENSITY
 from push import load_notif_settings, send_push_all
 from state import broadcast_to_browsers
+
+
+def _printer_location(printer_id: str) -> str:
+    """Return the Spoolman location string for a printer — its name, not its UUID."""
+    p = _state.printers.get(printer_id)
+    return p.name if p else printer_id
 
 SPOOLMAN_URL    = os.getenv("SPOOLMAN_URL", "http://localhost:7912").rstrip("/")
 SPOOLMAN_DB_URL = "https://donkie.github.io/SpoolmanDB/filaments.json"
@@ -48,9 +55,10 @@ def get_spool_density(printer_id: str) -> float:
     Falls back to the PLA default if Spoolman is unreachable or no spool is assigned.
     Designed to run in a thread pool executor.
     """
+    loc = _printer_location(printer_id)
     try:
         base = get_spoolman_url()
-        url = f"{base}/api/v1/spool?location={urllib.parse.quote(printer_id)}"
+        url = f"{base}/api/v1/spool?location={urllib.parse.quote(loc)}"
         with urllib.request.urlopen(url, timeout=3) as resp:
             data = json.loads(resp.read())
         if data:
@@ -64,16 +72,17 @@ def get_spool_density(printer_id: str) -> float:
 
 def spoolman_set_location(spool_id: int, printer_id: str) -> None:
     """Set location on a single spool without touching any other spools."""
+    loc = _printer_location(printer_id)
     try:
         base = get_spoolman_url()
         req = urllib.request.Request(
             f"{base}/api/v1/spool/{spool_id}",
-            data=json.dumps({"location": printer_id}).encode(),
+            data=json.dumps({"location": loc}).encode(),
             headers={"Content-Type": "application/json"},
             method="PATCH",
         )
         urllib.request.urlopen(req, timeout=3).close()
-        print(f"[Spoolman] Spool {spool_id} location → {printer_id}")
+        print(f"[Spoolman] Spool {spool_id} location → {loc}")
     except Exception as e:
         print(f"[Spoolman] Set location skipped ({e})")
 
@@ -82,12 +91,13 @@ def spoolman_assign(printer_id: str, spool_id: int | None) -> None:
     """Assign a spool to a printer in Spoolman (blocking — run in executor).
 
     Clears the location on any spool currently assigned to this printer, then
-    sets location=printer_id on the new spool (if given).
+    sets location=printer_name on the new spool (if given).
     """
+    loc = _printer_location(printer_id)
     try:
         base = get_spoolman_url()
         # Find currently assigned spool and clear it
-        url = f"{base}/api/v1/spool?location={urllib.parse.quote(printer_id)}"
+        url = f"{base}/api/v1/spool?location={urllib.parse.quote(loc)}"
         with urllib.request.urlopen(url, timeout=3) as resp:
             current = json.loads(resp.read())
         for s in current:
@@ -103,12 +113,12 @@ def spoolman_assign(printer_id: str, spool_id: int | None) -> None:
         if spool_id is not None:
             req = urllib.request.Request(
                 f"{base}/api/v1/spool/{spool_id}",
-                data=json.dumps({"location": printer_id}).encode(),
+                data=json.dumps({"location": loc}).encode(),
                 headers={"Content-Type": "application/json"},
                 method="PATCH",
             )
             urllib.request.urlopen(req, timeout=3).close()
-            print(f"[Spoolman] Spool {spool_id} → {printer_id}")
+            print(f"[Spoolman] Spool {spool_id} → {loc}")
     except Exception as e:
         print(f"[Spoolman] Assign skipped ({e})")
 
@@ -175,9 +185,10 @@ def spoolman_deduct(printer_id: str, amount_g: float, loop: asyncio.AbstractEven
     Fallback for single-colour prints where no per-tray tracking is available.
     Runs in a thread-pool executor.
     """
+    loc = _printer_location(printer_id)
     try:
         base = get_spoolman_url()
-        url = f"{base}/api/v1/spool?location={urllib.parse.quote(printer_id)}"
+        url = f"{base}/api/v1/spool?location={urllib.parse.quote(loc)}"
         with urllib.request.urlopen(url, timeout=3) as resp:
             data = json.loads(resp.read())
         if not data:
