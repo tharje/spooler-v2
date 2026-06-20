@@ -97,21 +97,45 @@ def spoolman_assign(printer_id: str, spool_id: int | None) -> None:
         print(f"[Spoolman] Assign skipped ({e})")
 
 
-def spoolman_deduct(printer_id: str, amount_g: float, loop: asyncio.AbstractEventLoop) -> None:
-    """Deduct used filament from the spool assigned to this printer in Spoolman.
+def _notify_spool_level(
+    result: dict,
+    printer_id: str,
+    loop: asyncio.AbstractEventLoop,
+) -> None:
+    """Broadcast low/empty spool warnings from a thread-pool executor."""
+    remaining = result.get("remaining_weight", 0)
+    total     = result.get("initial_weight", 0)
+    name      = result.get("filament", {}).get("name") or f"Spool {result.get('id', '?')}"
 
-    Designed to run in a thread pool executor; `loop` must be the running event
-    loop so we can schedule the browser broadcast from this thread.
-    """
+    if remaining <= 0:
+        msg: dict | None = {"type": "spool_empty", "spool": result, "printer_id": printer_id}
+    elif total > 0 and (remaining / total) < 0.1:
+        msg = {"type": "spool_low", "spool": result, "printer_id": printer_id}
+    else:
+        msg = None
+    if msg:
+        asyncio.run_coroutine_threadsafe(broadcast_to_browsers(msg), loop)
+
+    notif = load_notif_settings()
+    spool_low_cfg = notif.get("spool_low", {})
+    if spool_low_cfg.get("enabled") and remaining > 0:
+        threshold = float(spool_low_cfg.get("threshold", 100))
+        if remaining <= threshold:
+            send_push_all(
+                f"Spool almost empty — {name}",
+                f"{round(remaining)}g remaining on {printer_id}.",
+            )
+
+
+def spoolman_deduct_spool(
+    spool_id: int,
+    amount_g: float,
+    printer_id: str,
+    loop: asyncio.AbstractEventLoop,
+) -> None:
+    """Deduct filament from a specific spool by ID. Runs in a thread-pool executor."""
     try:
         base = get_spoolman_url()
-        url = f"{base}/api/v1/spool?location={urllib.parse.quote(printer_id)}"
-        with urllib.request.urlopen(url, timeout=3) as resp:
-            data = json.loads(resp.read())
-        if not data:
-            return
-        spool = data[0]
-        spool_id = spool["id"]
         body = json.dumps({"use_weight": round(amount_g, 1)}).encode()
         req = urllib.request.Request(
             f"{base}/api/v1/spool/{spool_id}/use",
@@ -121,30 +145,28 @@ def spoolman_deduct(printer_id: str, amount_g: float, loop: asyncio.AbstractEven
         )
         with urllib.request.urlopen(req, timeout=3) as resp:
             result = json.loads(resp.read())
+        name = result.get("filament", {}).get("name") or f"Spool {spool_id}"
         remaining = result.get("remaining_weight", 0)
-        total     = result.get("initial_weight", 0)
-        name      = result.get("filament", {}).get("name") or f"Spool {spool_id}"
         print(f"[Spoolman] {amount_g}g deducted from '{name}' → {remaining}g left")
+        _notify_spool_level(result, printer_id, loop)
+    except Exception as e:
+        print(f"[Spoolman] Deduct skipped for spool {spool_id} ({e})")
 
-        if remaining <= 0:
-            msg: dict | None = {"type": "spool_empty", "spool": result, "printer_id": printer_id}
-        elif total > 0 and (remaining / total) < 0.1:
-            msg = {"type": "spool_low", "spool": result, "printer_id": printer_id}
-        else:
-            msg = None
 
-        if msg:
-            asyncio.run_coroutine_threadsafe(broadcast_to_browsers(msg), loop)
+def spoolman_deduct(printer_id: str, amount_g: float, loop: asyncio.AbstractEventLoop) -> None:
+    """Deduct filament from the spool assigned to this printer's location in Spoolman.
 
-        # Push notification for configurable low-spool threshold
-        notif = load_notif_settings()
-        spool_low_cfg = notif.get("spool_low", {})
-        if spool_low_cfg.get("enabled") and remaining > 0:
-            threshold = float(spool_low_cfg.get("threshold", 100))
-            if remaining <= threshold:
-                send_push_all(
-                    f"Spool almost empty — {name}",
-                    f"{round(remaining)}g remaining on {printer_id}.",
-                )
+    Fallback for single-colour prints where no per-tray tracking is available.
+    Runs in a thread-pool executor.
+    """
+    try:
+        base = get_spoolman_url()
+        url = f"{base}/api/v1/spool?location={urllib.parse.quote(printer_id)}"
+        with urllib.request.urlopen(url, timeout=3) as resp:
+            data = json.loads(resp.read())
+        if not data:
+            return
+        spool_id = data[0]["id"]
+        spoolman_deduct_spool(spool_id, amount_g, printer_id, loop)
     except Exception as e:
         print(f"[Spoolman] Deduct skipped ({e})")
