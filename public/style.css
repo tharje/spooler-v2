@@ -1137,7 +1137,8 @@ main {
 }
 
 .file-name {
-  max-width: 240px;
+  width: 100%;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1147,13 +1148,14 @@ main {
   color: var(--text-muted);
   font-size: 12px;
   white-space: nowrap;
-  width: 70px;
+  width: 64px;
 }
 
 .file-actions {
   text-align: right;
   white-space: nowrap;
-  width: 70px;
+  width: auto;
+  padding-left: 6px;
 }
 
 
