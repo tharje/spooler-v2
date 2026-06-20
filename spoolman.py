@@ -62,6 +62,22 @@ def get_spool_density(printer_id: str) -> float:
     return FILAMENT_DENSITY
 
 
+def spoolman_set_location(spool_id: int, printer_id: str) -> None:
+    """Set location on a single spool without touching any other spools."""
+    try:
+        base = get_spoolman_url()
+        req = urllib.request.Request(
+            f"{base}/api/v1/spool/{spool_id}",
+            data=json.dumps({"location": printer_id}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="PATCH",
+        )
+        urllib.request.urlopen(req, timeout=3).close()
+        print(f"[Spoolman] Spool {spool_id} location → {printer_id}")
+    except Exception as e:
+        print(f"[Spoolman] Set location skipped ({e})")
+
+
 def spoolman_assign(printer_id: str, spool_id: int | None) -> None:
     """Assign a spool to a printer in Spoolman (blocking — run in executor).
 
