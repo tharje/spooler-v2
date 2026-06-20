@@ -38,6 +38,15 @@ function spoolRemaining(s)  { return Math.round(s.remaining_weight ?? 0); }
 function spoolTotal(s)      { return Math.round(s.initial_weight ?? 1000); }
 function spoolPct(s)        { const t = spoolTotal(s); return t > 0 ? Math.round(spoolRemaining(s) / t * 100) : 0; }
 function spoolAssignedTo(s) { return s.location || null; }
+// Find a printer by its Spoolman location string (name or legacy ID/IP).
+function printerByLocation(loc) {
+  if (!loc) return null;
+  return printers[loc] || Object.values(printers).find(p => p.name === loc) || null;
+}
+// The location string to store in Spoolman for a given printer ID — the printer's name.
+function printerLocation(printerId) {
+  return printers[printerId]?.name || printerId;
+}
 
 let currentPickerPrinterId = null;
 let currentPickerTrayId    = null; // non-null → picker is in tray-link mode
@@ -1401,7 +1410,7 @@ function renderSpoolPanel() {
     const vendor     = s.filament?.vendor?.name || "";
     const colorName  = s.filament?.name || "";
     const assignedTo = spoolAssignedTo(s);
-    const printerName = assignedTo ? (printers[assignedTo]?.name || assignedTo) : null;
+    const printerName = assignedTo ? (printerByLocation(assignedTo)?.name || assignedTo) : null;
     const isEmpty    = remaining === 0;
     const isLow      = !isEmpty && total > 0 && pct < 10;
     const barColor   = isEmpty ? "var(--red)" : isLow ? "var(--yellow)" : null;
@@ -1466,7 +1475,8 @@ function renderPickerList(printerId) {
 
   function spoolRow(s, onClickFn, isSelected) {
     const loc          = spoolAssignedTo(s);
-    const otherPrinter = loc && loc !== printerId ? printers[loc] : null;
+    const locPrinter   = printerByLocation(loc);
+    const otherPrinter = loc && locPrinter?.id !== printerId ? locPrinter : null;
     const activePrinter = getSpoolActivePrinter(s.id);  // printer currently printing with this spool
     const inUse        = activePrinter != null;
     const pct          = spoolPct(s);
@@ -1520,9 +1530,10 @@ function renderPickerList(printerId) {
 }
 
 async function assignSpool(printerId, spoolId) {
+  const loc = printerLocation(printerId);
   try {
     // Unassign existing spool on this printer if it's different
-    const cur = spools.find(s => spoolAssignedTo(s) === printerId);
+    const cur = spools.find(s => printerByLocation(spoolAssignedTo(s))?.id === printerId);
     if (cur && cur.id !== spoolId) {
       await fetch(`${SPOOLMAN_URL}/spool/${cur.id}`, {
         method: "PATCH",
@@ -1534,7 +1545,7 @@ async function assignSpool(printerId, spoolId) {
       await fetch(`${SPOOLMAN_URL}/spool/${spoolId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ location: printerId }),
+        body: JSON.stringify({ location: loc }),
       });
     }
     document.getElementById("modal-spool-picker").classList.remove("open");
