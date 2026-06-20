@@ -12,7 +12,7 @@ from printers.protocol import (
     CMD_ATTRS, CMD_CAMERA, CMD_CANVAS, CMD_LIGHT, CMD_LIST_FILES,
     CMD_START, CMD_STATUS, decode_printinfo, make_msg,
 )
-from spoolman import spoolman_assign
+from spoolman import spoolman_assign, spoolman_set_location
 
 try:
     from websockets.asyncio.client import connect as ws_connect
@@ -58,6 +58,8 @@ class CC1Connection(PrinterConnection):
             await self.send_cmd(CMD_STATUS, {})
             await self.send_cmd(CMD_CAMERA, {"Enable": True})
             await self.send_cmd(CMD_CANVAS, {})
+            loop = asyncio.get_running_loop()
+            loop.run_in_executor(None, self._sync_spoolman_locations)
         except Exception as e:
             print(f"[Printer {self.name}] Connection failed: {e}")
             self.connected = False
@@ -120,6 +122,11 @@ class CC1Connection(PrinterConnection):
         except Exception as e:
             print(f"[Printer {self.name}] Send error: {e}")
             return False
+
+    def _sync_spoolman_locations(self) -> None:
+        for spool_id in (state.tray_map.get(self.id) or {}).values():
+            if spool_id is not None:
+                spoolman_set_location(spool_id, self.id)
 
     def _apply_canvas(self, ci: dict) -> None:
         """Store canvas_info in status and auto-assign spool on tray change."""
