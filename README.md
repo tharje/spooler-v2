@@ -29,7 +29,12 @@ Open **`http://<server-ip>:8080`** in your browser. On first visit you will be p
 - **Camera feed** – MJPEG stream from each printer (CC2), proxied through Spooler behind auth
 - **Temperature monitoring** – nozzle, bed and chamber with live target values
 - **Print progress** – layer count, percentage, elapsed and remaining time
-- **Filament tracking** – live mm/g per print and cumulative history log
+- **Print speed control** – adjust speed while printing or paused (CC1 and CC2)
+- **Print options** – preview thumbnail, build plate, time-lapse and bed levelling before starting a print
+- **File browser** – list, start and delete files stored on the printer
+- **Canvas / AMS multi-material** – shows filament slots; link each slot to a Spoolman spool for per-tray deduction
+- **Filament tracking** – live mm/g per print and cumulative history log; deducts from the correct spool on tray changes
+- **Web Push notifications** – print complete, layer checkpoint, nozzle still hot, nozzle overheat, spool low/empty
 - **Controls** – pause, resume, stop, light toggle
 - **Auto-discovery** – finds printers on the local network automatically
 - **Persistence** – printers, history and spool data saved between restarts
@@ -138,7 +143,8 @@ Printer configs are saved and reconnect automatically on restart.
 
 - Live filament usage (mm and grams) shown on each printer card while printing
 - All completed and cancelled prints are logged in the **History** panel
-- Assign a Spoolman spool to a printer — used grams are deducted automatically after each print
+- **Single-material printers** – assign a Spoolman spool to the printer; used grams are deducted automatically after each print
+- **Multi-material (Canvas/AMS)** – link each filament slot to a Spoolman spool; filament is tracked per tray and deducted from the correct spool when the active tray changes
 
 ---
 
@@ -150,6 +156,7 @@ Spooler integrates with **[Spoolman](https://github.com/Donkie/Spoolman)**, an o
 - Open **Spoolman UI** directly from the Spools panel
 - Add spools manually or scan an EAN barcode to auto-fill details
 - **Import Elegoo** imports all 97 ELEGOO filament types from SpoolmanDB in one click
+- Spool **location** in Spoolman is set automatically to the printer's name (e.g. `CC2`) whenever a spool is linked to a slot or the printer connects — no manual setup needed
 
 ---
 
