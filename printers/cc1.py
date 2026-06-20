@@ -47,7 +47,9 @@ class CC1Connection(PrinterConnection):
         url = f"ws://{self.ip}:{PRINTER_PORT}/websocket"
         try:
             print(f"[Printer {self.name}] Connecting to {url} …")
-            self.ws = await ws_connect(url, ping_interval=20, ping_timeout=20)
+            # Disable WS-level pings — CC1 firmware doesn't respond to them,
+            # which causes spurious disconnects. App-level keepalive handles this.
+            self.ws = await ws_connect(url, ping_interval=None)
             self.connected = True
             print(f"[Printer {self.name}] Connected!")
             await self._broadcast_state()
@@ -61,7 +63,7 @@ class CC1Connection(PrinterConnection):
             await self._broadcast_state()
             return
 
-        self._canvas_poll_task = asyncio.create_task(self._canvas_poller())
+        self._canvas_poll_task = asyncio.create_task(self._keepalive_poller())
         try:
             async for raw in self.ws:
                 await self._handle_message(raw)
@@ -78,10 +80,13 @@ class CC1Connection(PrinterConnection):
             self.ws = None
             await self._broadcast_state()
 
-    async def _canvas_poller(self) -> None:
+    async def _keepalive_poller(self) -> None:
         while True:
-            await asyncio.sleep(10)
-            if self.connected and self.status.get("AmsConnectStatus"):
+            await asyncio.sleep(20)
+            if not self.connected:
+                break
+            await self.send_cmd(CMD_STATUS, {})
+            if self.status.get("AmsConnectStatus"):
                 await self.send_cmd(CMD_CANVAS, {})
 
     async def start_print_file(self, filename: str, print_opts: dict | None = None) -> bool:

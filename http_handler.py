@@ -288,6 +288,8 @@ class SPHandler(SimpleHTTPRequestHandler):
             conn = http.client.HTTPConnection(p.ip, 80, timeout=5)
             conn.request("GET", path, headers={})
             resp = conn.getresponse()
+            if state.DEBUG:
+                print(f"[thumb] {bare_name!r} → {resp.status}")
             if resp.status == 200:
                 data = resp.read(2 * 1024 * 1024)
                 ct   = resp.getheader("Content-Type", "image/png")
@@ -298,11 +300,9 @@ class SPHandler(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(data)
                 return
-            if state.DEBUG:
-                print(f"[thumb] cc1 /thumbnail/ → {resp.status} for {bare_name!r}")
         except Exception as e:
             if state.DEBUG:
-                print(f"[thumb] cc1 /thumbnail/ exception: {e}")
+                print(f"[thumb] exception for {bare_name!r}: {e}")
         finally:
             if conn:
                 try:
@@ -508,8 +508,8 @@ class SPHandler(SimpleHTTPRequestHandler):
             return
 
         if self.path == "/api/push-public-key":
-            if not self._check_auth():
-                return
+            # Public key is safe to expose without auth — it's literally a public key.
+            # Service workers need it to renew expired subscriptions without a session cookie.
             if WEBPUSH_AVAILABLE and get_public_key():
                 self._json({"publicKey": get_public_key()})
             else:
