@@ -567,14 +567,19 @@ class SPHandler(SimpleHTTPRequestHandler):
             # Spoolman SPA sub-route (e.g. /spools after client-side navigation + refresh)
             self._proxy_spoolman_ui("GET", "/")
         else:
-            # Serve from ./public/ if the file exists; otherwise fall back to
-            # Spoolman (handles favicon.ico, kofi logo, and other Spoolman root assets
-            # that React renders without the /spoolman/ prefix).
-            local = Path(__file__).parent / "public" / self.path.lstrip("/").split("?")[0]
+            # Serve from ./public/ — root and directory paths serve index.html.
+            # Only proxy to Spoolman for paths that don't exist in public/ AND
+            # have a file extension (static assets Spoolman renders without /spoolman/).
+            path_part = self.path.lstrip("/").split("?")[0] or "index.html"
+            local = Path(__file__).parent / "public" / path_part
             if local.is_file():
                 super().do_GET()
-            else:
+            elif Path(path_part).suffix:
+                # Has an extension but not in public/ — likely a Spoolman asset
                 self._proxy_spoolman_ui("GET", self.path.split("?")[0])
+            else:
+                # No extension and not in public/ — serve Spooler index.html
+                super().do_GET()
 
     def do_PATCH(self):
         if not self._check_auth():
