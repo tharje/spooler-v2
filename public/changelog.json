@@ -17,7 +17,8 @@
       "Fixed camera placeholder not showing when printer is offline (contributed by snazy2000)",
       "Printers sub-page in Settings — add, edit and remove printers without leaving the settings modal",
       "Edit and delete buttons removed from printer cards (managed via Settings → Printers)",
-      "Print speed slider for CC1 — adjust speed factor while printing or paused (Cmd 403 / PrintSpeedPct)"
+      "Print speed slider for CC1 — adjust speed factor while printing or paused (Cmd 403 / PrintSpeedPct)",
+      "CC2 print options modal — thumbnail preview via MQTT (method 1045), print time, layers and filament from file metadata (method 1046), bed leveling and plate options now shown for CC2"
     ]
   },
   {

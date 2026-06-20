@@ -77,6 +77,8 @@ class CC2Connection(PrinterConnection):
         self._current_filename    = ""
         self._mqtt_serial         = _load_cached_serial(self.id)
         self._prev_active_tray_id = -2  # sentinel: not yet seen
+        self._pending_thumb_fut: asyncio.Future | None = None
+        self._pending_meta_fut:  asyncio.Future | None = None
 
     async def connect(self) -> None:
         if not AIOMQTT_AVAILABLE:
@@ -159,7 +161,7 @@ class CC2Connection(PrinterConnection):
         if cmd == CMD_LIGHT and data:
             light_on = data.get("LightStatus", {}).get("SecondLight", False)
             payload["params"] = {"power": 1 if light_on else 0}
-        elif method in (1020, 1031, 1044, 1047) and data:
+        elif method in (1020, 1031, 1044, 1045, 1046, 1047) and data:
             payload["params"] = data
         try:
             await self._mqtt_client.publish(topic, json.dumps(payload))
@@ -244,6 +246,19 @@ class CC2Connection(PrinterConnection):
                     await self._broadcast_state()
                 return
 
+            # Thumbnail response (method 1045)
+            if _method == 1045 and isinstance(inner, dict):
+                if self._pending_thumb_fut and not self._pending_thumb_fut.done():
+                    b64 = inner.get("thumbnail") or inner.get("data") or inner.get("image")
+                    self._pending_thumb_fut.set_result(b64 if isinstance(b64, str) else None)
+                return
+
+            # File metadata response (method 1046)
+            if _method == 1046 and isinstance(inner, dict):
+                if self._pending_meta_fut and not self._pending_meta_fut.done():
+                    self._pending_meta_fut.set_result(inner)
+                return
+
             source = inner if isinstance(inner, dict) else payload
             if state.DEBUG:
                 _method = payload.get("method")
@@ -320,6 +335,39 @@ class CC2Connection(PrinterConnection):
         else:
             asyncio.create_task(self._file_list_timeout())
         return ok
+
+    async def fetch_file_info(self, filename: str) -> None:
+        """Fetch thumbnail (1045) + metadata (1046) via MQTT and broadcast file_info."""
+        if not self._mqtt_registered:
+            return
+        loop = asyncio.get_running_loop()
+        self._pending_thumb_fut = loop.create_future()
+        self._pending_meta_fut  = loop.create_future()
+        await self.send_cmd(1045, {"storage_media": "local", "filename": filename})
+        await self.send_cmd(1046, {"storage_media": "local", "filename": filename})
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(self._pending_thumb_fut, self._pending_meta_fut,
+                               return_exceptions=True),
+                timeout=10,
+            )
+        except asyncio.TimeoutError:
+            results = [None, {}]
+        finally:
+            self._pending_thumb_fut = None
+            self._pending_meta_fut  = None
+
+        thumb_b64 = results[0] if isinstance(results[0], str) else None
+        meta      = results[1] if isinstance(results[1], dict) else {}
+        await state.broadcast_to_browsers({
+            "type":         "file_info",
+            "printer_id":   self.id,
+            "filename":     filename,
+            "thumbnail_b64": thumb_b64,
+            "print_time":   meta.get("print_time"),
+            "layers":       meta.get("layer"),
+            "filament_g":   meta.get("total_filament_used"),
+        })
 
     async def _file_list_timeout(self) -> None:
         await asyncio.sleep(10)

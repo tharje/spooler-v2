@@ -267,6 +267,12 @@ async def handle_browser_message(ws, raw: str) -> None:
             await printer.send_cmd(CMD_DELETE_FILES, {"FileList": [filename]})
         return
 
+    if action == "get_file_info":
+        filename = msg.get("filename", "").strip()
+        if filename and hasattr(printer, "fetch_file_info"):
+            asyncio.create_task(printer.fetch_file_info(filename))
+        return
+
     if action == "set_speed":
         speed = msg.get("speed")
         if isinstance(speed, (int, float)) and 10 <= int(speed) <= 200:

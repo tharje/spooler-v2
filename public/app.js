@@ -155,6 +155,9 @@ function handleMessage(msg) {
     case "file_list":
       if (msg.printer_id === _currentFilePrinterId) renderFileList(msg.files, msg.error);
       break;
+    case "file_info":
+      _applyFileInfo(msg);
+      break;
     case "tray_map":
       trayMap = msg.tray_map || {};
       Object.values(printers).forEach(p => renderPrinter(p));
@@ -1130,9 +1133,42 @@ function formatFileSize(bytes) {
 let _printOptsFile = null;
 let _printOptsName = null;
 
+let _printOptsFilename = null; // bare filename used as key for file_info matching
+
+function _applyFileInfo(msg) {
+  // Only update if the modal is still open for the same printer+file
+  if (!_printOptsFilename || msg.printer_id !== _currentFilePrinterId) return;
+  if (msg.filename !== _printOptsFilename) return;
+  const modal = document.getElementById("modal-print-opts");
+  if (!modal.classList.contains("open")) return;
+
+  // Thumbnail
+  if (msg.thumbnail_b64) {
+    const thumbImg  = document.getElementById("print-opts-thumb");
+    const thumbWrap = document.getElementById("print-opts-thumb-wrap");
+    thumbImg.src = `data:image/png;base64,${msg.thumbnail_b64}`;
+    thumbImg.style.display = "";
+    thumbWrap.style.display = "";
+  }
+
+  // Stats (fill in if present and currently showing --)
+  const statsEl = document.getElementById("print-opts-stats");
+  if (msg.print_time || msg.layers || msg.filament_g) {
+    statsEl.style.display = "";
+    if (msg.print_time)
+      document.getElementById("print-opts-stat-time-val").textContent = formatTimeLong(msg.print_time);
+    if (msg.filament_g != null)
+      document.getElementById("print-opts-stat-filament-val").textContent =
+        `${parseFloat(msg.filament_g).toFixed(2)}g`;
+    if (msg.layers != null)
+      document.getElementById("print-opts-stat-layers-val").textContent = msg.layers;
+  }
+}
+
 function openPrintOpts(filePath, fileName, meta = {}) {
   _printOptsFile = filePath;
   _printOptsName = fileName;
+  _printOptsFilename = fileName; // used for file_info matching
   const isCC2 = printers[_currentFilePrinterId]?.printer_type === "cc2";
 
   // Stats bar
@@ -1160,16 +1196,18 @@ function openPrintOpts(filePath, fileName, meta = {}) {
   _setPrintPlate(0);
 
 
-  // Hide CC1-only options for CC2 (plate, timelapse, leveling are SDCP-only)
-  document.getElementById("print-opts-cc1-only").style.display = isCC2 ? "none" : "";
+  // Both CC1 and CC2 support leveling/timelapse/plate (CC2 via config params)
+  document.getElementById("print-opts-cc1-only").style.display = "";
 
-  // Load thumbnail (CC2 has no accessible thumbnail endpoint)
+  // Load thumbnail
   const thumbImg  = document.getElementById("print-opts-thumb");
   const thumbWrap = document.getElementById("print-opts-thumb-wrap");
   thumbImg.style.display = "none";
   thumbImg.src = "";
   if (isCC2) {
+    // CC2: thumbnail arrives async via WS file_info message; request it now
     thumbWrap.style.display = "none";
+    send({ action: "get_file_info", printer_id: _currentFilePrinterId, filename: fileName });
   } else {
     const bare = fileName.endsWith(".png") ? fileName : fileName + ".png";
     thumbImg.onload  = () => { thumbImg.style.display = ""; };
@@ -1185,6 +1223,7 @@ function closePrintOpts() {
   document.getElementById("modal-print-opts").classList.remove("open");
   _printOptsFile = null;
   _printOptsName = null;
+  _printOptsFilename = null;
 }
 
 function _setPrintPlate(plateId) {
