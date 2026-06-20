@@ -370,6 +370,63 @@ class SPHandler(SimpleHTTPRequestHandler):
                 html = html.replace("src='/", "src='/spoolman/")
                 html = html.replace('href="/', 'href="/spoolman/')
                 html = html.replace("href='/", "href='/spoolman/")
+                # Injected before Spoolman's own scripts to fix proxied-subpath issues:
+                # 1. Strip /spoolman from URL on load so React Router sees / and matches.
+                # 2. Click-intercept on href="/" forces reload via /spoolman/ (Home fix).
+                # 3. Patch fetch/XHR so API/asset requests route via /spoolman/.
+                # 4. MutationObserver fixes dynamically-rendered <img> src attrs.
+                # 5. Unregister SW + clear its caches (wrong scope, bypasses our patches).
+                # Note: Spoolman's WebSocket live-push connections are not proxied —
+                # they will fail silently; all page data still loads via HTTP polling.
+                _patch = (
+                    "<script>(function(){"
+                    # Strip /spoolman prefix from URL before React Router initialises
+                    "if(window.location.pathname.startsWith('/spoolman')){"
+                    "history.replaceState(null,'',"
+                    "window.location.pathname.slice('/spoolman'.length)||'/');"
+                    "}"
+                    # Intercept Home link clicks — reload via /spoolman/ so our script
+                    # re-runs and React Router sees / correctly.
+                    "document.addEventListener('click',function(e){"
+                    "var el=e.target&&e.target.closest('a');"
+                    "if(el&&(el.getAttribute('href')==='/'||el.pathname==='/')&&"
+                    "el.origin===location.origin){"
+                    "e.preventDefault();e.stopPropagation();"
+                    "window.location.replace('/spoolman/');}},true);"
+                    # Rewrite helper for fetch/XHR/img
+                    "function _rw(u){return(typeof u==='string'&&u.startsWith('/')&&"
+                    "!u.startsWith('/spoolman')&&!u.startsWith('/api/')&&!u.startsWith('/ws'))"
+                    "?'/spoolman'+u:u;}"
+                    # Patch fetch
+                    "var _f=window.fetch;"
+                    "window.fetch=function(u,o){return _f.call(this,_rw(u),o);};"
+                    # Patch XHR
+                    "var _o=XMLHttpRequest.prototype.open;"
+                    "XMLHttpRequest.prototype.open=function(m,u){"
+                    "arguments[1]=_rw(u);return _o.apply(this,arguments);};"
+                    # MutationObserver for dynamically-rendered <img>/<link> elements
+                    "var _mo=new MutationObserver(function(ms){"
+                    "ms.forEach(function(m){m.addedNodes.forEach(function(n){"
+                    "if(n.nodeType!==1)return;"
+                    "var els=[n].concat(Array.from(n.querySelectorAll('img,link')));"
+                    "els.forEach(function(el){"
+                    "var s=el.getAttribute('src');if(s&&el.tagName==='IMG')el.src=_rw(s);"
+                    "var h=el.getAttribute('href');if(h&&el.tagName==='LINK')el.href=_rw(h);"
+                    "});});});});"
+                    "_mo.observe(document,{childList:true,subtree:true});"
+                    # Unregister SW and clear its caches so stale SW doesn't intercept
+                    "if('serviceWorker'in navigator){"
+                    "navigator.serviceWorker.getRegistrations&&"
+                    "navigator.serviceWorker.getRegistrations().then(function(rs){"
+                    "rs.forEach(function(r){r.unregister();});});"
+                    "'caches'in window&&caches.keys().then(function(ns){"
+                    "ns.forEach(function(n){caches.delete(n);});});"
+                    "navigator.serviceWorker.register=function(){"
+                    "return Promise.resolve({scope:'/'});};"
+                    "}"
+                    "})();</script>"
+                )
+                html = html.replace("</head>", _patch + "</head>", 1)
                 data = html.encode("utf-8")
                 ct = "text/html; charset=utf-8"
 
@@ -412,6 +469,21 @@ class SPHandler(SimpleHTTPRequestHandler):
             return
         if self.path in ("/manifest.json", "/icon.svg", "/sw.js", "/favicon.ico"):
             super().do_GET()
+            return
+        if self.path == "/config.js":
+            import os
+            ws_port  = int(os.getenv("WS_PORT",  "8765"))
+            wss_port = int(os.getenv("WSS_PORT", "8766"))
+            body = (
+                f"window.SPOOLER_WS_PORT  = {ws_port};\n"
+                f"window.SPOOLER_WSS_PORT = {wss_port};\n"
+            ).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/javascript")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(body)
             return
         # Spoolman UI proxy — must come before auth gate so the browser can
         # load assets without cookie (crossorigin script tags don't send cookies)
@@ -487,8 +559,22 @@ class SPHandler(SimpleHTTPRequestHandler):
             self._json({"brands": brands, "materials": materials})
         elif self.path.startswith("/api/spoolman"):
             self._proxy_spoolman("GET", self.path[len("/api/spoolman"):], None)
+        elif (
+            "text/html" in self.headers.get("Accept", "")
+            and self.path not in ("/", "")
+            and not Path(self.path.split("?")[0]).suffix
+        ):
+            # Spoolman SPA sub-route (e.g. /spools after client-side navigation + refresh)
+            self._proxy_spoolman_ui("GET", "/")
         else:
-            super().do_GET()
+            # Serve from ./public/ if the file exists; otherwise fall back to
+            # Spoolman (handles favicon.ico, kofi logo, and other Spoolman root assets
+            # that React renders without the /spoolman/ prefix).
+            local = Path(__file__).parent / "public" / self.path.lstrip("/").split("?")[0]
+            if local.is_file():
+                super().do_GET()
+            else:
+                self._proxy_spoolman_ui("GET", self.path.split("?")[0])
 
     def do_PATCH(self):
         if not self._check_auth():

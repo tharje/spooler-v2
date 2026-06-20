@@ -13,7 +13,7 @@ import state
 from persistence import FILAMENT_DENSITY, append_history, filament_mm_to_grams, save_printers
 from printers.protocol import decode_printinfo
 from push import load_notif_settings, send_push_all
-from spoolman import get_spool_density, spoolman_deduct
+from spoolman import get_spool_density, spoolman_deduct, spoolman_deduct_spool
 
 
 class PrinterConnection:
@@ -40,6 +40,9 @@ class PrinterConnection:
         self._task: asyncio.Task | None = None
         self._last_print_status = None
         self._print_start_time: float | None = None
+        self._spool_extrusion: dict  = {}   # spool_id -> mm used this print
+        self._extrusion_snapshot: float = 0.0  # TotalExtrusion at last tray swap
+        self._current_print_spool: int | None = None
         self._notif_state: dict = {
             "last_status":      None,
             "nozzle_idle_fired": False,
@@ -111,6 +114,33 @@ class PrinterConnection:
 
     def _update_filament_density(self) -> None:
         self.filament_density = get_spool_density(self.id)
+
+    def _on_tray_change(self, new_spool_id: int | None) -> None:
+        """Record + immediately deduct filament used by the outgoing spool.
+
+        Deducting at swap time (rather than waiting for print end) means partial
+        prints are correctly accounted for if the server restarts or the printer
+        disconnects mid-print.  Pass new_spool_id=None as a sentinel at print end
+        to flush the last spool's usage.
+        """
+        current_mm = float(self._decoded_printinfo().get("TotalExtrusion", 0) or 0)
+        delta = current_mm - self._extrusion_snapshot
+        if self._current_print_spool is not None and delta > 0:
+            self._spool_extrusion[self._current_print_spool] = (
+                self._spool_extrusion.get(self._current_print_spool, 0) + delta
+            )
+            g = filament_mm_to_grams(delta, self.filament_density)
+            if g > 0:
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.run_in_executor(
+                        None, spoolman_deduct_spool,
+                        self._current_print_spool, g, self.id, loop,
+                    )
+                except RuntimeError:
+                    pass
+        self._extrusion_snapshot = current_mm
+        self._current_print_spool = new_spool_id
 
     async def request_file_list(self) -> bool:
         from printers.protocol import CMD_LIST_FILES
@@ -194,6 +224,15 @@ class PrinterConnection:
 
         if cur_status in ACTIVE and self._last_print_status not in ACTIVE:
             self._print_start_time = time.time()
+            # Initialise per-spool tracking for this print
+            self._spool_extrusion = {}
+            self._extrusion_snapshot = 0.0
+            canvas = self.status.get("canvas_info", {})
+            active_tray = canvas.get("active_tray_id", -1)
+            self._current_print_spool = (
+                (state.tray_map.get(self.id) or {}).get(str(active_tray))
+                if active_tray >= 0 else None
+            )
 
         if cur_status in (9, 8, 14, 0) and self._last_print_status in PRINTING | {5, 6}:
             filament_mm = pi.get("TotalExtrusion", 0) or 0
@@ -221,12 +260,17 @@ class PrinterConnection:
                       f" (density {density} g/cm³)")
                 await state.broadcast_to_browsers({"type": "history_entry", "entry": entry})
                 if filament_mm > 0:
-                    loop.run_in_executor(
-                        None,
-                        spoolman_deduct,
-                        self.id,
-                        filament_g,
-                        loop,
-                    )
+                    # Flush + deduct the last active spool immediately
+                    self._on_tray_change(None)
+                    if self._spool_extrusion:
+                        # Log per-spool breakdown (deduction already fired in _on_tray_change)
+                        for spool_id, mm in self._spool_extrusion.items():
+                            g = filament_mm_to_grams(mm, density)
+                            print(f"[History] → spool {spool_id}: {mm:.0f}mm / {g}g")
+                    else:
+                        # No per-tray mapping: fall back to printer-location lookup
+                        loop.run_in_executor(
+                            None, spoolman_deduct, self.id, filament_g, loop,
+                        )
 
         self._last_print_status = cur_status

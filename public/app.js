@@ -2,8 +2,8 @@
 "use strict";
 
 const WS_URL  = location.protocol === "https:"
-  ? `wss://${location.hostname}:8766`
-  : `ws://${location.hostname}:8765`;
+  ? `wss://${location.hostname}:${window.SPOOLER_WSS_PORT ?? 8766}`
+  : `ws://${location.hostname}:${window.SPOOLER_WS_PORT ?? 8765}`;
 const SPOOLMAN_URL = "/api/spoolman/api/v1";
 const RECONNECT_DELAY = 3000;
 
