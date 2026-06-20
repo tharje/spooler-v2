@@ -211,14 +211,7 @@ async def handle_browser_message(ws, raw: str) -> None:
         p = state.printers.get(pid)
         if p:
             loop.run_in_executor(None, p._update_filament_density)
-            canvas_info = p.status.get("canvas_info")
-            if not canvas_info:
-                # No AMS/Canvas: single filament, assign this spool to the printer now
-                loop.run_in_executor(None, spoolman_assign, pid, spool_id)
-            else:
-                active_tray = canvas_info.get("active_tray_id", -1)
-                if active_tray >= 0 and active_tray == tray_id:
-                    loop.run_in_executor(None, spoolman_assign, pid, spool_id)
+            loop.run_in_executor(None, spoolman_assign, pid, spool_id)
         return
 
     if not printer:
