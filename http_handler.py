@@ -436,8 +436,8 @@ class SPHandler(SimpleHTTPRequestHandler):
             return
 
         if self.path == "/api/push-public-key":
-            if not self._check_auth():
-                return
+            # Public key is safe to expose without auth — it's literally a public key.
+            # Service workers need it to renew expired subscriptions without a session cookie.
             if WEBPUSH_AVAILABLE and get_public_key():
                 self._json({"publicKey": get_public_key()})
             else:

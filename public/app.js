@@ -1914,3 +1914,18 @@ fetch("/api/auth-status")
   .catch(() => {});
 loadChangelog();
 connect();
+
+// On startup: if notifications are enabled but the subscription was cleared by the
+// browser (e.g. after cache purge), silently re-subscribe so notifications keep working.
+(async () => {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+  try {
+    const resp = await fetch("/api/notification-settings");
+    if (!resp.ok) return;
+    const s = await resp.json();
+    if (!s || !Object.values(s).some(v => v?.enabled)) return;
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (!sub) await _subscribePush();
+  } catch (_) {}
+})();
