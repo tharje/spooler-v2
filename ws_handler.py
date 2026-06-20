@@ -272,6 +272,8 @@ async def handle_browser_message(ws, raw: str) -> None:
         if isinstance(speed, (int, float)) and 10 <= int(speed) <= 200:
             if printer.printer_type == "cc2":
                 await printer.send_cmd(1031, {"speed": int(speed)})
+            else:
+                await printer.send_cmd(CMD_LIGHT, {"PrintSpeedPct": int(speed)})
         return
 
     if action in cmd_map:

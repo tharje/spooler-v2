@@ -288,6 +288,8 @@ class SPHandler(SimpleHTTPRequestHandler):
             conn = http.client.HTTPConnection(p.ip, 80, timeout=5)
             conn.request("GET", path, headers={})
             resp = conn.getresponse()
+            if state.DEBUG:
+                print(f"[thumb] {bare_name!r} → {resp.status}")
             if resp.status == 200:
                 data = resp.read(2 * 1024 * 1024)
                 ct   = resp.getheader("Content-Type", "image/png")
@@ -298,11 +300,9 @@ class SPHandler(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(data)
                 return
-            if state.DEBUG:
-                print(f"[thumb] cc1 /thumbnail/ → {resp.status} for {bare_name!r}")
         except Exception as e:
             if state.DEBUG:
-                print(f"[thumb] cc1 /thumbnail/ exception: {e}")
+                print(f"[thumb] exception for {bare_name!r}: {e}")
         finally:
             if conn:
                 try:

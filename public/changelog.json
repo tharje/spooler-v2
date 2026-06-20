@@ -16,7 +16,8 @@
       "CC1 file list now shows estimated print time, layer count and filament usage (contributed by snazy2000)",
       "Fixed camera placeholder not showing when printer is offline (contributed by snazy2000)",
       "Printers sub-page in Settings — add, edit and remove printers without leaving the settings modal",
-      "Edit and delete buttons removed from printer cards (managed via Settings → Printers)"
+      "Edit and delete buttons removed from printer cards (managed via Settings → Printers)",
+      "Print speed slider for CC1 — adjust speed factor while printing or paused (Cmd 403 / PrintSpeedPct)"
     ]
   },
   {
