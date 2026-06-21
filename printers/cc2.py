@@ -4,6 +4,7 @@ CC2 printer connection via MQTT (Klipper-based firmware).
 
 import asyncio
 import json
+import math
 import secrets
 import time
 import uuid
@@ -79,6 +80,10 @@ class CC2Connection(PrinterConnection):
         self._prev_active_tray_id = -2  # sentinel: not yet seen
         self._pending_thumb_fut: asyncio.Future | None = None
         self._pending_meta_fut:  asyncio.Future | None = None
+        self._expected_filament_g    = 0.0  # from method 1046 at print start
+        self._expected_print_time_s  = 0    # from method 1046 at print start
+        self._last_active_filament_mm = 0.0 # snapshot for cancelled prints
+        self._meta_fetch_filename    = ""   # avoid duplicate 1046 fetches
 
     async def connect(self) -> None:
         self._prev_active_tray_id = -2
@@ -260,6 +265,16 @@ class CC2Connection(PrinterConnection):
             if _method == 1046 and isinstance(inner, dict):
                 if self._pending_meta_fut and not self._pending_meta_fut.done():
                     self._pending_meta_fut.set_result(inner)
+                # Always store expected filament + duration for live tracking
+                fila_g = inner.get("total_filament_used")
+                if fila_g is not None and float(fila_g or 0) > 0:
+                    self._expected_filament_g = float(fila_g)
+                pt = inner.get("print_time")
+                if pt is not None and int(pt or 0) > 0:
+                    self._expected_print_time_s = int(pt)
+                if self._expected_filament_g or self._expected_print_time_s:
+                    print(f"[Printer {self.name}] File metadata: "
+                          f"{self._expected_filament_g}g / {self._expected_print_time_s}s")
                 return
 
             source = inner if isinstance(inner, dict) else payload
@@ -450,26 +465,58 @@ class CC2Connection(PrinterConnection):
             print_duration = 0
             remaining      = 0
 
+        # CC2 doesn't report remaining_time_sec — estimate from file's expected duration
+        if remaining == 0 and state_str == "printing" and self._expected_print_time_s > 0:
+            remaining = max(0, self._expected_print_time_s - print_duration)
+
         total    = print_duration + remaining
         progress = min(100, round(print_duration / total * 100)) if total > 0 else 0
 
-        if state_str == "printing" and self._prev_state_str not in ("printing", "paused"):
-            self._filament_mm_max  = 0.0
-            self._extruder_offset  = 0.0
-            self._last_extruder    = 0.0
+        new_print = state_str == "printing" and self._prev_state_str not in ("printing", "paused")
+        if new_print:
+            self._filament_mm_max        = 0.0
+            self._extruder_offset        = 0.0
+            self._last_extruder          = 0.0
+            self._expected_filament_g    = 0.0
+            self._expected_print_time_s  = 0
+            self._last_active_filament_mm = 0.0
+            fname = self._current_filename
+            if fname and fname != self._meta_fetch_filename:
+                self._meta_fetch_filename = fname
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(
+                        self.send_cmd(1046, {"storage_media": "local", "filename": fname})
+                    )
+                except RuntimeError:
+                    pass
+
         if state_str:
             self._prev_state_str = state_str
 
-        filament_from_push = ps.get("filament_used") or 0
-        if filament_from_push > self._filament_mm_max:
-            self._filament_mm_max = filament_from_push
-
-        raw_ext = gm.get("extruder") or 0
-        if raw_ext < self._last_extruder * 0.5 and self._last_extruder > 1.0:
-            self._extruder_offset += self._last_extruder
-        self._last_extruder = raw_ext
-
-        filament_mm = max(self._filament_mm_max, self._extruder_offset + raw_ext)
+        # CC2 MQTT never sends filament_used or reliable gcode_move.extruder.
+        # Use time-progress × expected grams (from method 1046) instead.
+        if self._expected_filament_g > 0:
+            density = self.filament_density or 1.24
+            expected_mm = self._expected_filament_g * 10.0 / (math.pi * 0.0875 ** 2 * density)
+            just_finished = state_str in ("complete", "standby") and self._prev_state_str in ("printing", "paused")
+            if state_str == "printing" and (print_duration + remaining) > 0:
+                filament_mm = print_duration / (print_duration + remaining) * expected_mm
+                self._last_active_filament_mm = filament_mm
+            elif just_finished:
+                filament_mm = expected_mm
+            else:
+                filament_mm = self._last_active_filament_mm
+        else:
+            # Fallback: legacy live tracking (usually 0 for CC2 but kept for safety)
+            filament_from_push = ps.get("filament_used") or 0
+            if filament_from_push > self._filament_mm_max:
+                self._filament_mm_max = filament_from_push
+            raw_ext = gm.get("extruder") or 0
+            if raw_ext < self._last_extruder * 0.5 and self._last_extruder > 1.0:
+                self._extruder_offset += self._last_extruder
+            self._last_extruder = raw_ext
+            filament_mm = max(self._filament_mm_max, self._extruder_offset + raw_ext)
 
         led    = s.get("led", {})
         led_on = 1 if (led.get("status", 0) or 0) > 0 else 0
