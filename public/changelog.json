@@ -9,7 +9,11 @@
       "CC2 print options modal — print time, layer count and filament weight from MQTT method 1046; bed leveling, timelapse and plate options now shown for CC2 (protocol reference: danielcherubini/elegoo-homeassistant, ELEGOO-3D/elegoo-link)",
       "Configurable WebSocket ports via WS_PORT/WSS_PORT environment variables (contributed by snazy2000)",
       "Per-spool filament deduction for multi-material prints — filament tracked per tray and deducted from the correct spool on tray change (contributed by snazy2000)",
-      "Spoolman UI proxy improvements — SPA sub-route refresh support and better asset routing (contributed by snazy2000)"
+      "Spoolman UI proxy improvements — SPA sub-route refresh support and better asset routing (contributed by snazy2000)",
+      "PROXY_SPOOLMAN env option — set to false to redirect the browser directly to Spoolman instead of proxying through Spooler, for better WebSocket support (contributed by snazy2000)",
+      "Spoolman location set to printer name automatically — spool location in Spoolman is updated to the printer's display name (e.g. 'CC2') on connect and on tray link, no manual setup needed",
+      "Canvas/AMS spools re-synced to Spoolman on every printer connect — location survives Spooler restarts without relinking",
+      "Fixed spool assign button hidden on CC1 without AMS — empty canvas response no longer suppresses the assign UI"
     ]
   },
   {
