@@ -34,7 +34,7 @@ Open **`http://<server-ip>:8080`** in your browser. On first visit you will be p
 - **File browser** – list, start and delete files stored on the printer
 - **Canvas / AMS multi-material** – shows filament slots; link each slot to a Spoolman spool for per-tray deduction
 - **Filament tracking** – live mm/g per print and cumulative history log; deducts from the correct spool on tray changes
-- **Web Push notifications** – print complete, layer checkpoint, nozzle still hot, nozzle overheat, spool low/empty
+- **Web Push notifications** – print complete, layer checkpoint, nozzle still hot, nozzle overheat, spool low/empty *(still in testing)*
 - **Controls** – pause, resume, stop, light toggle
 - **Auto-discovery** – finds printers on the local network automatically
 - **Persistence** – printers, history and spool data saved between restarts
