@@ -40,7 +40,6 @@ Open **`http://<server-ip>:8080`** in your browser. On first visit you will be p
 - **Persistence** – printers, history and spool data saved between restarts
 - **Authentication** – password-protected login; first-time setup via the web UI, no terminal needed
 - **Spoolman integration** – filament spool inventory with auto-deduction after each print
-- **EAN barcode lookup** – scan a spool to auto-fill brand, material, colour and weight
 - **Filament catalogue import** – one-click import of all ELEGOO filaments from SpoolmanDB
 - **PWA** – installable as a home screen app on Android and iOS
 - **HTTPS** – self-signed cert on port 8443; works with Tailscale serve out of the box
@@ -154,7 +153,7 @@ Spooler integrates with **[Spoolman](https://github.com/Donkie/Spoolman)**, an o
 
 - Runs on **port 7912** alongside Spooler (started automatically by Docker Compose)
 - Open **Spoolman UI** directly from the Spools panel
-- Add spools manually or scan an EAN barcode to auto-fill details
+- Add spools manually
 - **Import Elegoo** imports all 97 ELEGOO filament types from SpoolmanDB in one click
 - Spool **location** in Spoolman is set automatically to the printer's name (e.g. `CC2`) whenever a spool is linked to a slot or the printer connects — no manual setup needed
 
@@ -208,4 +207,4 @@ CC2 support would not have been possible without these projects:
 - [sdcp-centauri-carbon](https://github.com/WalkerFrederick/sdcp-centauri-carbon) by WalkerFrederick — SDCP v3.0 protocol documentation (CC1)
 - centauri-carbon-dashboard (open source) — CC1 print speed control reference (SDCP Cmd 403 / PrintSpeedPct)
 - [Spoolman](https://github.com/Donkie/Spoolman) by Donkie — open-source filament spool manager
-- [SpoolmanDB](https://github.com/Donkie/SpoolmanDB) by Donkie — filament database for EAN lookup and catalogue import
+- [SpoolmanDB](https://github.com/Donkie/SpoolmanDB) by Donkie — filament database for catalogue import
