@@ -579,12 +579,14 @@ class SPHandler(SimpleHTTPRequestHandler):
             # Spoolman SPA sub-route (e.g. /spools after client-side navigation + refresh)
             self._proxy_spoolman_ui("GET", "/")
         else:
-            local_rel = self.path.lstrip("/").split("?")[0]
-            local = Path(__file__).parent / "public" / local_rel
-            if not local_rel or local.is_file():
+            # Root/directory paths fall through to index.html via super().
+            # Static assets not in public/ are proxied to Spoolman when enabled
+            # (handles favicon, kofi logo, etc. rendered without /spoolman/ prefix).
+            path_part = self.path.lstrip("/").split("?")[0] or "index.html"
+            local = Path(__file__).parent / "public" / path_part
+            if local.is_file():
                 super().do_GET()
-            elif PROXY_SPOOLMAN:
-                # Proxy Spoolman root assets (favicon, kofi logo, etc.) when proxying
+            elif PROXY_SPOOLMAN and Path(path_part).suffix:
                 self._proxy_spoolman_ui("GET", self.path.split("?")[0])
             else:
                 super().do_GET()

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import state
 from printers.base import PrinterConnection
-from spoolman import spoolman_assign
+from spoolman import spoolman_assign, spoolman_set_location
 from printers.protocol import (
     CMD_LIGHT, CMD_PAUSE, CMD_RESUME, CMD_STOP,
     deep_merge,
@@ -81,6 +81,7 @@ class CC2Connection(PrinterConnection):
         self._pending_meta_fut:  asyncio.Future | None = None
 
     async def connect(self) -> None:
+        self._prev_active_tray_id = -2
         if not AIOMQTT_AVAILABLE:
             print(f"[Printer {self.name}] aiomqtt not installed — CC2 unavailable")
             await self._broadcast_state()
@@ -196,6 +197,8 @@ class CC2Connection(PrinterConnection):
                     await self.send_cmd(1042)  # camera URL
                     await self.send_cmd(2005)  # canvas channel info
                     await self.send_cmd(1056)  # extruder filament info
+                    loop = asyncio.get_running_loop()
+                    loop.run_in_executor(None, self._sync_spoolman_locations)
                 else:
                     print(f"[Printer {self.name}] CC2 registration failed: {p}")
             except Exception:
@@ -369,6 +372,12 @@ class CC2Connection(PrinterConnection):
             "filament_g":   meta.get("total_filament_used"),
         })
 
+    def _sync_spoolman_locations(self) -> None:
+        """On connect, push all tray-linked spool locations to Spoolman."""
+        for spool_id in (state.tray_map.get(self.id) or {}).values():
+            if spool_id is not None:
+                spoolman_set_location(spool_id, self.id)
+
     async def _file_list_timeout(self) -> None:
         await asyncio.sleep(10)
         if self._awaiting_file_list:
@@ -498,7 +507,8 @@ class CC2Connection(PrinterConnection):
                 self._prev_active_tray_id = active_tray
                 spool_id = (state.tray_map.get(self.id) or {}).get(str(active_tray)) if active_tray >= 0 else None
                 loop = asyncio.get_running_loop()
-                loop.run_in_executor(None, spoolman_assign, self.id, spool_id)
+                if active_tray >= 0:
+                    loop.run_in_executor(None, spoolman_assign, self.id, spool_id)
                 loop.run_in_executor(None, self._update_filament_density)
                 self._on_tray_change(spool_id)
                 print(f"[Printer {self.name}] Active tray changed → {active_tray}, spool {spool_id}")

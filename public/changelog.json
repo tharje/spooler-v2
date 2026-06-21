@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.2.2",
+    "date": "2026-06-20",
+    "changes": [
+      "Print speed slider for CC1 — adjust speed while printing or paused via SDCP Cmd 403 / PrintSpeedPct (protocol reference: centauri-carbon-dashboard open source project)",
+      "CC1 connection stability — disabled WebSocket-level pings (firmware ignores them causing spurious disconnects), replaced with 20-second CMD_STATUS keepalive",
+      "Push notification auto-renewal — pushsubscriptionchange service worker handler, startup subscription check, and VAPID public key no longer requires auth so renewals work without a session cookie",
+      "CC2 print options modal — print time, layer count and filament weight from MQTT method 1046; bed leveling, timelapse and plate options now shown for CC2 (protocol reference: danielcherubini/elegoo-homeassistant, ELEGOO-3D/elegoo-link)",
+      "Configurable WebSocket ports via WS_PORT/WSS_PORT environment variables (contributed by snazy2000)",
+      "Per-spool filament deduction for multi-material prints — filament tracked per tray and deducted from the correct spool on tray change (contributed by snazy2000)",
+      "Spoolman UI proxy improvements — SPA sub-route refresh support and better asset routing (contributed by snazy2000)"
+    ]
+  },
+  {
     "version": "2.2.1",
     "date": "2026-06-19",
     "changes": [

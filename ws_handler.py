@@ -12,6 +12,7 @@ from auth import AUTH_ENABLED, _parse_sid, _validate_session
 from discovery import discover_cc2_printers, discover_printers
 from persistence import save_printers, save_tray_map
 from printers import PRINTER_TYPES, make_printer
+from spoolman import spoolman_assign, spoolman_set_location
 from printers.protocol import (
     CMD_CAMERA, CMD_DELETE_FILES, CMD_LIGHT, CMD_LIST_FILES,
     CMD_PAUSE, CMD_RESUME, CMD_STATUS, CMD_STOP,
@@ -210,6 +211,8 @@ async def handle_browser_message(ws, raw: str) -> None:
         p = state.printers.get(pid)
         if p:
             loop.run_in_executor(None, p._update_filament_density)
+            if spool_id is not None:
+                loop.run_in_executor(None, spoolman_set_location, spool_id, pid)
         return
 
     if not printer:

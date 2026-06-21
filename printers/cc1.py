@@ -12,7 +12,7 @@ from printers.protocol import (
     CMD_ATTRS, CMD_CAMERA, CMD_CANVAS, CMD_LIGHT, CMD_LIST_FILES,
     CMD_START, CMD_STATUS, decode_printinfo, make_msg,
 )
-from spoolman import spoolman_assign
+from spoolman import spoolman_assign, spoolman_set_location
 
 try:
     from websockets.asyncio.client import connect as ws_connect
@@ -44,6 +44,7 @@ class CC1Connection(PrinterConnection):
         self._canvas_poll_task    = None
 
     async def connect(self) -> None:
+        self._prev_active_tray_id = -2
         url = f"ws://{self.ip}:{PRINTER_PORT}/websocket"
         try:
             print(f"[Printer {self.name}] Connecting to {url} …")
@@ -57,6 +58,8 @@ class CC1Connection(PrinterConnection):
             await self.send_cmd(CMD_STATUS, {})
             await self.send_cmd(CMD_CAMERA, {"Enable": True})
             await self.send_cmd(CMD_CANVAS, {})
+            loop = asyncio.get_running_loop()
+            loop.run_in_executor(None, self._sync_spoolman_locations)
         except Exception as e:
             print(f"[Printer {self.name}] Connection failed: {e}")
             self.connected = False
@@ -120,6 +123,11 @@ class CC1Connection(PrinterConnection):
             print(f"[Printer {self.name}] Send error: {e}")
             return False
 
+    def _sync_spoolman_locations(self) -> None:
+        for spool_id in (state.tray_map.get(self.id) or {}).values():
+            if spool_id is not None:
+                spoolman_set_location(spool_id, self.id)
+
     def _apply_canvas(self, ci: dict) -> None:
         """Store canvas_info in status and auto-assign spool on tray change."""
         self.status["canvas_info"] = ci
@@ -128,7 +136,8 @@ class CC1Connection(PrinterConnection):
             self._prev_active_tray_id = active_tray
             spool_id = (state.tray_map.get(self.id) or {}).get(str(active_tray)) if active_tray >= 0 else None
             loop = asyncio.get_running_loop()
-            loop.run_in_executor(None, spoolman_assign, self.id, spool_id)
+            if active_tray >= 0:
+                loop.run_in_executor(None, spoolman_assign, self.id, spool_id)
             self._on_tray_change(spool_id)
             print(f"[Printer {self.name}] Active tray changed → {active_tray}, spool {spool_id}")
 
@@ -190,7 +199,7 @@ class CC1Connection(PrinterConnection):
                       or payload.get("AmsInfo"))
                 if ci is None and "canvas_list" in payload:
                     ci = payload  # flat — the payload IS the canvas_info
-                if isinstance(ci, dict):
+                if isinstance(ci, dict) and ci.get("canvas_list"):
                     self._apply_canvas(ci)
                     if state.DEBUG:
                         print(f"[Printer {self.name}] Canvas: {len(ci.get('canvas_list', []))} canvas(es), "
