@@ -16,7 +16,9 @@
       "Fixed spool assign button hidden on CC1 without AMS — empty canvas response no longer suppresses the assign UI",
       "Canvas AMS slots always on one line — all 4 slots share the row width equally on mobile",
       "File browser redesigned — filename on its own line, Print and Delete buttons always visible without horizontal scrolling",
-      "Themed scrollbar styling — replaces white OS default scrollbar across all panels"
+      "Themed scrollbar styling — replaces white OS default scrollbar across all panels",
+      "Fixed CC2 filament tracking — fetches expected grams from file metadata at print start; live display tracks time-progress, history deducts the correct amount",
+      "Fixed CC2 progress bar stuck at 100% and missing remaining time — estimated from file's expected print duration since CC2 does not report remaining time via MQTT"
     ]
   },
   {
