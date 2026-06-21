@@ -199,7 +199,7 @@ class CC1Connection(PrinterConnection):
                       or payload.get("AmsInfo"))
                 if ci is None and "canvas_list" in payload:
                     ci = payload  # flat — the payload IS the canvas_info
-                if isinstance(ci, dict):
+                if isinstance(ci, dict) and ci.get("canvas_list"):
                     self._apply_canvas(ci)
                     if state.DEBUG:
                         print(f"[Printer {self.name}] Canvas: {len(ci.get('canvas_list', []))} canvas(es), "
