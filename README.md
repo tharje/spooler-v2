@@ -158,6 +158,8 @@ Spooler integrates with **[Spoolman](https://github.com/Donkie/Spoolman)**, an o
 - **Import Elegoo** imports all 97 ELEGOO filament types from SpoolmanDB in one click
 - Spool **location** in Spoolman is set automatically to the printer's name (e.g. `CC2`) whenever a spool is linked to a slot or the printer connects — no manual setup needed
 
+By default, Spooler proxies the Spoolman UI through itself (so one port covers everything). To redirect the browser directly to Spoolman instead — useful if you run a separate reverse proxy or need better WebSocket support — set `PROXY_SPOOLMAN=false` in your `.env` file.
+
 ---
 
 ## Protocol
