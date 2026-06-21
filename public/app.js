@@ -411,7 +411,7 @@ function renderPrinter(printer) {
 
     <!-- Spool (hidden for canvas printers — tray linking handles assignment) -->
     ${!printer.status?.canvas_info?.canvas_list?.length ? (() => {
-      const s = spools.find(sp => spoolAssignedTo(sp) === printer.id);
+      const s = spools.find(sp => printerByLocation(spoolAssignedTo(sp))?.id === printer.id);
       const pct = s ? spoolPct(s) : 0;
       const isEmpty = s && spoolRemaining(s) === 0;
       const isLow   = s && !isEmpty && spoolTotal(s) > 0 && pct < 10;
