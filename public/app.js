@@ -1069,32 +1069,33 @@ function renderFileList(files, error) {
     return;
   }
 
-  const table = document.createElement("table");
-  table.className = "files-table";
-  const thead = document.createElement("thead");
-  thead.innerHTML = "<tr><th>Name</th><th>Size</th><th></th></tr>";
-  table.appendChild(thead);
+  const ul = document.createElement("ul");
+  ul.className = "files-list-items";
 
-  const tbody = document.createElement("tbody");
   for (const f of files) {
-    const tr = document.createElement("tr");
+    const li = document.createElement("li");
+    li.className = "file-item" + (f.is_dir ? " file-item-dir" : "");
 
-    const nameTd = document.createElement("td");
-    nameTd.className = "file-name";
-    nameTd.textContent = f.name || f.path || "";
-    nameTd.title = f.path || "";
-    tr.appendChild(nameTd);
+    const nameEl = document.createElement("div");
+    nameEl.className = "file-name";
+    nameEl.textContent = f.name || f.path || "";
+    nameEl.title = f.path || "";
+    li.appendChild(nameEl);
 
-    const sizeTd = document.createElement("td");
-    sizeTd.className = "file-size";
-    sizeTd.textContent = f.is_dir ? "—" : formatFileSize(f.size);
-    tr.appendChild(sizeTd);
+    const metaRow = document.createElement("div");
+    metaRow.className = "file-meta-row";
 
-    const actionTd = document.createElement("td");
-    actionTd.className = "file-actions";
+    const sizeEl = document.createElement("span");
+    sizeEl.className = "file-size";
+    sizeEl.textContent = f.is_dir ? "" : formatFileSize(f.size);
+    metaRow.appendChild(sizeEl);
+
     if (!f.is_dir) {
       const filePath = f.path;
       const fileName = f.name || filePath.split("/").pop() || filePath;
+
+      const actions = document.createElement("div");
+      actions.className = "file-actions";
 
       const btn = document.createElement("button");
       btn.className = "btn btn-primary btn-sm";
@@ -1103,7 +1104,7 @@ function renderFileList(files, error) {
         const meta = _currentFileList.find(x => x.path === filePath) || {};
         openPrintOpts(filePath, fileName, meta);
       });
-      actionTd.appendChild(btn);
+      actions.appendChild(btn);
 
       const delBtn = document.createElement("button");
       delBtn.className = "btn btn-danger btn-sm";
@@ -1119,15 +1120,16 @@ function renderFileList(files, error) {
           }, 600);
         }
       });
-      actionTd.appendChild(delBtn);
+      actions.appendChild(delBtn);
+      metaRow.appendChild(actions);
     }
-    tr.appendChild(actionTd);
-    tbody.appendChild(tr);
+
+    li.appendChild(metaRow);
+    ul.appendChild(li);
   }
 
-  table.appendChild(tbody);
   list.innerHTML = "";
-  list.appendChild(table);
+  list.appendChild(ul);
 }
 
 function formatFileSize(bytes) {
