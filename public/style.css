@@ -321,7 +321,7 @@ main {
 .canvas-trays {
   display: flex;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 .canvas-tray {
   display: flex;
@@ -332,7 +332,8 @@ main {
   border-radius: var(--radius-sm);
   background: var(--surface2);
   border: 1px solid var(--border);
-  min-width: 52px;
+  min-width: 0;
+  flex: 1;
   cursor: default;
   transition: border-color .15s;
 }
