@@ -13,6 +13,7 @@ import urllib.error
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+import os
 import state
 from auth import (
     AUTH_ENABLED, BCRYPT_AVAILABLE, SECURE_COOKIES, SESSION_COOKIE,
@@ -35,6 +36,10 @@ CERT_FILE = DATA_DIR / "cert.pem"
 KEY_FILE  = DATA_DIR / "key.pem"
 
 MAX_BODY = 100 * 1024 * 1024  # 100 MB
+
+# When true, Spoolman's web UI is proxied through /spoolman/ on this server.
+# When false (default), /spoolman redirects the browser directly to SPOOLMAN_URL.
+PROXY_SPOOLMAN = os.getenv("PROXY_SPOOLMAN", "true").lower() in ("1", "true", "yes")
 
 
 def ensure_ssl_cert() -> bool:
@@ -471,7 +476,6 @@ class SPHandler(SimpleHTTPRequestHandler):
             super().do_GET()
             return
         if self.path == "/config.js":
-            import os
             ws_port  = int(os.getenv("WS_PORT",  "8765"))
             wss_port = int(os.getenv("WSS_PORT", "8766"))
             body = (
@@ -485,25 +489,32 @@ class SPHandler(SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
-        # Spoolman UI proxy — must come before auth gate so the browser can
-        # load assets without cookie (crossorigin script tags don't send cookies)
-        if self.path == "/spoolman":
-            self.send_response(302)
-            self.send_header("Location", "/spoolman/")
-            self.end_headers()
+        # Spoolman — either proxy through our server or redirect directly to it
+        if self.path in ("/spoolman", "/spoolman/"):
+            if PROXY_SPOOLMAN:
+                if self.path == "/spoolman":
+                    self.send_response(302)
+                    self.send_header("Location", "/spoolman/")
+                    self.end_headers()
+                else:
+                    self._proxy_spoolman_ui("GET", "/")
+            else:
+                self.send_response(302)
+                self.send_header("Location", get_spoolman_url() + "/")
+                self.end_headers()
             return
-        if self.path.startswith("/spoolman/"):
-            sm_path = self.path[len("/spoolman"):]  # e.g. "/assets/..."
+        if PROXY_SPOOLMAN and self.path.startswith("/spoolman/"):
+            sm_path = self.path[len("/spoolman"):]
             self._proxy_spoolman_ui("GET", sm_path or "/")
             return
-        # Spoolman's own JS calls /api/v1/ directly — proxy those through
-        if self.path.startswith("/api/v1/"):
+        # Spoolman's own JS calls /api/v1/ directly — only proxy when enabled
+        if PROXY_SPOOLMAN and self.path.startswith("/api/v1/"):
             self._proxy_spoolman_ui("GET", self.path)
             return
         if self.path == "/api/auth-status":
             resp = {"setup_required": not _has_password()}
             if _auth_ok(self):
-                resp["spoolman_url"] = "/spoolman/"
+                resp["spoolman_url"] = "/spoolman/" if PROXY_SPOOLMAN else get_spoolman_url() + "/"
             self._json(resp)
             return
 
@@ -560,26 +571,28 @@ class SPHandler(SimpleHTTPRequestHandler):
         elif self.path.startswith("/api/spoolman"):
             self._proxy_spoolman("GET", self.path[len("/api/spoolman"):], None)
         elif (
-            "text/html" in self.headers.get("Accept", "")
+            PROXY_SPOOLMAN
+            and "text/html" in self.headers.get("Accept", "")
             and self.path not in ("/", "")
             and not Path(self.path.split("?")[0]).suffix
         ):
             # Spoolman SPA sub-route (e.g. /spools after client-side navigation + refresh)
             self._proxy_spoolman_ui("GET", "/")
         else:
-            # Serve from ./public/ if the file exists; otherwise fall back to
-            # Spoolman (handles favicon.ico, kofi logo, and other Spoolman root assets
-            # that React renders without the /spoolman/ prefix).
-            local = Path(__file__).parent / "public" / self.path.lstrip("/").split("?")[0]
-            if local.is_file():
+            local_rel = self.path.lstrip("/").split("?")[0]
+            local = Path(__file__).parent / "public" / local_rel
+            if not local_rel or local.is_file():
                 super().do_GET()
-            else:
+            elif PROXY_SPOOLMAN:
+                # Proxy Spoolman root assets (favicon, kofi logo, etc.) when proxying
                 self._proxy_spoolman_ui("GET", self.path.split("?")[0])
+            else:
+                super().do_GET()
 
     def do_PATCH(self):
         if not self._check_auth():
             return
-        if self.path.startswith("/api/v1/"):
+        if PROXY_SPOOLMAN and self.path.startswith("/api/v1/"):
             self._proxy_spoolman_ui("PATCH", self.path, self._read_body())
             return
         if self.path.startswith("/api/spoolman"):
@@ -590,7 +603,7 @@ class SPHandler(SimpleHTTPRequestHandler):
     def do_DELETE(self):
         if not self._check_auth():
             return
-        if self.path.startswith("/api/v1/"):
+        if PROXY_SPOOLMAN and self.path.startswith("/api/v1/"):
             self._proxy_spoolman_ui("DELETE", self.path)
             return
         if self.path.startswith("/api/spoolman"):
