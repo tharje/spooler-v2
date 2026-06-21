@@ -30,6 +30,13 @@ body.light-mode {
   --shadow:   0 4px 24px rgba(0,0,0,.1);
 }
 
+/* ─── Scrollbars ─────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+
 body {
   background: var(--bg);
   color: var(--text);
