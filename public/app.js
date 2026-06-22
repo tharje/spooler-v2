@@ -612,11 +612,19 @@ function openPrinterSettings(id) {
   inputType.value = p.printer_type || "cc1";
   inputType.style.display = "none";
   document.getElementById("input-type-readonly").style.display = "";
-  document.getElementById("input-type-readonly").textContent =
-    p.printer_type === "cc2" ? "CC2 – Centauri Carbon 2 (MQTT)" : "CC1 – Centauri Carbon 1 (WebSocket/SDCP)";
+  const typeLabels = {
+    cc1: "CC1 – Centauri Carbon 1 (WebSocket/SDCP)",
+    cc2: "CC2 – Centauri Carbon 2 (MQTT)",
+    prusa: "Prusa – PrusaLink HTTP API",
+  };
+  document.getElementById("input-type-readonly").textContent = typeLabels[p.printer_type] || typeLabels.cc1;
+  const needsKey = p.printer_type === "cc2" || p.printer_type === "prusa";
+  const keyLabel = p.printer_type === "prusa" ? "API Key" : "MQTT Password";
+  const keyHint  = p.printer_type === "prusa" ? "API key from PrusaLink settings" : "12345";
   inputAccessCode.value = "";
-  inputAccessCode.placeholder = p.has_access_code ? "Leave blank to keep current" : "Enter MQTT password";
-  labelAccessCode.style.display = p.printer_type === "cc2" ? "flex" : "none";
+  inputAccessCode.placeholder = p.has_access_code ? "Leave blank to keep current" : keyHint;
+  document.getElementById("label-access-code-text").textContent = keyLabel;
+  labelAccessCode.style.display = needsKey ? "flex" : "none";
 
   document.getElementById("printer-panel-title").textContent = p.name || "Edit Printer";
   document.getElementById("printer-discover-section").style.display = "none";
@@ -704,16 +712,24 @@ function _settingsEditPrinter(id) {
     typeSelect.value = p.printer_type || "cc1";
     typeSelect.style.display = "none";
     typeReadonly.style.display = "";
-    typeReadonly.textContent = p.printer_type === "cc2"
-      ? "CC2 – Centauri Carbon 2 (MQTT)"
-      : "CC1 – Centauri Carbon 1 (WebSocket/SDCP)";
+    const typeLabels = {
+      cc1: "CC1 – Centauri Carbon 1 (WebSocket/SDCP)",
+      cc2: "CC2 – Centauri Carbon 2 (MQTT)",
+      prusa: "Prusa – PrusaLink HTTP API",
+    };
+    typeReadonly.textContent = typeLabels[p.printer_type] || typeLabels.cc1;
   }
 
-  const isCC2 = p ? p.printer_type === "cc2" : typeSelect.value === "cc2";
-  document.getElementById("settings-edit-access-code-label").style.display = isCC2 ? "" : "none";
+  const curType = p ? p.printer_type : typeSelect.value;
+  const needsKey = curType === "cc2" || curType === "prusa";
+  document.getElementById("settings-edit-access-code-label").style.display = needsKey ? "" : "none";
+  document.getElementById("settings-edit-access-code-text").textContent =
+    curType === "prusa" ? "API Key" : "MQTT Password";
   const ac = document.getElementById("settings-edit-access-code");
   ac.value = "";
-  ac.placeholder = (!isNew && p?.has_access_code) ? "Leave blank to keep current" : "Enter MQTT password";
+  ac.placeholder = (!isNew && p?.has_access_code)
+    ? "Leave blank to keep current"
+    : curType === "prusa" ? "API key from PrusaLink settings" : "12345";
 
   document.getElementById("btn-settings-printer-remove").style.display = isNew ? "none" : "";
   document.getElementById("btn-settings-printer-save").textContent = isNew ? "Add Printer" : "Save";
@@ -759,8 +775,12 @@ document.getElementById("btn-settings-back-printer-edit")?.addEventListener("cli
   _showSettingsPage(_settingsPrintersPage);
 });
 document.getElementById("settings-edit-type")?.addEventListener("change", function () {
-  document.getElementById("settings-edit-access-code-label").style.display =
-    this.value === "cc2" ? "" : "none";
+  const needsKey = this.value === "cc2" || this.value === "prusa";
+  document.getElementById("settings-edit-access-code-label").style.display = needsKey ? "" : "none";
+  document.getElementById("settings-edit-access-code-text").textContent =
+    this.value === "prusa" ? "API Key" : "MQTT Password";
+  document.getElementById("settings-edit-access-code").placeholder =
+    this.value === "prusa" ? "API key from PrusaLink settings" : "12345";
 });
 document.getElementById("btn-settings-printer-save")?.addEventListener("click", () => {
   const name = document.getElementById("settings-edit-name").value.trim();
@@ -978,7 +998,12 @@ function resetPrinterForm() {
 }
 
 inputType.addEventListener("change", () => {
-  labelAccessCode.style.display = inputType.value === "cc2" ? "flex" : "none";
+  const needsKey = inputType.value === "cc2" || inputType.value === "prusa";
+  labelAccessCode.style.display = needsKey ? "flex" : "none";
+  document.getElementById("label-access-code-text").textContent =
+    inputType.value === "prusa" ? "API Key" : "MQTT Password";
+  document.getElementById("input-access-code").placeholder =
+    inputType.value === "prusa" ? "API key from PrusaLink settings" : "12345";
 });
 
 const openPrinters = () => {
@@ -1180,7 +1205,9 @@ function openPrintOpts(filePath, fileName, meta = {}) {
   _printOptsFile = filePath;
   _printOptsName = fileName;
   _printOptsFilename = fileName; // used for file_info matching
-  const isCC2 = printers[_currentFilePrinterId]?.printer_type === "cc2";
+  const printerType = printers[_currentFilePrinterId]?.printer_type;
+  const isCC2   = printerType === "cc2";
+  const isPrusa = printerType === "prusa";
 
   // Stats bar
   const statsEl = document.getElementById("print-opts-stats");
@@ -1207,15 +1234,17 @@ function openPrintOpts(filePath, fileName, meta = {}) {
   _setPrintPlate(0);
 
 
-  // Both CC1 and CC2 support leveling/timelapse/plate (CC2 via config params)
-  document.getElementById("print-opts-cc1-only").style.display = "";
+  // CC1 and CC2 support leveling/timelapse/plate; Prusa handles these natively
+  document.getElementById("print-opts-cc1-only").style.display = isPrusa ? "none" : "";
 
   // Load thumbnail
   const thumbImg  = document.getElementById("print-opts-thumb");
   const thumbWrap = document.getElementById("print-opts-thumb-wrap");
   thumbImg.style.display = "none";
   thumbImg.src = "";
-  if (isCC2) {
+  if (isPrusa) {
+    thumbWrap.style.display = "none";
+  } else if (isCC2) {
     // CC2: thumbnail arrives async via WS file_info message; request it now
     thumbWrap.style.display = "none";
     send({ action: "get_file_info", printer_id: _currentFilePrinterId, filename: fileName });

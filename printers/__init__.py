@@ -1,9 +1,11 @@
 from printers.cc1 import CC1Connection
 from printers.cc2 import CC2Connection
+from printers.prusa import PrusaConnection
 
 PRINTER_TYPES = {
-    "cc1": CC1Connection,
-    "cc2": CC2Connection,
+    "cc1":   CC1Connection,
+    "cc2":   CC2Connection,
+    "prusa": PrusaConnection,
 }
 
 

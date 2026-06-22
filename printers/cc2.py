@@ -275,6 +275,7 @@ class CC2Connection(PrinterConnection):
                 if self._expected_filament_g or self._expected_print_time_s:
                     print(f"[Printer {self.name}] File metadata: "
                           f"{self._expected_filament_g}g / {self._expected_print_time_s}s")
+                    print(f"[Printer {self.name}] 1046 full response: {json.dumps(inner)[:600]}")
                 return
 
             source = inner if isinstance(inner, dict) else payload
