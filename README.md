@@ -3,6 +3,7 @@
 Local web GUI for **Elegoo Centauri Carbon** FDM 3D printers (CC1 and CC2). Monitor and control multiple printers from a single browser tab — or install as a PWA on your phone.
 
 ![Status: printing, paused, idle, complete](https://img.shields.io/badge/CC1%20%26%20CC2-supported-brightgreen)
+![Prusa](https://img.shields.io/badge/Prusa%20(PrusaLink)-experimental-orange)
 
 > **Branches**
 > - `main` — latest stable release. This is what the Docker image (`ghcr.io/tharje/spooler-v2:latest`) is built from.
@@ -134,6 +135,8 @@ See [`.env.example`](.env.example) for all options.
 
 For **CC2 (Centauri Carbon 2)**, you also need the MQTT password shown on the printer under **Settings → Network**.
 
+For **Prusa printers (PrusaLink)**, select *Prusa – PrusaLink HTTP API* and enter the API key from your printer's PrusaLink settings. *(Still experimental — basic control and file browser work, some features may be limited.)*
+
 Printer configs are saved and reconnect automatically on restart.
 
 ---
@@ -167,6 +170,7 @@ By default, Spooler proxies the Spoolman UI through itself (so one port covers e
 |---------|-----------|-------|
 | CC1 (Centauri Carbon 1) | SDCP v3.0 over WebSocket (port 3030) | |
 | CC2 (Centauri Carbon 2) | MQTT – printer hosts its own broker (port 1883) | Requires MQTT password from printer settings |
+| Prusa (PrusaLink) | HTTP REST polling (`/api/v1`) | Requires API key from PrusaLink settings; experimental |
 
 See [CC2_INTEGRATION.md](CC2_INTEGRATION.md) for full CC2 protocol notes.
 
