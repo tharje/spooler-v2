@@ -119,6 +119,7 @@
             <option value="cc1">CC1 – Centauri Carbon 1 (WebSocket/SDCP)</option>
             <option value="cc2">CC2 – Centauri Carbon 2 (MQTT)</option>
             <option value="prusa">Prusa – PrusaLink HTTP API</option>
+            <option value="moonraker">Klipper – Moonraker HTTP API</option>
           </select>
           <span id="input-type-readonly" class="settings-readonly" style="display:none"></span>
         </label>
@@ -452,6 +453,7 @@
             <option value="cc1">CC1 – Centauri Carbon 1 (WebSocket/SDCP)</option>
             <option value="cc2">CC2 – Centauri Carbon 2 (MQTT)</option>
             <option value="prusa">Prusa – PrusaLink HTTP API</option>
+            <option value="moonraker">Klipper – Moonraker HTTP API</option>
           </select>
           <span id="settings-edit-type-readonly" class="settings-readonly" style="display:none"></span>
         </label>
@@ -587,7 +589,7 @@
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="/config.js"></script>
-  <script src="app.js?v=41"></script>
+  <script src="app.js?v=42"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});

@@ -4,6 +4,7 @@ Local web GUI for **Elegoo Centauri Carbon** FDM 3D printers (CC1 and CC2). Moni
 
 ![Status: printing, paused, idle, complete](https://img.shields.io/badge/CC1%20%26%20CC2-supported-brightgreen)
 ![Prusa](https://img.shields.io/badge/Prusa%20(PrusaLink)-experimental-orange)
+![Klipper](https://img.shields.io/badge/Klipper%20(Moonraker)-experimental-orange)
 
 > **Branches**
 > - `main` — latest stable release. This is what the Docker image (`ghcr.io/tharje/spooler-v2:latest`) is built from.
@@ -137,6 +138,8 @@ For **CC2 (Centauri Carbon 2)**, you also need the MQTT password shown on the pr
 
 For **Prusa printers (PrusaLink)**, select *Prusa – PrusaLink HTTP API* and enter the API key from your printer's PrusaLink settings. *(Still experimental — basic control and file browser work, some features may be limited.)*
 
+For **Klipper printers (Moonraker)**, select *Klipper – Moonraker HTTP API* and enter the IP address of your Moonraker host (default port 7125). API key is optional — only needed if your Moonraker is configured with authentication. *(Still experimental — basic control and file browser work, some features may be limited.)*
+
 Printer configs are saved and reconnect automatically on restart.
 
 ---
@@ -171,6 +174,7 @@ By default, Spooler proxies the Spoolman UI through itself (so one port covers e
 | CC1 (Centauri Carbon 1) | SDCP v3.0 over WebSocket (port 3030) | |
 | CC2 (Centauri Carbon 2) | MQTT – printer hosts its own broker (port 1883) | Requires MQTT password from printer settings |
 | Prusa (PrusaLink) | HTTP REST polling (`/api/v1`) | Requires API key from PrusaLink settings; experimental |
+| Klipper (Moonraker) | HTTP REST polling (`/printer/objects/query`, port 7125) | API key optional; experimental |
 
 See [CC2_INTEGRATION.md](CC2_INTEGRATION.md) for full CC2 protocol notes.
 

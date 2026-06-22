@@ -1,11 +1,13 @@
 from printers.cc1 import CC1Connection
 from printers.cc2 import CC2Connection
+from printers.moonraker import MoonrakerConnection
 from printers.prusa import PrusaConnection
 
 PRINTER_TYPES = {
-    "cc1":   CC1Connection,
-    "cc2":   CC2Connection,
-    "prusa": PrusaConnection,
+    "cc1":       CC1Connection,
+    "cc2":       CC2Connection,
+    "prusa":     PrusaConnection,
+    "moonraker": MoonrakerConnection,
 }
 
 

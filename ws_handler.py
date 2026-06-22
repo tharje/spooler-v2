@@ -268,6 +268,8 @@ async def handle_browser_message(ws, raw: str) -> None:
             await printer.send_cmd(1047, {"filename": filename, "storage_media": "local"})
         elif printer.printer_type == "prusa":
             await printer.delete_file_prusa(filename)
+        elif printer.printer_type == "moonraker":
+            await printer.delete_file_moonraker(filename)
         else:
             await printer.send_cmd(CMD_DELETE_FILES, {"FileList": [filename]})
         return
