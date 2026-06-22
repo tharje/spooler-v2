@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.2.5",
+    "date": "2026-06-22",
+    "changes": [
+      "Experimental Prusa support (PrusaLink HTTP API) — monitor status and temperatures, browse and start files, pause, resume and stop prints; requires API key from PrusaLink settings",
+      "Experimental Klipper support (Moonraker HTTP API) — same controls as Prusa; polls /printer/objects/query every 2 seconds, filament tracked live from print_stats.filament_used, remaining time estimated from file metadata; API key optional"
+    ]
+  },
+  {
     "version": "2.2.2",
     "date": "2026-06-20",
     "changes": [
