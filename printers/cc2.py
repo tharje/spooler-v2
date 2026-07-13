@@ -166,7 +166,7 @@ class CC2Connection(PrinterConnection):
         payload = {"id": uuid.uuid4().int & 0xFFFF, "method": method}
         if cmd == CMD_LIGHT and data:
             light_on = data.get("LightStatus", {}).get("SecondLight", False)
-            payload["params"] = {"power": 1 if light_on else 0}
+            payload["params"] = {"brightness": 255 if light_on else 0, "power": 1 if light_on else 0}
         elif method in (1020, 1031, 1044, 1045, 1046, 1047) and data:
             payload["params"] = data
         try:
