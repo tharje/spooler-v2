@@ -64,8 +64,16 @@ async def browser_handler(websocket) -> None:
             headers = websocket.request.headers
         except AttributeError:
             headers = websocket.request_headers
-        token = _parse_sid(headers.get("cookie", ""))
-        if not _validate_session(token):
+        cookie_header = headers.get("cookie", "")
+        token = _parse_sid(cookie_header)
+        valid = _validate_session(token)
+        if not valid:
+            print(
+                "[Browser][Auth] Rejected WS connection — "
+                f"cookie_header_present={bool(cookie_header)} "
+                f"token_found={bool(token)} "
+                f"token_prefix={token[:8] if token else None!r}"
+            )
             await websocket.close(1008, "Unauthorized")
             return
 

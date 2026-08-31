@@ -1,4 +1,4 @@
-websockets
+websockets==17.1
 aiomqtt
 bcrypt
 pywebpush

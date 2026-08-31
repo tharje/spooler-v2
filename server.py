@@ -41,16 +41,22 @@ _load_dotenv()
 
 try:
     from websockets.asyncio.server import serve as ws_serve
+    from websockets.asyncio.server import Server as _WSServer
+    from websockets.asyncio.server import ServerConnection as _WSServerConnection
+    from websockets.server import ServerProtocol as _WSServerProtocol
+    from websockets.protocol import OPEN as _WS_OPEN
+    from websockets.frames import CloseCode as _WSCloseCode
 except ImportError:
     try:
         from websockets.server import serve as ws_serve
     except ImportError:
         ws_serve = None  # type: ignore
+    _WSServer = None  # type: ignore
 
 import auth
 import state
 from auth import AUTH_ENABLED, BCRYPT_AVAILABLE, session_cleanup_loop
-from http_handler import run_http, run_https
+from http_handler import run_http, run_https, set_ws_adopter
 from persistence import DATA_DIR, load_printers, load_tray_map
 from printers import PRINTER_TYPES, make_printer
 from push import init_vapid
@@ -122,6 +128,68 @@ async def main() -> None:
     state.tray_map = load_tray_map()
 
     asyncio.create_task(session_cleanup_loop())
+
+    # Let the plain HTTP server (port HTTP_PORT) also adopt WebSocket upgrade
+    # requests it sees — combo mode, so single-port tunnels/proxies work.
+    # Must be registered before the HTTP thread starts accepting connections.
+    #
+    # This drives websockets' Server/ServerConnection/ServerProtocol directly
+    # (the same pieces serve() itself uses internally) since there's no public
+    # API for handing it a socket that was accepted outside the library. That
+    # internal wiring has changed shape between websockets releases before —
+    # requirements.txt pins the version this was written against — so the
+    # whole thing is wrapped in a try/except: if it ever breaks again, combo
+    # mode is disabled but the app (and printer monitoring) keeps running.
+    if _WSServer is not None:
+        try:
+            async def _combo_create_server():
+                raise RuntimeError("combo WS server has no listening socket of its own")
+
+            async def _combo_protocol_handler(connection) -> None:
+                try:
+                    async with asyncio.timeout(10):
+                        await connection.handshake()
+                    if connection.protocol.state is not _WS_OPEN:
+                        connection.transport.abort()
+                        return
+                    combo_ws_server.all_connections.add(connection)
+                    connection.start_keepalive()
+                    try:
+                        await browser_handler(connection)
+                    except Exception:
+                        await connection.close(_WSCloseCode.INTERNAL_ERROR)
+                    else:
+                        await connection.close()
+                    finally:
+                        combo_ws_server.all_connections.discard(connection)
+                except Exception:
+                    connection.transport.abort()
+                finally:
+                    combo_ws_server.handler_tasks.discard(asyncio.current_task())
+
+            combo_ws_server = _WSServer(_combo_create_server, _combo_protocol_handler)
+
+            # Server.is_serving() delegates to the real asyncio.Server that
+            # serve() normally creates via create_server() — we never call
+            # that (sockets are adopted individually), so stub in a
+            # always-serving stand-in.
+            class _AlwaysServing:
+                def is_serving(self) -> bool:
+                    return True
+            combo_ws_server.server = _AlwaysServing()
+
+            def _combo_connection_factory():
+                protocol = _WSServerProtocol(max_size=2**20)
+                return _WSServerConnection(
+                    protocol, combo_ws_server,
+                    ping_interval=20, ping_timeout=10, close_timeout=10,
+                )
+
+            set_ws_adopter(asyncio.get_running_loop(), _combo_connection_factory)
+        except Exception as e:
+            print(f"[WS] Combo (same-port) WebSocket support failed to initialize: {e}")
+    else:
+        print("[WS] Combo (same-port) WebSocket support unavailable — needs a newer 'websockets' package.")
 
     http_thread = threading.Thread(target=run_http, args=(HTTP_PORT,), daemon=True)
     http_thread.start()

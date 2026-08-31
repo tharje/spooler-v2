@@ -1,9 +1,30 @@
 /* Spooler – frontend app.js */
 "use strict";
 
-const WS_URL  = location.protocol === "https:"
-  ? `wss://${location.hostname}:${window.SPOOLER_WSS_PORT ?? 8766}`
-  : `ws://${location.hostname}:${window.SPOOLER_WS_PORT ?? 8765}`;
+// The backend also accepts WebSocket upgrades on the plain HTTP port itself
+// ("combo" mode), so by default we just reconnect to the page's own origin
+// (same hostname + port) — this is what makes Spooler work through a
+// single-port tunnel/reverse proxy (e.g. Cloudflare Tunnel → http://ip:8080)
+// with zero extra config: Cloudflare always presents the browser with the
+// standard port (443, so location.port is blank) and forwards the upgrade
+// through the same route as regular HTTP.
+//
+// The one case that still needs a separate port is a *direct* HTTPS
+// connection to Spooler's own self-signed listener (HTTPS_PORT, e.g. LAN PWA
+// installs) — TLS has to be terminated before the request line is even
+// visible, so that path can't be combo'd and keeps using WSS_PORT.
+//
+// SPOOLER_WS_HOST (WS_HOST env var) forces a specific host for edge cases
+// (e.g. running HTTPS_PORT=443 directly with no reverse proxy in front).
+const _directHttpsPort = location.protocol === "https:" && location.port && location.port !== "443";
+let WS_URL;
+if (window.SPOOLER_WS_HOST) {
+  WS_URL = (location.protocol === "https:" ? "wss://" : "ws://") + window.SPOOLER_WS_HOST;
+} else if (_directHttpsPort) {
+  WS_URL = `wss://${location.hostname}:${window.SPOOLER_WSS_PORT ?? 8766}`;
+} else {
+  WS_URL = (location.protocol === "https:" ? "wss://" : "ws://") + location.host;
+}
 const SPOOLMAN_URL = "/api/spoolman/api/v1";
 const RECONNECT_DELAY = 3000;
 

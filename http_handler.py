@@ -2,11 +2,14 @@
 HTTP request handler: static files + /api/ routes.
 """
 
+import asyncio
 import http.client
 import json
 import ssl
 import socket
 import subprocess
+import threading
+import time
 import urllib.parse
 import urllib.request
 import urllib.error
@@ -478,9 +481,11 @@ class SPHandler(SimpleHTTPRequestHandler):
         if self.path == "/config.js":
             ws_port  = int(os.getenv("WS_PORT",  "8765"))
             wss_port = int(os.getenv("WSS_PORT", "8766"))
+            ws_host  = os.getenv("WS_HOST", "")
             body = (
                 f"window.SPOOLER_WS_PORT  = {ws_port};\n"
                 f"window.SPOOLER_WSS_PORT = {wss_port};\n"
+                f"window.SPOOLER_WS_HOST  = {json.dumps(ws_host)};\n"
             ).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/javascript")
@@ -809,8 +814,98 @@ class SPHandler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
 
+# ── WebSocket-on-the-same-port ("combo") ─────────────────────────────────────
+#
+# The browser WebSocket normally lives on its own port (WS_PORT/WSS_PORT).
+# That's unreachable through single-port reverse proxies / tunnels (e.g. a
+# Cloudflare Tunnel hostname mapped to just http://<ip>:8080), so the plain
+# HTTP server here can also adopt WebSocket upgrade requests and hand the raw
+# socket off to the asyncio WS server — same origin, same port, no extra
+# tunnel/proxy config needed. HTTPS is not combo'd: TLS must be terminated
+# before the request line is visible, so PWA installs over the self-signed
+# cert on HTTPS_PORT keep using the separate WSS_PORT.
+
+_ws_loop = None
+_ws_connection_factory = None
+
+
+def set_ws_adopter(loop, connection_factory) -> None:
+    """Register the asyncio loop + WS connection factory that combo mode
+    hands adopted sockets to. Must be called before run_http()'s server
+    starts accepting connections."""
+    global _ws_loop, _ws_connection_factory
+    _ws_loop = loop
+    _ws_connection_factory = connection_factory
+
+
+def _looks_like_ws_upgrade(sock, timeout: float = 1.0) -> bool:
+    """Peek (non-destructively) at the start of a freshly accepted connection
+    to see if it's an HTTP WebSocket upgrade request, without consuming any
+    bytes — so the request is still intact for whichever handler takes it."""
+    deadline = time.time() + timeout
+    sock.settimeout(0.2)
+    data = b""
+    try:
+        while time.time() < deadline:
+            try:
+                data = sock.recv(4096, socket.MSG_PEEK)
+            except socket.timeout:
+                continue
+            except OSError:
+                break
+            if not data or b"\r\n\r\n" in data or len(data) > 1024:
+                break
+    finally:
+        sock.settimeout(None)
+    head = data.split(b"\r\n\r\n", 1)[0].lower()
+    return b"upgrade" in head and b"websocket" in head
+
+
+def _adopt_ws_socket(sock, client_address) -> None:
+    async def _do():
+        try:
+            await _ws_loop.connect_accepted_socket(_ws_connection_factory, sock)
+        except Exception as e:
+            print(f"[WS] Combo adopt failed for {client_address}: {e}")
+            try:
+                sock.close()
+            except Exception:
+                pass
+    asyncio.run_coroutine_threadsafe(_do(), _ws_loop)
+
+
+class ComboHTTPServer(ThreadingHTTPServer):
+    """ThreadingHTTPServer that also accepts WebSocket upgrades on the same
+    port (see module note above)."""
+
+    def process_request(self, request, client_address):
+        if _ws_loop is None:
+            super().process_request(request, client_address)
+            return
+        # _looks_like_ws_upgrade() blocks for up to ~1s on a slow/silent
+        # client. process_request() runs on the server's single accept-loop
+        # thread (socketserver dispatches to a new thread *inside*
+        # ThreadingHTTPServer.process_request, not before it), so peeking
+        # here directly would stall accepting any other connection while it
+        # waits. Hand off to a thread immediately instead, same as
+        # ThreadingMixIn normally does for the HTTP-only path.
+        t = threading.Thread(target=self._route_request, args=(request, client_address), daemon=True)
+        t.start()
+
+    def _route_request(self, request, client_address):
+        if _looks_like_ws_upgrade(request):
+            _adopt_ws_socket(request, client_address)
+            return
+        try:
+            self.finish_request(request, client_address)
+        except Exception:
+            self.handle_error(request, client_address)
+        finally:
+            self.shutdown_request(request)
+
+
 def run_http(port: int) -> None:
-    server = ThreadingHTTPServer(("0.0.0.0", port), SPHandler)
+    server = ComboHTTPServer(("0.0.0.0", port), SPHandler)
     print(f"[HTTP] Serving on http://0.0.0.0:{port}")
     server.serve_forever()
 
