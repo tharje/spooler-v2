@@ -18,7 +18,7 @@ except ImportError:
     WEBPUSH_AVAILABLE = False
 
 from features import is_enabled
-from persistence import DATA_DIR
+from persistence import DATA_DIR, _atomic_write
 
 VAPID_FILE          = DATA_DIR / "vapid_keys.json"
 PUSH_SUBS_FILE      = DATA_DIR / "push_subscriptions.json"
@@ -46,10 +46,10 @@ def init_vapid() -> None:
             ).decode()
             pub = pk.public_key().public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
             _vapid_public_key = _b64.urlsafe_b64encode(pub).rstrip(b"=").decode()
-            VAPID_FILE.write_text(json.dumps({
+            _atomic_write(VAPID_FILE, json.dumps({
                 "private_pem": private_pem,
                 "public_key":  _vapid_public_key,
-            }))
+            }), mode=0o600)  # contains the VAPID private key
             print("[Push] Generated new VAPID key pair")
 
         # pywebpush 2.x requires a Vapid02 object, not a raw PEM string

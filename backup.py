@@ -202,7 +202,11 @@ def restore_from_zip(zip_path: Path) -> dict:
             for entry in manifest["files"]:
                 name = entry["name"]
                 raw = zf.read(name)
-                _atomic_write(DATA_DIR / name, raw.decode("utf-8"))
+                # Every file here is this instance's own credentials/identity
+                # (auth hash, printer access codes, VAPID private key, ...) --
+                # restore must not leave any of them world-readable, same as
+                # when they're first written outside of a restore.
+                _atomic_write(DATA_DIR / name, raw.decode("utf-8"), mode=0o600)
 
     return manifest
 

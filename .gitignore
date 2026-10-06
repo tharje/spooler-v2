@@ -1,7 +1,22 @@
 venv/
 __pycache__/
 *.pyc
-printers.json
-history.json
 /tmp/
 .env
+
+# Runtime data (DATA_DIR defaults to the project root) -- credentials,
+# identity keys, and other instance state. None of this belongs in git.
+printers.json
+history.json
+tray_map.json
+auth.json
+integrations.json
+notification_settings.json
+push_subscriptions.json
+vapid_keys.json
+cert.pem
+key.pem
+backups/
+raw/
+.last_version
+.last_daily_backup

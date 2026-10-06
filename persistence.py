@@ -77,7 +77,7 @@ def filament_mm_to_grams(mm: float, density: float = FILAMENT_DENSITY) -> float:
     return round(vol_cm3 * density, 1)
 
 
-def _atomic_write(path: Path, text: str) -> None:
+def _atomic_write(path: Path, text: str, mode: int | None = None) -> None:
     fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
     try:
         with os.fdopen(fd, "w") as f:
@@ -85,6 +85,8 @@ def _atomic_write(path: Path, text: str) -> None:
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp_name, path)
+        if mode is not None:
+            os.chmod(path, mode)
     except Exception:
         try:
             os.unlink(tmp_name)
@@ -105,7 +107,7 @@ def save_printers(printers: dict) -> None:
         for p in printers.values()
     ]
     with _PRINTERS_LOCK:
-        _atomic_write(PRINTERS_FILE, json.dumps(data, indent=2))
+        _atomic_write(PRINTERS_FILE, json.dumps(data, indent=2), mode=0o600)  # contains access_code
 
 
 def load_printers() -> list:
