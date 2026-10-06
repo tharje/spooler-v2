@@ -56,6 +56,10 @@ FEATURES: dict = {
         key="file_upload", name="File upload", default=True,
         description="Upload G-code from the browser to a printer (CC1, Moonraker, PrusaLink).",
     ),
+    "report_problem": Feature(
+        key="report_problem", name="Report problem", default=True,
+        description="Footer button that builds a redacted diagnostics report and opens a prefilled GitHub issue.",
+    ),
     "notifications": Feature(
         key="notifications", name="Notifications", default=True,
         description="Master switch for all print notifications.",

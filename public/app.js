@@ -1931,6 +1931,8 @@ function _applyFeatures(list) {
   list.forEach(f => { features[f.key] = f; });
   Object.values(printers).forEach(renderPrinter);
   if (_currentFilePrinterId) updateUploadUi();
+  const reportBtn = document.getElementById("btn-report-problem");
+  if (reportBtn) reportBtn.style.display = featureEnabled("report_problem") ? "" : "none";
   const spoolsBtn = document.getElementById("btn-spools");
   if (spoolsBtn) spoolsBtn.style.display = featureEnabled("spoolman") ? "" : "none";
 
@@ -2731,3 +2733,62 @@ if (new URLSearchParams(location.search).get("demo") === "states") {
     if (!sub) await _subscribePush();
   } catch (_) {}
 })();
+
+
+// ─── Report problem ───────────────────────────────────────────────────────────
+const _ISSUES_URL = "https://github.com/tharje/spooler-v2/issues/new";
+
+function _reportBody() {
+  const version = (typeof _changelog !== "undefined" && _changelog[0]) ? _changelog[0].version : "unknown";
+  const lines = Object.values(printers).map(p =>
+    `- ${p.printer_type}${p.attrs?.Model ? " " + p.attrs.Model : ""}` +
+    `${p.attrs?.FirmwareVersion ? ", firmware " + p.attrs.FirmwareVersion : ""}`);
+  return [
+    "**What happened?**", "", "",
+    "**What did you expect?**", "", "",
+    "**Steps to reproduce**", "", "",
+    "**Environment**",
+    `- Spooler version: ${version}`,
+    `- Browser: ${navigator.userAgent}`,
+    "- Printers:", ...(lines.length ? lines : ["- (none)"]),
+    "", "_Paste the diagnostics here or attach spooler-diagnostics.txt (see the Report problem dialog)._",
+  ].join("\n");
+}
+
+async function openReport() {
+  const box = document.getElementById("report-diag");
+  box.value = "Loading…";
+  document.getElementById("modal-report").classList.add("open");
+  try {
+    const r = await fetch("/api/diagnostics");
+    box.value = r.ok ? await r.text() : `Could not load diagnostics (HTTP ${r.status}).`;
+  } catch (e) {
+    box.value = "Could not load diagnostics: " + e;
+  }
+}
+
+function closeReport() { document.getElementById("modal-report").classList.remove("open"); }
+
+document.getElementById("btn-report-problem")?.addEventListener("click", openReport);
+document.getElementById("btn-report-close")?.addEventListener("click", closeReport);
+document.getElementById("modal-report")?.addEventListener("click", (e) => {
+  if (e.target === document.getElementById("modal-report")) closeReport();
+});
+document.getElementById("btn-report-github")?.addEventListener("click", () => {
+  const url = `${_ISSUES_URL}?title=${encodeURIComponent("[Bug] ")}&body=${encodeURIComponent(_reportBody())}`;
+  window.open(url, "_blank", "noopener");
+});
+document.getElementById("btn-report-copy")?.addEventListener("click", async () => {
+  const box = document.getElementById("report-diag");
+  try { await navigator.clipboard.writeText(box.value); }
+  catch (_) { box.select(); document.execCommand("copy"); }
+  toast("Diagnostics copied");
+});
+document.getElementById("btn-report-download")?.addEventListener("click", () => {
+  const blob = new Blob([document.getElementById("report-diag").value], { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "spooler-diagnostics.txt";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});

@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css?v=37" />
+  <link rel="stylesheet" href="style.css?v=38" />
 </head>
 <body>
   <header>
@@ -383,8 +383,26 @@
   <!-- Footer -->
   <footer class="app-footer">
     <span class="footer-brand">Spooler v2</span>
-    <button id="version-badge" class="footer-version" title="Release notes">v…</button>
+    <span class="footer-right">
+      <button id="btn-report-problem" class="footer-version" title="Report a problem">Report problem</button>
+      <button id="version-badge" class="footer-version" title="Release notes">v…</button>
+    </span>
   </footer>
+
+  <!-- Report problem modal -->
+  <div id="modal-report" class="modal">
+    <div class="modal-box modal-box-wide">
+      <h3>Report a problem</h3>
+      <p class="report-desc">This opens a new GitHub issue with your Spooler version and printer models filled in. Nothing is sent until you submit it there. The diagnostics below have IP addresses, serial numbers, names and access codes removed — read through them before you attach anything.</p>
+      <textarea id="report-diag" class="report-diag" readonly spellcheck="false">Loading…</textarea>
+      <div class="modal-actions">
+        <button id="btn-report-copy" class="btn btn-secondary btn-sm">Copy diagnostics</button>
+        <button id="btn-report-download" class="btn btn-secondary btn-sm">Download</button>
+        <button id="btn-report-github" class="btn btn-primary btn-sm">Open GitHub issue</button>
+        <button id="btn-report-close" class="btn btn-secondary">Close</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Settings modal -->
   <div id="modal-app-settings" class="modal">
@@ -703,7 +721,7 @@
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="/config.js"></script>
-  <script src="app.js?v=55"></script>
+  <script src="app.js?v=56"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});

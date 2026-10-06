@@ -1532,3 +1532,8 @@ main {
 .files-upload-progress { position: relative; margin-top: 8px; height: 20px; border-radius: 6px; background: rgba(128,128,128,.2); overflow: hidden; }
 .files-upload-bar { height: 100%; width: 0; background: var(--accent, #4a9eff); transition: width .15s; }
 .files-upload-progress span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+
+/* ── Report problem (T21) ─────────────────────────────────────────────────── */
+.footer-right { display: flex; align-items: center; gap: 16px; }
+.report-desc { font-size: 13px; opacity: .8; margin: 4px 0 10px; }
+.report-diag { width: 100%; height: 280px; box-sizing: border-box; font-family: ui-monospace, monospace; font-size: 11px; resize: vertical; }

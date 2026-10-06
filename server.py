@@ -56,6 +56,7 @@ except ImportError:
 import auth
 import state
 from auth import AUTH_ENABLED, BCRYPT_AVAILABLE, session_cleanup_loop
+import diagnostics
 import uploads
 from backup import check_startup_backup, daily_backup_loop
 from http_handler import run_http, run_https, set_ws_adopter
@@ -92,6 +93,7 @@ auth.set_auth_file(DATA_DIR / "auth.json")
 
 
 async def main() -> None:
+    diagnostics.install_log_capture()
     if ws_serve is None:
         print("\n[ERROR] Please install the 'websockets' package first.")
         print("  python3 -m venv venv && . venv/bin/activate && pip install websockets")

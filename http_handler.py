@@ -36,6 +36,7 @@ from push import (
 )
 from spoolman import get_spoolman_db, get_spoolman_url, spoolman_auth_header, test_spoolman_connection
 import config
+import diagnostics
 import uploads
 
 try:
@@ -605,6 +606,8 @@ class SPHandler(SimpleHTTPRequestHandler):
 
         if self.path == "/api/features":
             self._json(describe_all_features())
+        elif self.path == "/api/diagnostics":
+            self._handle_diagnostics()
         elif self.path == "/api/integrations":
             self._json({
                 "fields": config.describe_all(),
@@ -878,6 +881,17 @@ class SPHandler(SimpleHTTPRequestHandler):
                 skipped += 1
         print(f"[Import] {brand}: {created} created, {skipped} skipped")
         self._json({"brand": brand, "created": created, "skipped": skipped, "total": len(entries)})
+
+    @requires_feature("report_problem")
+    def _handle_diagnostics(self):
+        data = diagnostics.build_report().encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Disposition", 'attachment; filename="spooler-diagnostics.txt"')
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(data)
 
     @requires_feature("file_upload")
     def _handle_upload(self):
