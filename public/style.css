@@ -1520,12 +1520,15 @@ main {
 /* ── File upload (T9) ─────────────────────────────────────────────────────── */
 .files-upload { margin-bottom: 12px; }
 .files-dropzone {
-  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 6px; padding: 10px 12px;
   border: 1px dashed var(--border, #555); border-radius: 8px; font-size: 13px;
 }
 .files-dropzone.dragover { border-color: var(--accent, #4a9eff); background: rgba(74,158,255,.08); }
 .files-dropzone.disabled { opacity: .55; }
-.files-upload-start { display: block; margin-top: 8px; font-size: 13px; }
+.files-upload-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.files-upload-start { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.files-upload-start input { margin: 0; width: auto; }
+.files-upload-hint { font-size: 12px; opacity: .7; }
 .files-upload-progress { position: relative; margin-top: 8px; height: 20px; border-radius: 6px; background: rgba(128,128,128,.2); overflow: hidden; }
 .files-upload-bar { height: 100%; width: 0; background: var(--accent, #4a9eff); transition: width .15s; }
 .files-upload-progress span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; }

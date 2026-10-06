@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css?v=36" />
+  <link rel="stylesheet" href="style.css?v=37" />
 </head>
 <body>
   <header>
@@ -217,10 +217,12 @@
       <div id="files-upload" class="files-upload">
         <input type="file" id="files-upload-input" accept=".gcode,.gco,.bgcode" style="display:none" />
         <div id="files-dropzone" class="files-dropzone">
-          <button id="btn-files-upload" class="btn btn-primary btn-sm">Upload</button>
-          <span id="files-upload-hint">or drop a .gcode file here</span>
+          <div class="files-upload-row">
+            <button id="btn-files-upload" class="btn btn-primary btn-sm">Upload</button>
+            <label class="files-upload-start"><input type="checkbox" id="files-upload-start" /> Start print after upload</label>
+          </div>
+          <span id="files-upload-hint" class="files-upload-hint">or drop a .gcode file here</span>
         </div>
-        <label class="files-upload-start"><input type="checkbox" id="files-upload-start" /> Start print after upload</label>
         <div id="files-upload-progress" class="files-upload-progress" style="display:none">
           <div id="files-upload-bar" class="files-upload-bar"></div>
           <span id="files-upload-status"></span>
@@ -701,7 +703,7 @@
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="/config.js"></script>
-  <script src="app.js?v=54"></script>
+  <script src="app.js?v=55"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
