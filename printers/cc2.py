@@ -76,6 +76,9 @@ _MS_PREPARING = {3: 10, 4: 10, 5: 20, 6: 10, 7: 10, 8: 10, 10: 10, 13: 10}
 # 11 file transfer, 12 timelapse export: shown as before, no log noise.
 _MS_KNOWN_IDLE_OR_HANDLED = {0, 1, 2, 9, 11, 12}
 _logged_ms_status: set = set()
+_logged_sub_status: set = set()
+# sub_status values that mean material is (or is about to be) laid down.
+_EXTRUDING_SUBS = {2075, 2401, 2402, 2077, 2501, 2502, 2503, 2504, 2505}
 
 # What a busy-but-not-printing printer is doing, from sub_status (Elegoo
 # elegoo-link SDK codes) or, failing that, machine_status.status.
@@ -102,8 +105,10 @@ _PHASE_BY_MS = {
 def _cc2_phase(ms_status, sub_status, status_code) -> str:
     # Only meaningful for pre-print/maintenance work and the odd modes that
     # have no print_status of their own; during plain printing it stays empty.
+    # While printing/paused, only the sub_status phases are shown (e.g. a
+    # nozzle re-heat during a filament swap), never the machine mode.
     if status_code in (3, 5, 6, 9, 0) and ms_status not in _PHASE_BY_MS:
-        return ""
+        return _PHASE_BY_SUB.get(sub_status, "") if status_code == 3 else ""
     return _PHASE_BY_SUB.get(sub_status) or _PHASE_BY_MS.get(ms_status, "")
 
 
@@ -638,6 +643,24 @@ class CC2Connection(PrinterConnection):
             status_code = _SUB_TRANSIENT[sub_status]
         elif state_str in _STATE_STR:
             status_code = _STATE_STR[state_str]
+            # Verified live (2026-10-06): while the printer heats up before a
+            # print, print_status.state already says "printing" (duration 0,
+            # layer 0) with sub_status 1045 (nozzle) / 1405 (bed) -- showing
+            # "printing" then is wrong. Before extruding has begun, let the
+            # more specific sub_status decide (heating, homing, leveling).
+            if state_str == "printing" and not print_duration and sub_status not in _EXTRUDING_SUBS:
+                if sub_status in _SUB_STABLE:
+                    status_code = _SUB_STABLE[sub_status]
+                else:
+                    # Nothing has been extruded yet, so whatever the printer is
+                    # doing it isn't "printing": show preparing, and log the
+                    # sub_status once so it can be given a proper label
+                    # (1066 was seen during bed leveling on 2026-10-06).
+                    status_code = 15
+                    if sub_status not in _logged_sub_status:
+                        _logged_sub_status.add(sub_status)
+                        print(f"[Printer {self.name}] CC2 sub_status {sub_status} before extrusion "
+                              f"isn't mapped -- shown as Preparing.")
         elif sub_status in _SUB_STABLE:
             status_code = _SUB_STABLE[sub_status]
         elif remaining > 0:

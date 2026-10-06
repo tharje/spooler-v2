@@ -248,3 +248,51 @@ def test_phase_empty_while_printing_and_in_to_dict(printer):
     printer._apply_cc2_status()
     assert printer.phase == ""
     assert printer.to_dict()["phase"] == ""
+
+
+# ── heating before a print: state says "printing" but nothing is extruding yet ─
+
+@pytest.mark.parametrize("sub,expected_code,expected_phase", [
+    (1045, 15, "Heating nozzle"),   # the real capture: state=printing, duration 0, sub 1045
+    (1405, 15, "Heating bed"),
+    (2801, 1, "Homing"),
+    (2901, 20, "Leveling"),
+])
+def test_pre_print_phases_win_over_printing_state_while_duration_is_zero(printer, sub, expected_code, expected_phase):
+    printer._cc2_state["machine_status"] = {"status": 2, "sub_status": sub}
+    printer._cc2_state["print_status"] = {"state": "printing", "print_duration": 0, "remaining_time_sec": 2989}
+    printer._apply_cc2_status()
+    assert printer.status["PrintInfo"]["Status"] == expected_code
+    assert printer.phase == expected_phase
+    assert printer.to_dict()["state"] == "preparing"
+
+
+def test_actual_printing_stays_printing_once_extruding(printer):
+    printer._cc2_state["machine_status"] = {"status": 2, "sub_status": 2075}
+    printer._cc2_state["print_status"] = {"state": "printing", "print_duration": 120, "remaining_time_sec": 2800}
+    printer._apply_cc2_status()
+    assert printer.status["PrintInfo"]["Status"] == 3 and printer.to_dict()["state"] == "printing"
+
+
+def test_midprint_reheat_keeps_printing_state_but_shows_phase(printer):
+    printer._cc2_state["machine_status"] = {"status": 2, "sub_status": 1045}
+    printer._cc2_state["print_status"] = {"state": "printing", "print_duration": 900, "remaining_time_sec": 2000}
+    printer._apply_cc2_status()
+    assert printer.to_dict()["state"] == "printing" and printer.phase == "Heating nozzle"
+
+
+def test_unknown_sub_status_before_extrusion_is_preparing_not_printing(printer, capsys):
+    # sub_status 1066 was observed with print_duration 0 during bed leveling.
+    printer._cc2_state["machine_status"] = {"status": 2, "sub_status": 1066}
+    printer._cc2_state["print_status"] = {"state": "printing", "print_duration": 0, "remaining_time_sec": 2989}
+    printer._apply_cc2_status()
+    assert printer.to_dict()["state"] == "preparing"
+    printer._apply_cc2_status()   # logged only once
+    assert capsys.readouterr().out.count("1066") == 1
+
+
+def test_known_extruding_sub_status_with_zero_duration_still_printing(printer):
+    printer._cc2_state["machine_status"] = {"status": 2, "sub_status": 2075}
+    printer._cc2_state["print_status"] = {"state": "printing", "print_duration": 0, "remaining_time_sec": 100}
+    printer._apply_cc2_status()
+    assert printer.to_dict()["state"] == "printing"
