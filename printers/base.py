@@ -128,6 +128,11 @@ def classify_display_state(connected: bool, status_code, is_homing_between_print
 
 
 class PrinterConnection:
+    # Subclasses that implement upload_file() set this True; the UI disables
+    # the upload button for printers where it stays False.
+    supports_upload: bool = False
+    upload_unsupported_reason: str = "File upload is not supported for this printer type."
+
     def __init__(
         self,
         printer_id: str,
@@ -242,6 +247,8 @@ class PrinterConnection:
             "attrs":           self.attrs,
             "camera_url":      self.camera_url,
             "camera_connected": self.camera_connected,
+            "supports_upload": self.supports_upload,
+            "upload_unsupported_reason": None if self.supports_upload else self.upload_unsupported_reason,
             "filament_mm":     round(filament_mm, 1),
             "filament_g":      filament_mm_to_grams(filament_mm, self.filament_density),
         }
@@ -305,6 +312,13 @@ class PrinterConnection:
     async def start_print_file(self, filename: str, print_opts: dict | None = None) -> bool:
         from printers.protocol import CMD_START
         return await self.send_cmd(CMD_START, {"Filename": filename})
+
+    async def upload_file(self, local_path, remote_name: str, start_after: bool = False) -> bool:
+        """Send a file already on disk to the printer's storage, optionally
+        starting the print. Returns True on success; raises
+        uploads.UploadError with a readable message on failure."""
+        from uploads import UploadError
+        raise UploadError(self.upload_unsupported_reason)
 
     # ── Internal helpers ───────────────────────────────────────────────────────
 

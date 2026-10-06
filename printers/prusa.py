@@ -9,10 +9,12 @@ import asyncio
 import json
 import math
 import urllib.error
+import urllib.parse
 import urllib.request
 
 import state
 from printers.base import PrinterConnection
+from uploads import UploadError, forward_timeout, put_file
 from printers.protocol import CMD_PAUSE, CMD_RESUME, CMD_STOP
 
 POLL_INTERVAL = 2.0
@@ -239,6 +241,29 @@ class PrusaConnection(PrinterConnection):
             if is_dir and isinstance(f.get("children"), list):
                 result.extend(self._parse_files(f["children"]))
         return result
+
+    supports_upload = True
+
+    async def upload_file(self, local_path, remote_name: str, start_after: bool = False) -> bool:
+        # PrusaLink v1: PUT /api/v1/files/{storage}/{path}. Not yet verified
+        # against a real printer.
+        size = local_path.stat().st_size
+        loop = asyncio.get_running_loop()
+        headers = {"Overwrite": "?1", "Print-After-Upload": "?1" if start_after else "?0"}
+        if self.access_code:
+            headers["X-Api-Key"] = self.access_code
+
+        def _send():
+            return put_file(self.ip, 80, f"/api/v1/files/usb/{urllib.parse.quote(remote_name)}",
+                            local_path, headers=headers, timeout=forward_timeout(size))
+        try:
+            status, body = await loop.run_in_executor(None, _send)
+        except OSError as e:
+            raise UploadError(f"Could not reach the printer: {e}") from e
+        if status not in (200, 201):
+            raise UploadError(f"PrusaLink rejected the upload (HTTP {status}): "
+                              f"{body.decode('utf-8', errors='replace')[:300]}")
+        return True
 
     async def start_print_file(self, filename: str, print_opts: dict | None = None) -> bool:
         name = filename.lstrip("/").removeprefix("usb/").removeprefix("local/")

@@ -52,6 +52,10 @@ FEATURES: dict = {
         key="spoolman", name="Spoolman integration", default=True,
         description="Filament spool inventory, tray linking, and automatic deduction after each print.",
     ),
+    "file_upload": Feature(
+        key="file_upload", name="File upload", default=True,
+        description="Upload G-code from the browser to a printer (CC1, Moonraker, PrusaLink).",
+    ),
     "notifications": Feature(
         key="notifications", name="Notifications", default=True,
         description="Master switch for all print notifications.",

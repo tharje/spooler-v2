@@ -454,6 +454,11 @@ class CC2Connection(PrinterConnection):
                 "error": "File list request timed out.",
             })
 
+    # Whether CC2 has an upload endpoint is unknown; see the T9 test
+    # instruction. Until that is verified from real traffic, upload stays off.
+    upload_unsupported_reason = ("Upload to the Centauri Carbon 2 isn't supported yet "
+                                 "(the printer's upload method hasn't been verified).")
+
     async def start_print_file(self, filename: str, print_opts: dict | None = None) -> bool:
         self._current_filename = filename
         opts = print_opts or {}

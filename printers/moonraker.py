@@ -15,6 +15,7 @@ import urllib.request
 
 import state
 from printers.base import PrinterConnection
+from uploads import UploadError, forward_timeout, post_multipart_file
 from printers.protocol import CMD_PAUSE, CMD_RESUME, CMD_STOP
 
 POLL_INTERVAL = 2.0
@@ -257,6 +258,29 @@ class MoonrakerConnection(PrinterConnection):
                 "filament_g": None,
             })
         return result
+
+    supports_upload = True
+
+    async def upload_file(self, local_path, remote_name: str, start_after: bool = False) -> bool:
+        size = local_path.stat().st_size
+        loop = asyncio.get_running_loop()
+        fields = {"root": "gcodes"}
+        if start_after:
+            fields["print"] = "true"
+        headers = {"X-Api-Key": self.access_code} if self.access_code else {}
+
+        def _send():
+            return post_multipart_file(self.ip, 7125, "/server/files/upload", fields, "file",
+                                       remote_name, local_path, headers=headers,
+                                       timeout=forward_timeout(size))
+        try:
+            status, body = await loop.run_in_executor(None, _send)
+        except OSError as e:
+            raise UploadError(f"Could not reach the printer: {e}") from e
+        if status not in (200, 201):
+            raise UploadError(f"Moonraker rejected the upload (HTTP {status}): "
+                              f"{body.decode('utf-8', errors='replace')[:300]}")
+        return True
 
     async def start_print_file(self, filename: str, print_opts: dict | None = None) -> bool:
         name = filename.lstrip("/")

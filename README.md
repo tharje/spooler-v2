@@ -164,6 +164,10 @@ Settings → **Backup** lets you download a zip of your printers, history, spool
 
 ---
 
+## File upload
+
+Open a printer's file browser and use **Upload** (or drop a `.gcode`/`.gco`/`.bgcode` file on the box) to send a file to the printer, optionally starting the print right away. Supported on Elegoo CC1, Moonraker and PrusaLink printers; the Centauri Carbon 2 isn't supported yet. Files are streamed through `DATA_DIR/uploads/` (never held in memory) and deleted once sent; leftovers older than 24 h are removed at startup. The size limit is `SPOOLER_MAX_UPLOAD_MB` (default 500). Can be switched off under Settings → Features (`file_upload`).
+
 ## Spoolman
 
 Spooler integrates with **[Spoolman](https://github.com/Donkie/Spoolman)**, an open-source filament spool manager.

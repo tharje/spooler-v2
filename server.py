@@ -56,6 +56,7 @@ except ImportError:
 import auth
 import state
 from auth import AUTH_ENABLED, BCRYPT_AVAILABLE, session_cleanup_loop
+import uploads
 from backup import check_startup_backup, daily_backup_loop
 from http_handler import run_http, run_https, set_ws_adopter
 from persistence import DATA_DIR, load_printers, load_tray_map, migrate_history_ids
@@ -109,6 +110,7 @@ async def main() -> None:
     init_vapid()
     check_startup_backup()
     migrate_history_ids()
+    uploads.remove_stale_uploads()
 
     # Load saved printers
     for entry in load_printers():

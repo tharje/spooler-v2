@@ -36,6 +36,7 @@ from push import (
 )
 from spoolman import get_spoolman_db, get_spoolman_url, spoolman_auth_header, test_spoolman_connection
 import config
+import uploads
 
 try:
     import bcrypt as _bcrypt
@@ -46,6 +47,8 @@ CERT_FILE = DATA_DIR / "cert.pem"
 KEY_FILE  = DATA_DIR / "key.pem"
 
 MAX_BODY = 100 * 1024 * 1024  # 100 MB
+_uploads_lock = threading.Lock()
+_uploads_active: set = set()  # printer ids with an upload in flight
 
 _current_version = current_version  # kept as a module-local alias; call sites unchanged
 
@@ -876,29 +879,67 @@ class SPHandler(SimpleHTTPRequestHandler):
         print(f"[Import] {brand}: {created} created, {skipped} skipped")
         self._json({"brand": brand, "created": created, "skipped": skipped, "total": len(entries)})
 
+    @requires_feature("file_upload")
     def _handle_upload(self):
-        printer_id = urllib.parse.unquote(self.path[len("/api/upload/"):])
-        printer    = state.printers.get(printer_id)
+        """POST /api/upload/<printer_id>?name=<file>&start=0|1 with the raw
+        file as the request body. The body is streamed to DATA_DIR/uploads/
+        in chunks, then handed to the printer connection."""
+        parsed = urllib.parse.urlparse(self.path)
+        params = urllib.parse.parse_qs(parsed.query)
+        printer_id = urllib.parse.unquote(parsed.path[len("/api/upload/"):])
+        printer = state.printers.get(printer_id)
         if not printer:
             self._json({"error": "Printer not found"}, 404)
             return
-        ct = self.headers.get("Content-Type", "")
-        if not ct.startswith("multipart/form-data"):
-            self._json({"error": "Expected multipart/form-data"}, 400)
+        if not printer.supports_upload:
+            self._json({"error": printer.upload_unsupported_reason}, 400)
             return
-        body = self._read_body()
+        if not printer.connected:
+            self._json({"error": "Printer is offline"}, 409)
+            return
+        start_after = params.get("start", ["0"])[0] in ("1", "true")
+        if start_after and printer.to_dict().get("state") not in ("idle", "complete", "cancelled"):
+            self._json({"error": "Printer is busy; upload without starting the print."}, 409)
+            return
+        with _uploads_lock:
+            if printer_id in _uploads_active:
+                self._json({"error": "An upload to this printer is already in progress"}, 409)
+                return
+            _uploads_active.add(printer_id)
+        local_path = None
         try:
-            req = urllib.request.Request(
-                f"http://{printer.ip}/uploadFile/upload",
-                data=body,
-                headers={"Content-Type": ct},
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                result = resp.read()
-            self._json({"ok": True, "response": result.decode("utf-8", errors="replace")})
+            name = uploads.sanitize_filename(params.get("name", [""])[0])
+            length = int(self.headers.get("Content-Length", 0))
+            try:
+                local_path = uploads.save_stream(self.rfile, length, name)
+            except uploads.UploadError as e:
+                # An oversized/invalid body was not read; the connection can't
+                # be reused safely.
+                self.close_connection = True
+                self._json({"error": str(e)}, 413 if "too large" in str(e) else 400)
+                return
+            uploads.on_file_uploaded(printer_id, local_path, name)
+            if _ws_loop is None:
+                self._json({"error": "Server not ready"}, 503)
+                return
+            fut = asyncio.run_coroutine_threadsafe(
+                printer.upload_file(local_path, name, start_after), _ws_loop)
+            ok = fut.result(timeout=uploads.forward_timeout(local_path.stat().st_size) + 30)
+            if ok:
+                self._json({"ok": True, "filename": name, "started": start_after})
+            else:
+                self._json({"error": "Upload succeeded but starting the print failed",
+                            "filename": name}, 502)
+        except uploads.UploadError as e:
+            self._json({"error": str(e)}, 400 if str(e).startswith(("Invalid", "Unsupported")) else 502)
         except Exception as e:
-            self._json({"error": str(e)}, 500)
+            print(f"[Upload] {printer_id} failed: {e}")
+            self._json({"error": f"Upload failed: {e}"}, 500)
+        finally:
+            if local_path is not None:
+                local_path.unlink(missing_ok=True)
+            with _uploads_lock:
+                _uploads_active.discard(printer_id)
 
     # ── Backup / restore ─────────────────────────────────────────────────────
 

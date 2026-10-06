@@ -214,6 +214,18 @@
   <div id="modal-files" class="modal">
     <div class="modal-box modal-box-wide">
       <h3 id="files-modal-title">Files</h3>
+      <div id="files-upload" class="files-upload">
+        <input type="file" id="files-upload-input" accept=".gcode,.gco,.bgcode" style="display:none" />
+        <div id="files-dropzone" class="files-dropzone">
+          <button id="btn-files-upload" class="btn btn-primary btn-sm">Upload</button>
+          <span id="files-upload-hint">or drop a .gcode file here</span>
+        </div>
+        <label class="files-upload-start"><input type="checkbox" id="files-upload-start" /> Start print after upload</label>
+        <div id="files-upload-progress" class="files-upload-progress" style="display:none">
+          <div id="files-upload-bar" class="files-upload-bar"></div>
+          <span id="files-upload-status"></span>
+        </div>
+      </div>
       <div id="files-loading" class="files-loading">Loading…</div>
       <div id="files-list"></div>
       <div class="modal-actions">

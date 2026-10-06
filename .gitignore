@@ -17,6 +17,7 @@ vapid_keys.json
 cert.pem
 key.pem
 backups/
+uploads/
 raw/
 .last_version
 .last_daily_backup

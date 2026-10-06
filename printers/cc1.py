@@ -5,10 +5,12 @@ CC1 printer connection via WebSocket (SDCP protocol).
 import asyncio
 import json
 import re
+import uuid
 
 import state
 from persistence import dump_raw_message
 from printers.base import PrinterConnection
+from uploads import UploadError, file_md5, forward_timeout, post_multipart_file
 from printers.protocol import (
     CMD_ATTRS, CMD_CAMERA, CMD_CANVAS, CMD_LIGHT, CMD_LIST_FILES,
     CMD_START, CMD_STATUS, decode_printinfo, make_msg,
@@ -92,6 +94,37 @@ class CC1Connection(PrinterConnection):
             await self.send_cmd(CMD_STATUS, {})
             if self.status.get("AmsConnectStatus"):
                 await self.send_cmd(CMD_CANVAS, {})
+
+    supports_upload = True
+
+    async def upload_file(self, local_path, remote_name: str, start_after: bool = False) -> bool:
+        # UNVERIFIED against real hardware: single-chunk variant of the SDCP
+        # v3 upload form (S-File-MD5/Check/Offset/Uuid/TotalSize/File). See
+        # the T9 test instruction before relying on this.
+        size = local_path.stat().st_size
+        loop = asyncio.get_running_loop()
+
+        def _send():
+            fields = {
+                "S-File-MD5": file_md5(local_path),
+                "Check": 1,
+                "Offset": 0,
+                "Uuid": uuid.uuid4().hex,
+                "TotalSize": size,
+            }
+            return post_multipart_file(self.ip, 80, "/uploadFile/upload", fields, "File",
+                                       remote_name, local_path, timeout=forward_timeout(size))
+        try:
+            status, body = await loop.run_in_executor(None, _send)
+        except OSError as e:
+            raise UploadError(f"Could not reach the printer: {e}") from e
+        text = body.decode("utf-8", errors="replace")[:300]
+        print(f"[Printer {self.name}] CC1 upload -> HTTP {status}: {text}")
+        if status != 200:
+            raise UploadError(f"Printer rejected the upload (HTTP {status}): {text}")
+        if start_after:
+            return await self.start_print_file(remote_name)
+        return True
 
     async def start_print_file(self, filename: str, print_opts: dict | None = None) -> bool:
         if filename.startswith("/usb/"):

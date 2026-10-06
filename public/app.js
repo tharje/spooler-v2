@@ -200,6 +200,7 @@ function handleMessage(msg) {
     case "printer_update":
       printers[msg.printer.id] = msg.printer;
       renderPrinter(msg.printer);
+      if (msg.printer.id === _currentFilePrinterId) updateUploadUi();
       syncEmptyState();
       _checkActiveTrayChange(msg.printer);
       break;
@@ -1370,8 +1371,99 @@ function openFileBrowser(printerId) {
   document.getElementById("files-list").innerHTML = "";
   document.getElementById("files-loading").style.display = "";
   document.getElementById("modal-files").classList.add("open");
+  updateUploadUi();
   send({ action: "list_files", printer_id: printerId });
 }
+
+// ─── File upload ──────────────────────────────────────────────────────────────
+let _uploading = false;
+
+function updateUploadUi() {
+  const wrap = document.getElementById("files-upload");
+  if (!wrap) return;
+  const on = featureEnabled("file_upload");
+  wrap.style.display = on ? "" : "none";
+  if (!on) return;
+  const p = printers[_currentFilePrinterId];
+  const ok = !!(p && p.supports_upload) && !_uploading;
+  document.getElementById("btn-files-upload").disabled = !ok;
+  document.getElementById("files-dropzone").classList.toggle("disabled", !ok);
+  document.getElementById("files-upload-hint").textContent = p && !p.supports_upload
+    ? (p.upload_unsupported_reason || "Upload isn't supported for this printer.")
+    : "or drop a .gcode file here";
+  const cb = document.getElementById("files-upload-start");
+  cb.disabled = !ok || !p || p.state !== "idle";
+  if (cb.disabled) cb.checked = false;
+}
+
+function uploadFile(file) {
+  const printerId = _currentFilePrinterId;
+  const p = printers[printerId];
+  if (_uploading || !p || !p.supports_upload) return;
+  const start = document.getElementById("files-upload-start").checked;
+  const prog = document.getElementById("files-upload-progress");
+  const bar = document.getElementById("files-upload-bar");
+  const status = document.getElementById("files-upload-status");
+  const done = (msg, isErr) => {
+    _uploading = false;
+    status.textContent = msg;
+    status.style.color = isErr ? "var(--red)" : "";
+    updateUploadUi();
+  };
+  _uploading = true;
+  updateUploadUi();
+  prog.style.display = "";
+  bar.style.width = "0";
+  status.style.color = "";
+  status.textContent = "0%";
+  const xhr = new XMLHttpRequest();
+  xhr.open("POST", `/api/upload/${encodeURIComponent(printerId)}?name=${encodeURIComponent(file.name)}&start=${start ? 1 : 0}`);
+  xhr.setRequestHeader("Content-Type", "application/octet-stream");
+  xhr.upload.onprogress = (e) => {
+    if (!e.lengthComputable) return;
+    const pct = Math.round((e.loaded / e.total) * 100);
+    bar.style.width = pct + "%";
+    status.textContent = pct < 100 ? `${pct}%` : "Sending to printer…";
+  };
+  xhr.onload = () => {
+    let body = {};
+    try { body = JSON.parse(xhr.responseText); } catch (_) {}
+    if (xhr.status === 200 && body.ok) {
+      bar.style.width = "100%";
+      done(start ? "Uploaded – print started" : "Uploaded", false);
+      toast(`Uploaded: ${file.name}`);
+      if (_currentFilePrinterId === printerId) send({ action: "list_files", printer_id: printerId });
+    } else {
+      done(body.error || `Upload failed (HTTP ${xhr.status})`, true);
+    }
+  };
+  xhr.onerror = () => done("Upload failed: network error", true);
+  xhr.send(file);
+}
+
+(function initUpload() {
+  const btn = document.getElementById("btn-files-upload");
+  const input = document.getElementById("files-upload-input");
+  const zone = document.getElementById("files-dropzone");
+  if (!btn || !input || !zone) return;
+  btn.addEventListener("click", () => input.click());
+  input.addEventListener("change", () => {
+    if (input.files[0]) uploadFile(input.files[0]);
+    input.value = "";
+  });
+  ["dragenter", "dragover"].forEach(ev => zone.addEventListener(ev, (e) => {
+    e.preventDefault();
+    if (!zone.classList.contains("disabled")) zone.classList.add("dragover");
+  }));
+  ["dragleave", "drop"].forEach(ev => zone.addEventListener(ev, (e) => {
+    e.preventDefault();
+    zone.classList.remove("dragover");
+  }));
+  zone.addEventListener("drop", (e) => {
+    const f = e.dataTransfer && e.dataTransfer.files[0];
+    if (f && !zone.classList.contains("disabled")) uploadFile(f);
+  });
+})();
 
 function closeFileBrowser() {
   document.getElementById("modal-files").classList.remove("open");
@@ -1838,6 +1930,7 @@ function _applyFeatures(list) {
   features = {};
   list.forEach(f => { features[f.key] = f; });
   Object.values(printers).forEach(renderPrinter);
+  if (_currentFilePrinterId) updateUploadUi();
   const spoolsBtn = document.getElementById("btn-spools");
   if (spoolsBtn) spoolsBtn.style.display = featureEnabled("spoolman") ? "" : "none";
 
