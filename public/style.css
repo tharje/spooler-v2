@@ -1537,3 +1537,11 @@ main {
 .footer-right { display: flex; align-items: center; gap: 16px; }
 .report-desc { font-size: 13px; opacity: .8; margin: 4px 0 10px; }
 .report-diag { width: 100%; height: 280px; box-sizing: border-box; font-family: ui-monospace, monospace; font-size: 11px; resize: vertical; }
+.footer-version.report-btn {
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.footer-version.report-btn:hover { background: var(--accent); color: #fff; }
