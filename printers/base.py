@@ -25,7 +25,9 @@ from spoolman import get_spool_density, spoolman_deduct, spoolman_deduct_spool
 # active would make a direct 9 -> printing transition (reprinting without an
 # intervening idle poll) look like "already active", so the per-print
 # extrusion snapshot reset in _check_print_transition would never fire.
-ACTIVE_STATUSES   = {1, 2, 3, 4, 7, 10, 12, 13, 15, 16, 18, 19, 20, 21}
+# 11 printer check, 17 resonance test and 22 its completion are steps between
+# 10 (file check) and 18 (print start) on CC1 and belong to the print start-up.
+ACTIVE_STATUSES   = {1, 2, 3, 4, 7, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20, 21, 22}
 PRINTING_STATUSES = {2, 3, 4, 13}
 PAUSED_STATUSES   = {5, 6}   # pausing, paused
 _END_STATUSES     = {9, 8, 14, 0}
@@ -65,9 +67,9 @@ def classify_print_transition(prev_status, cur_status) -> str | None:
 # (see each printer module's _STATE_MAP/_STATE_STR). This table is the single
 # place that turns a raw code into the small, stable vocabulary every consumer
 # (history, UI, future notifications) should use instead of re-interpreting
-# numbers themselves. Codes not listed here (e.g. 11, 17 — never observed,
-# never documented) deliberately fall through to "unknown" rather than being
-# guessed at.
+# numbers themselves. Codes not listed here deliberately fall through to
+# "unknown" rather than being guessed at. CC1's own names for 11-26 come from
+# Elegoo's elegoo-link SDK (see spooler-cc1-research.md).
 _DISPLAY_STATE_BY_CODE = {
     0:  "idle",
     1:  "preparing",   # homing
@@ -79,7 +81,8 @@ _DISPLAY_STATE_BY_CODE = {
     7:  "stopping",
     8:  "cancelled",
     9:  "complete",
-    10: "preparing",   # checking
+    10: "preparing",   # file checking
+    11: "preparing",   # printer checking (CC1)
     12: "printing",    # recovering (resuming after e.g. power loss)
     13: "printing",    # printing (recovery)
     14: "error",
@@ -89,6 +92,12 @@ _DISPLAY_STATE_BY_CODE = {
     19: "preparing",   # warming up
     20: "preparing",   # leveling
     21: "preparing",   # warming up
+    17: "preparing",   # resonance test (CC1)
+    22: "preparing",   # resonance test completed (CC1)
+    23: "preparing",   # filament auto-feeding (CC1, from the printer's screen)
+    24: "preparing",   # filament unloading (CC1)
+    25: "preparing",   # filament unloading abnormal (CC1) -- see phase label
+    26: "preparing",   # filament unloading paused (CC1) -- see phase label
 }
 
 _KIND_BY_DISPLAY_STATE = {
@@ -102,7 +111,7 @@ _KIND_BY_DISPLAY_STATE = {
 _logged_unknown_display_codes: set = set()
 
 
-def classify_display_state(connected: bool, status_code, is_homing_between_prints: bool = False) -> str:
+def classify_display_state(connected: bool, status_code, busy_between_prints: bool = False) -> str:
     """Map (connected, raw status code) to one of: offline, idle, preparing,
     printing, pausing, paused, stopping, complete, cancelled, error, unknown.
 
@@ -115,7 +124,7 @@ def classify_display_state(connected: bool, status_code, is_homing_between_print
         return "offline"
     if status_code is None:
         return "idle"
-    if is_homing_between_prints and status_code == 0:
+    if busy_between_prints and status_code == 0:
         return "preparing"
     state_str = _DISPLAY_STATE_BY_CODE.get(status_code)
     if state_str is not None:
@@ -203,13 +212,19 @@ class PrinterConnection:
         """
         return None
 
-    def _is_homing_between_prints(self) -> bool:
-        """CC1-specific quirk: CurrentStatus[0] == 9 (machine-level "homing")
-        combined with PrintInfo.Status == 0 means idle-but-homing, not plain
-        idle. Other protocols never populate CurrentStatus, so this is a
-        harmless no-op for them."""
+    def _is_busy_between_prints(self) -> bool:
+        """CC1 reports a machine-level mode in CurrentStatus alongside the
+        print status. When PrintInfo.Status says idle but the machine is doing
+        something else (self-check 4, auto-leveling 5, resonance test 6, busy
+        7, file check 8, homing 9, filament unload 10, PID 11), the printer is
+        busy, not plain idle. Per Elegoo's SDK the first entry is used, or the
+        second when the first is 2 (file transfer). Other protocols never
+        populate CurrentStatus, so this is a harmless no-op for them."""
         arr = self.status.get("CurrentStatus")
-        return isinstance(arr, list) and bool(arr) and arr[0] == 9
+        if not isinstance(arr, list) or not arr:
+            return False
+        mode = arr[1] if arr[0] == 2 and len(arr) > 1 else arr[0]
+        return mode in (4, 5, 6, 7, 8, 9, 10, 11)
 
     def _decoded_printinfo(self) -> dict:
         """Decode PrintInfo hex keys and normalise CC1 time fields.
@@ -244,7 +259,7 @@ class PrinterConnection:
             "connected":       self.connected,
             "status":          status,
             "state":           classify_display_state(
-                                   self.connected, pi.get("Status"), self._is_homing_between_prints()),
+                                   self.connected, pi.get("Status"), self._is_busy_between_prints()),
             "state_reason":    self.state_reason,
             "phase":           self.phase,
             "last_seen":       self.last_seen,
@@ -461,7 +476,7 @@ class PrinterConnection:
         cur_status = pi.get("Status")
         event = classify_print_transition(self._last_print_status, cur_status)
 
-        display_state = classify_display_state(self.connected, cur_status, self._is_homing_between_prints())
+        display_state = classify_display_state(self.connected, cur_status, self._is_busy_between_prints())
         self._update_state_reason(display_state)
 
         if event == "start":

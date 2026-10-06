@@ -13,7 +13,7 @@ from printers.base import PrinterConnection
 from uploads import UploadError, file_md5, forward_timeout, post_multipart_file
 from printers.protocol import (
     CMD_ATTRS, CMD_CAMERA, CMD_CANVAS, CMD_LIGHT, CMD_LIST_FILES,
-    CMD_START, CMD_STATUS, decode_printinfo, make_msg,
+    CMD_PAUSE, CMD_RESUME, CMD_START, CMD_STATUS, CMD_STOP, decode_printinfo, make_msg,
 )
 from spoolman import spoolman_assign, spoolman_set_location
 
@@ -23,6 +23,30 @@ except ImportError:
     from websockets.client import connect as ws_connect
 
 PRINTER_PORT = 3030
+
+# What a busy CC1 is doing, from Elegoo's SDK enums. PrintInfo.Status first
+# (a print's own steps), then the machine-level CurrentStatus mode.
+_PHASE_BY_PRINT_STATUS = {
+    1: "Homing", 10: "Checking file", 11: "Checking printer", 15: "Leveling",
+    16: "Heating", 17: "Resonance test", 18: "Starting print", 19: "Leveling",
+    20: "Heating", 21: "Homing", 22: "Resonance test",
+    23: "Loading filament", 24: "Unloading filament",
+    25: "Filament unload problem", 26: "Filament unload paused",
+}
+_PHASE_BY_MACHINE_MODE = {
+    4: "Self-check", 5: "Leveling", 6: "Resonance test", 7: "Busy",
+    8: "Checking file", 9: "Homing", 10: "Unloading filament", 11: "PID calibration",
+}
+# Rejected-command reasons (Data.Ack), from Elegoo's SDK; 0 means accepted.
+_ACK_MESSAGES = {
+    1: "the printer is busy or refused the command",
+    2: "the file wasn't found on the printer",
+    3: "the file failed the printer's MD5 check",
+    4: "the printer couldn't read the file",
+    5: "the file's format or resolution doesn't match the printer",
+    6: "the file is for a different printer model",
+}
+_CMD_NAMES = {128: "Start print", 129: "Pause", 130: "Stop", 131: "Resume"}
 
 _TIME_RE = re.compile(r'_(?:(\d+)h)?(\d+)m(?:(\d+)s)?\.[^.]+$')
 
@@ -45,6 +69,7 @@ class CC1Connection(PrinterConnection):
         self._cached_filename     = ""
         self._prev_active_tray_id = -2   # sentinel: not yet seen
         self._canvas_poll_task    = None
+        self._warned_slots        = False
 
     async def connect(self) -> None:
         self._prev_active_tray_id = -2
@@ -55,6 +80,7 @@ class CC1Connection(PrinterConnection):
             # which causes spurious disconnects. App-level keepalive handles this.
             self.ws = await ws_connect(url, ping_interval=None)
             self.connected = True
+            self._warned_slots = False
             print(f"[Printer {self.name}] Connected!")
             await self._broadcast_state()
             await self.send_cmd(CMD_ATTRS, {})
@@ -65,6 +91,19 @@ class CC1Connection(PrinterConnection):
             loop.run_in_executor(None, self._sync_spoolman_locations)
         except Exception as e:
             print(f"[Printer {self.name}] Connection failed: {e}")
+            if " 500" in str(e):
+                # The CC1 accepts at most 5 WebSocket clients and answers the
+                # 6th with HTTP 500 "too many client" (reported by pycentauri).
+                print(f"[Printer {self.name}] HTTP 500 usually means the printer's 5 connection "
+                      f"slots are taken (slicer, Elegoo app, web UI, Home Assistant ...). "
+                      f"Close one of them and Spooler will connect on the next retry.")
+                if not self._warned_slots:
+                    self._warned_slots = True
+                    await state.broadcast_to_browsers({
+                        "type": "error",
+                        "message": f"{self.name}: the printer refused the connection — all 5 of its "
+                                   f"connection slots may be in use (slicer, Elegoo app, web UI, Home Assistant).",
+                    })
             self.connected = False
             await self._broadcast_state()
             return
@@ -85,6 +124,36 @@ class CC1Connection(PrinterConnection):
             self.connected = False
             self.ws = None
             await self._broadcast_state()
+
+    def _update_phase(self) -> None:
+        pi = decode_printinfo(self.status.get("PrintInfo") or {}) if isinstance(self.status.get("PrintInfo"), dict) else {}
+        label = _PHASE_BY_PRINT_STATUS.get(pi.get("Status"), "")
+        if not label and pi.get("Status") in (0, None):
+            arr = self.status.get("CurrentStatus")
+            if isinstance(arr, list) and arr:
+                mode = arr[1] if arr[0] == 2 and len(arr) > 1 else arr[0]
+                label = _PHASE_BY_MACHINE_MODE.get(mode, "")
+        self.phase = label
+
+    def _protocol_reason_hint(self) -> dict | None:
+        # Nothing in Elegoo's SDK or the SDCP spec tells us where (or whether)
+        # CC1 reports the codes its screen shows (101, 304, ...; see
+        # printers/error_codes.py CC1_ERROR_CODES), so only what the status
+        # itself says is used: PrintInfo.Status 14 means "stopped because of an
+        # error", and a non-zero ErrorNumber (SDCP spec field) is kept raw.
+        pi = decode_printinfo(self.status.get("PrintInfo") or {}) if isinstance(self.status.get("PrintInfo"), dict) else {}
+        err = pi.get("ErrorNumber")
+        if pi.get("Status") != 14 and not err:
+            return None
+        return {
+            "code":     err if err else "",
+            "category": "unknown",
+            "message":  ("The printer stopped the print because of an error. "
+                         "The details are shown on the printer's screen.") if pi.get("Status") == 14 else "",
+            "action":   "",
+            "raw":      {"Status": pi.get("Status"), "ErrorNumber": err,
+                         "CurrentStatus": self.status.get("CurrentStatus")},
+        }
 
     async def _keepalive_poller(self) -> None:
         while True:
@@ -192,6 +261,7 @@ class CC1Connection(PrinterConnection):
                 pi_decoded = decode_printinfo(self.status["PrintInfo"])
                 if not pi_decoded.get("Filename"):
                     self.status["PrintInfo"]["Filename"] = self._cached_filename
+            self._update_phase()
             await self._check_print_transition()
             await self._broadcast_state()
             return
@@ -217,11 +287,21 @@ class CC1Connection(PrinterConnection):
         elif cmd == CMD_STATUS:
             if payload and payload != {"Ack": 0}:
                 self.status = payload
+                self._update_phase()
                 # This is the keepalive poller's CMD_STATUS response, not the
                 # printer's unsolicited "Status" push handled above — it still
                 # carries fresh PrintInfo, so transitions must be checked here
                 # too or a print start/end seen only via polling is missed.
                 await self._check_print_transition()
+        elif cmd in (CMD_START, CMD_PAUSE, CMD_STOP, CMD_RESUME):
+            ack = payload.get("Ack") if isinstance(payload, dict) else None
+            if ack not in (0, None):
+                why = _ACK_MESSAGES.get(ack, f"error code {ack}")
+                print(f"[Printer {self.name}] CC1 command {cmd} rejected, Ack={ack}")
+                await state.broadcast_to_browsers({
+                    "type": "error",
+                    "message": f"{self.name}: {_CMD_NAMES.get(cmd, 'Command')} was rejected — {why}.",
+                })
         elif cmd == CMD_CAMERA:
             url = payload.get("VideoUrl") or payload.get("Url")
             if url:

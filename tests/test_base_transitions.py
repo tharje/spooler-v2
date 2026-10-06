@@ -58,8 +58,12 @@ def test_classify_print_transition(prev, cur, expected):
     (True, 9, False, "complete"),
     (True, 14, False, "error"),         # the confirmed bug: must NOT be "cancelled"
     (True, 0, True, "preparing"),       # CC1's CurrentStatus[0]==9 + Status==0 quirk
-    (True, 11, False, "unknown"),       # never-documented code: must NOT be "idle"
-    (True, 17, False, "unknown"),
+    (True, 11, False, "preparing"),     # CC1: printer checking (Elegoo SDK)
+    (True, 17, False, "preparing"),     # CC1: resonance test
+    (True, 22, False, "preparing"),
+    (True, 23, False, "preparing"),     # CC1: filament feeding from the screen
+    (True, 27, False, "unknown"),       # undocumented code: must NOT be "idle"
+    (True, 99, False, "unknown"),
 ])
 def test_classify_display_state(connected, code, homing, expected):
     assert classify_display_state(connected, code, homing) == expected

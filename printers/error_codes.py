@@ -75,6 +75,33 @@ CC2_ERROR_CODES = {
     1264: {"category": "filament_feed", "message": "External filament holder fault (plug/blockage)."},                # [fw]
 }
 
+# Codes the original Centauri Carbon (CC1) shows on its own screen. Source:
+# Elegoo's open-source CC1 firmware (github.com/elegooofficial/CentauriCarbon,
+# firmware/app/e100/app_top.cpp for the code, firmware/resources/e100/
+# translation.csv for the English text -- quoted/condensed, not invented).
+# NOT yet seen arriving over SDCP: CC1's WebSocket status isn't known to carry
+# these codes, so nothing looks them up until a real capture shows where they
+# come from (see printers/cc1.py _protocol_reason_hint). 101-104, 304 and
+# 701-703 mean the same on CC2.
+CC1_ERROR_CODES = {
+    101: {"category": "thermal", "message": "The heated bed didn't heat up as expected."},
+    102: {"category": "thermal", "message": "Anomaly in reading the heated bed NTC.",
+          "action": "Check the heated bed NTC and its wiring."},
+    103: {"category": "thermal", "message": "The printhead didn't heat up as expected."},
+    104: {"category": "thermal", "message": "Anomaly in reading the printhead NTC.",
+          "action": "Check the printhead NTC and its wiring."},
+    304: {"category": "motion",  "message": "Z-axis returning to home failed (abnormal motor).",
+          "action": "Check the Z-axis motor and its wiring."},
+    502: {"category": "leveling", "message": "Abnormal leveling sensor.",
+          "action": "Check the leveling sensor and its wiring."},
+    701: {"category": "fan",     "message": "Abnormal mainboard fan.",
+          "action": "Check the mainboard fan and its wiring."},
+    702: {"category": "fan",     "message": "Abnormal heat break cooling fan.",
+          "action": "Check the heat break cooling fan and its wiring."},
+    703: {"category": "fan",     "message": "Abnormal model fan.",
+          "action": "Check the model fan and its wiring."},
+}
+
 # Result codes of *commands* (api_response result.error_code), not printer
 # faults: UNKNOWN_INTERFACE..DATABASE_FAILED, PRINT_FILE_NOT_FOUND,
 # MISSING_BED_LEVELING and the 9xxx upload/file group. They never overlap the
@@ -90,8 +117,9 @@ def is_api_result_code(code) -> bool:
     return any(lo <= code <= hi for lo, hi in _API_RESULT_RANGES)
 
 
-def lookup(error_code) -> dict | None:
+def lookup(error_code, printer_type: str = "cc2") -> dict | None:
+    table = CC1_ERROR_CODES if printer_type == "cc1" else CC2_ERROR_CODES
     try:
-        return CC2_ERROR_CODES.get(int(error_code))
+        return table.get(int(error_code))
     except (TypeError, ValueError):
         return None
