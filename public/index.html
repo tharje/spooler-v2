@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css?v=42" />
+  <link rel="stylesheet" href="style.css?v=45" />
 </head>
 <body>
   <header>
@@ -192,12 +192,6 @@
             <path d="M12 5v14M5 12h14"/>
           </svg>
           Add Spool
-        </button>
-        <button id="btn-import-filaments" class="btn btn-secondary btn-sm" title="Import Elegoo filament catalogue from SpoolmanDB">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-          </svg>
-          Import Elegoo
         </button>
         <a id="btn-spoolman-ui" href="#" target="_blank" class="btn btn-secondary btn-sm" title="Open Spoolman web UI">Spoolman UI</a>
       </div>
@@ -684,6 +678,14 @@
         </div>
         <p class="integrations-warning">Changes here affect connections to other services.</p>
         <div id="integrations-list"></div>
+        <div class="integrations-catalogue">
+          <h4>Spoolman filament catalogue</h4>
+          <p class="report-desc">Adds a brand's filament types (material, colour, weight) from the open SpoolmanDB to Spoolman so you can pick them when adding a spool. It creates filament types only, not spools, and skips any that already exist. Needs Spoolman running and internet access.</p>
+          <div class="catalogue-row">
+            <select id="import-brand" aria-label="Brand"><option value="">Loading brands…</option></select>
+            <button id="btn-import-filaments" class="btn btn-secondary btn-sm" title="Import this brand's filaments from SpoolmanDB">Import</button>
+          </div>
+        </div>
         <div class="modal-actions">
           <button id="btn-integrations-save" class="btn btn-primary">Save</button>
         </div>
@@ -731,7 +733,7 @@
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="/config.js"></script>
-  <script src="app.js?v=57"></script>
+  <script src="app.js?v=60"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});

@@ -1180,6 +1180,7 @@ document.getElementById("btn-settings-back-features")?.addEventListener("click",
 document.getElementById("btn-settings-goto-integrations")?.addEventListener("click", () => {
   _showSettingsPage(_settingsIntegrationsPage);
   _renderIntegrationsList();
+  loadImportBrands();
   _renderServerSettings();
 });
 document.getElementById("btn-settings-back-integrations")?.addEventListener("click", _backToSettingsMenu);
@@ -1784,6 +1785,9 @@ const _INTEGRATION_GROUPS = [
   { title: "Slicer",   prefix: "slicer.",   testKey: null },
 ];
 
+// Static markup in index.html; re-attached into the Spoolman group after each render.
+const _catalogueEl = document.querySelector(".integrations-catalogue");
+
 function _renderIntegrationsList() {
   const container = document.getElementById("integrations-list");
   if (!container) return;
@@ -1842,11 +1846,16 @@ function _renderIntegrationsList() {
       </div>` : "";
 
     return `
-      <details class="integration-group" open>
+      <details class="integration-group" ${group.prefix === "spoolman." ? "open" : ""}>
         <summary>${escHtml(group.title)}</summary>
         <div class="integration-group-body">${fieldsHtml}${testHtml}</div>
       </details>`;
   }).join("");
+
+  const spoolmanBody = container.querySelector(".integration-group .integration-group-body");
+  if (_catalogueEl && spoolmanBody && container.querySelector(".integration-group summary")?.textContent === "Spoolman") {
+    spoolmanBody.appendChild(_catalogueEl);
+  }
 
   container.querySelectorAll("button[data-test-key]").forEach(btn => {
     btn.addEventListener("click", async () => {
@@ -2319,30 +2328,47 @@ const closeSpools = () => {
 btnSpools.addEventListener("click", openSpools);
 document.getElementById("btn-spools-close").addEventListener("click", closeSpools);
 
+async function loadImportBrands() {
+  const sel = document.getElementById("import-brand");
+  if (!sel || sel.dataset.loaded) return;
+  try {
+    const r = await fetch("/api/filament-meta");
+    if (!r.ok) throw new Error(r.status);
+    const { brands } = await r.json();
+    if (!brands.length) throw new Error("empty");
+    sel.innerHTML = brands.map(b => `<option value="${escAttr(b)}">${escHtml(b)}</option>`).join("");
+    const elegoo = brands.find(b => b.toLowerCase() === "elegoo");
+    if (elegoo) sel.value = elegoo;
+    sel.dataset.loaded = "1";
+  } catch (_) {
+    sel.innerHTML = '<option value="">Could not load brands</option>';
+  }
+}
+
 document.getElementById("btn-import-filaments").addEventListener("click", async () => {
   const btn = document.getElementById("btn-import-filaments");
+  const brand = document.getElementById("import-brand").value;
+  if (!brand) { toast("Pick a brand first", true); return; }
   btn.disabled = true;
   btn.textContent = "Importing…";
   try {
     const r = await fetch("/api/import-filaments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ brand: "ELEGOO" }),
+      body: JSON.stringify({ brand }),
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || r.status);
     if (d.created > 0) {
-      alert(`✓ Imported ${d.created} ELEGOO filaments into Spoolman.\n\nYou can now create spools from these in Spoolman UI or when adding a spool here.`);
+      alert(`✓ Imported ${d.created} ${brand} filaments into Spoolman.\n\nYou can now create spools from these in Spoolman UI or when adding a spool here.`);
     } else {
-      alert(`All ${d.total} ELEGOO filaments are already in Spoolman (${d.skipped} skipped).`);
+      alert(`All ${d.total} ${brand} filaments are already in Spoolman (${d.skipped} skipped).`);
     }
   } catch (e) {
     alert("Import failed: " + e.message);
   } finally {
     btn.disabled = false;
-    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-    </svg> Import Elegoo`;
+    btn.textContent = "Import";
   }
 });
 

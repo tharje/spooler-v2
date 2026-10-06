@@ -1563,3 +1563,10 @@ main {
 }
 .modal-box textarea:focus { border-color: var(--accent); }
 .modal-box .report-diag { font-size: 11px; }
+.integrations-catalogue { padding: 12px 0 0; border-top: 1px solid var(--border); }
+.integrations-catalogue.integration-group-body { padding-left: 0; padding-right: 0; }
+.integrations-catalogue h4 { margin: 0 0 4px; font-size: 14px; }
+.catalogue-row { display: flex; gap: 8px; align-items: center; }
+.catalogue-row select { flex: 1; min-width: 0; }
+.modal-box { max-height: 90vh; overflow-y: auto; }
+.modal-box > * { flex-shrink: 0; }

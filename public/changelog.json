@@ -7,7 +7,8 @@
       "Report bug button in the footer — pick the printer, describe the issue, and open a prefilled GitHub issue with redacted diagnostics (IPs, serials, names and access codes removed)",
       "CC2: poll the full status instead of machine status only",
       "Secrets at rest are now protected with locked-down file permissions",
-      "Web Push contact address is now configurable (VAPID_CONTACT) instead of hardcoded"
+      "Web Push contact address is now configurable (VAPID_CONTACT) instead of hardcoded",
+      "Filament catalogue import moved from the Spools panel to Settings → Integrations, now with a brand dropdown so you can import any brand from SpoolmanDB (Elegoo preselected)"
     ]
   },  {
     "version": "2.2.6",
