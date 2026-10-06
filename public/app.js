@@ -2738,33 +2738,64 @@ if (new URLSearchParams(location.search).get("demo") === "states") {
 // ─── Report problem ───────────────────────────────────────────────────────────
 const _ISSUES_URL = "https://github.com/tharje/spooler-v2/issues/new";
 
-function _reportBody() {
+const _URL_BUDGET = 7000; // GitHub rejects very long prefilled URLs
+
+function _reportEnv(printerId) {
   const version = (typeof _changelog !== "undefined" && _changelog[0]) ? _changelog[0].version : "unknown";
-  const lines = Object.values(printers).map(p =>
+  const list = printerId === "none" ? [] : Object.entries(printers).filter(([id]) => !printerId || id === printerId).map(([, p]) => p);
+  const lines = list.map(p =>
     `- ${p.printer_type}${p.attrs?.Model ? " " + p.attrs.Model : ""}` +
     `${p.attrs?.FirmwareVersion ? ", firmware " + p.attrs.FirmwareVersion : ""}`);
   return [
-    "**What happened?**", "", "",
-    "**What did you expect?**", "", "",
-    "**Steps to reproduce**", "", "",
     "**Environment**",
     `- Spooler version: ${version}`,
     `- Browser: ${navigator.userAgent}`,
-    "- Printers:", ...(lines.length ? lines : ["- (none)"]),
-    "", "_Paste the diagnostics here or attach spooler-diagnostics.txt (see the Report problem dialog)._",
+    "- Printer:", ...(lines.length ? lines : ["- (none)"]),
   ].join("\n");
 }
 
-async function openReport() {
+// Build title + body, trimming the oldest log lines until the URL fits.
+function _reportIssueUrl() {
+  const printerId = document.getElementById("report-printer").value;
+  const title = document.getElementById("report-title").value.trim();
+  const desc = document.getElementById("report-desc").value.trim();
+  const diag = document.getElementById("report-diag").value;
+  const head = `${desc || "_(no description)_"}\n\n${_reportEnv(printerId)}\n\n<details><summary>Diagnostics</summary>\n\n\`\`\`\n`;
+  const tail = "\n```\n</details>\n";
+  const make = (d) => `${_ISSUES_URL}?title=${encodeURIComponent("[Bug] " + title)}&body=${encodeURIComponent(head + d + tail)}`;
+  let lines = diag.split("\n"), url = make(lines.join("\n")), cut = false;
+  while (url.length > _URL_BUDGET && lines.length > 20) {
+    lines = lines.slice(Math.ceil(lines.length * 0.15) || 1);
+    cut = true;
+    url = make("(older lines trimmed to fit - use Download to attach the full report)\n" + lines.join("\n"));
+  }
+  return url;
+}
+
+async function _loadDiagnostics() {
   const box = document.getElementById("report-diag");
+  const id = document.getElementById("report-printer").value;
   box.value = "Loading…";
-  document.getElementById("modal-report").classList.add("open");
   try {
-    const r = await fetch("/api/diagnostics");
+    const r = await fetch("/api/diagnostics?printer=" + encodeURIComponent(id));
     box.value = r.ok ? await r.text() : `Could not load diagnostics (HTTP ${r.status}).`;
   } catch (e) {
     box.value = "Could not load diagnostics: " + e;
   }
+}
+
+async function openReport() {
+  const sel = document.getElementById("report-printer");
+  const entries = Object.entries(printers);
+  sel.innerHTML = "";
+  if (entries.length > 1) sel.add(new Option("All printers", ""));
+  entries.forEach(([id, p]) => sel.add(new Option(p.name || id, id)));
+  sel.add(new Option("Not printer-related", "none"));
+  document.getElementById("report-printer-row").hidden = sel.options.length <= 2;
+  document.getElementById("report-title").value = "";
+  document.getElementById("report-desc").value = "";
+  document.getElementById("modal-report").classList.add("open");
+  await _loadDiagnostics();
 }
 
 function closeReport() { document.getElementById("modal-report").classList.remove("open"); }
@@ -2774,9 +2805,9 @@ document.getElementById("btn-report-close")?.addEventListener("click", closeRepo
 document.getElementById("modal-report")?.addEventListener("click", (e) => {
   if (e.target === document.getElementById("modal-report")) closeReport();
 });
+document.getElementById("report-printer")?.addEventListener("change", _loadDiagnostics);
 document.getElementById("btn-report-github")?.addEventListener("click", () => {
-  const url = `${_ISSUES_URL}?title=${encodeURIComponent("[Bug] ")}&body=${encodeURIComponent(_reportBody())}`;
-  window.open(url, "_blank", "noopener");
+  window.open(_reportIssueUrl(), "_blank", "noopener");
 });
 document.getElementById("btn-report-copy")?.addEventListener("click", async () => {
   const box = document.getElementById("report-diag");

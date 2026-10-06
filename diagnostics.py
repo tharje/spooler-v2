@@ -110,12 +110,20 @@ def printer_summary(p) -> dict:
     }
 
 
-def build_report() -> str:
+def build_report(printer_id: str | None = None) -> str:
+    """printer_id None/"" = all printers, "none" = no printer, otherwise
+    only the printer with that id."""
     secrets = _known_secrets()
     features = {f["key"]: f["enabled"] for f in describe_all()}
-    printers = [printer_summary(p) for p in list(state.printers.values())]
+    if printer_id == "none":
+        selected = []
+    elif printer_id:
+        selected = [p for k, p in list(state.printers.items()) if k == printer_id]
+    else:
+        selected = list(state.printers.values())
+    printers = [printer_summary(p) for p in selected]
     raw_status = {}
-    for i, p in enumerate(list(state.printers.values()), 1):
+    for i, p in enumerate(selected, 1):
         raw_status[f"printer_{i}"] = redact(json.dumps(p.status, default=str)[:3000], secrets)
     parts = [
         "Spooler diagnostics",

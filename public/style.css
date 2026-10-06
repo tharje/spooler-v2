@@ -1545,3 +1545,21 @@ main {
   font-size: 12px;
 }
 .footer-version.report-btn:hover { background: var(--accent); color: #fff; }
+.report-label { display: block; font-size: 12px; font-weight: 600; margin: 8px 0 4px; color: var(--text-muted); }
+.report-label[hidden] { display: none; }
+.report-label input, .report-label select, .report-text { width: 100%; box-sizing: border-box; margin-top: 4px; font: inherit; font-size: 13px; }
+.report-text { resize: vertical; }
+.report-diag { height: 140px; }
+.modal-box textarea {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 9px 12px;
+  font-size: 14px;
+  width: 100%;
+  outline: none;
+  transition: border-color .15s;
+}
+.modal-box textarea:focus { border-color: var(--accent); }
+.modal-box .report-diag { font-size: 11px; }

@@ -119,8 +119,9 @@ class RestoreError(Exception):
 
 
 def _parse_version(v: str) -> tuple:
+    """"2.3.0-beta" parses as (2, 3, 0); a pre-release suffix is ignored."""
     try:
-        return tuple(int(p) for p in v.split("."))
+        return tuple(int(p) for p in v.split("-")[0].split("."))
     except Exception:
         return (0,)
 

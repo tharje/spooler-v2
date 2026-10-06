@@ -606,7 +606,7 @@ class SPHandler(SimpleHTTPRequestHandler):
 
         if self.path == "/api/features":
             self._json(describe_all_features())
-        elif self.path == "/api/diagnostics":
+        elif self.path.split("?")[0] == "/api/diagnostics":
             self._handle_diagnostics()
         elif self.path == "/api/integrations":
             self._json({
@@ -884,7 +884,8 @@ class SPHandler(SimpleHTTPRequestHandler):
 
     @requires_feature("report_problem")
     def _handle_diagnostics(self):
-        data = diagnostics.build_report().encode("utf-8")
+        qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        data = diagnostics.build_report(qs.get("printer", [""])[0]).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Content-Disposition", 'attachment; filename="spooler-diagnostics.txt"')
