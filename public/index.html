@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css?v=41" />
+  <link rel="stylesheet" href="style.css?v=42" />
 </head>
 <body>
   <header>
@@ -384,7 +384,7 @@
   <footer class="app-footer">
     <span class="footer-brand">Spooler v2</span>
     <span class="footer-right">
-      <button id="btn-report-problem" class="footer-version report-btn" title="Report a problem">Report problem</button>
+      <button id="btn-report-problem" class="footer-version report-btn" title="Report a bug"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M8 2l1.9 1.9M16 2l-1.9 1.9"/><path d="M9 7.1V6a3 3 0 0 1 6 0v1.1"/><path d="M12 20a6 6 0 0 1-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3a6 6 0 0 1-6 6z"/><path d="M12 20v-9M6.5 13H2M17.5 13H22M6 18l-2.5 2M18 18l2.5 2M6 9L3.5 7M18 9l2.5-2"/></svg>Report bug</button>
       <button id="version-badge" class="footer-version" title="Release notes">v…</button>
     </span>
   </footer>
@@ -392,7 +392,7 @@
   <!-- Report problem modal -->
   <div id="modal-report" class="modal">
     <div class="modal-box modal-box-wide">
-      <h3>Report a problem</h3>
+      <h3>Report a bug</h3>
       <p class="report-desc">Describe the problem and Spooler opens a new GitHub issue with your description, version and diagnostics filled in. Nothing is sent until you press Submit on GitHub. IP addresses, serial numbers, names and access codes are removed from the diagnostics — read through them first.</p>
       <label id="report-printer-row" class="report-label" hidden>Which printer?
         <select id="report-printer"></select>

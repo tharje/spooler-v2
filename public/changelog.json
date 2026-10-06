@@ -4,7 +4,7 @@
     "date": "2026-10-06",
     "changes": [
       "Upload files to the printer from the UI (CC1, Klipper/Moonraker, Prusa/PrusaLink)",
-      "Report problem button in the footer — pick the printer, describe the issue, and open a prefilled GitHub issue with redacted diagnostics (IPs, serials, names and access codes removed)",
+      "Report bug button in the footer — pick the printer, describe the issue, and open a prefilled GitHub issue with redacted diagnostics (IPs, serials, names and access codes removed)",
       "CC2: poll the full status instead of machine status only",
       "Secrets at rest are now protected with locked-down file permissions"
     ]
