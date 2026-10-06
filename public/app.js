@@ -1365,6 +1365,11 @@ function _channelFieldsHtml(ch) {
 function _renderNotifChannels() {
   const host = document.getElementById("notif-channels");
   if (!host) return;
+  const summary = document.getElementById("notif-channels-summary");
+  if (summary) {
+    const on = _NOTIF_CHANNELS.filter(ch => features[ch.feature]?.enabled && !features[ch.feature]?.missing).length;
+    summary.textContent = on ? `${on} on` : "none on";
+  }
   host.innerHTML = _NOTIF_CHANNELS.map(ch => {
     const f = features[ch.feature];
     if (!f) return "";

@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css?v=48" />
+  <link rel="stylesheet" href="style.css?v=50" />
 </head>
 <body>
   <header>
@@ -547,8 +547,14 @@
           <h3>Notifications</h3>
         </div>
         <div class="notif-list">
-          <div class="feature-group-title">Send notifications to</div>
-          <div id="notif-channels"></div>
+          <details class="notif-group">
+            <summary>
+              <span class="notif-group-text"><strong>Notification channels</strong><small>Browser push, ntfy, Telegram, Discord, webhook</small></span>
+              <span id="notif-channels-summary" class="notif-group-pill"></span>
+              <svg class="notif-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+            </summary>
+            <div id="notif-channels"></div>
+          </details>
           <div class="feature-group-title">Events</div>
 
           <div class="notif-row">
@@ -740,7 +746,7 @@
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="/config.js"></script>
-  <script src="app.js?v=64"></script>
+  <script src="app.js?v=66"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
