@@ -181,11 +181,21 @@ class CC2Connection(PrinterConnection):
             return False
 
     async def _mqtt_status_poller(self) -> None:
+        # Full state (1002), not just machine_status (1003) -- the printer's
+        # unsolicited api_status pushes (method 6000) are a delta stream, and
+        # Elegoo's own client resyncs via 1002 whenever it detects a gap in
+        # that stream. We don't track delta continuity, so poll 1002 on a
+        # timer instead: without it, a single dropped delta (e.g. the one
+        # that would clear print_status.state from "complete" back to "" /
+        # idle after the user confirms on the printer) leaves Spooler showing
+        # a stale status forever, since nothing else ever re-requests it.
+        # Verified live (2026-10-06): 1002's response is a strict superset of
+        # 1003's (same machine_status block, plus print_status/extruder/etc).
         tick = 0
         while True:
             await asyncio.sleep(5)
             if self._mqtt_registered:
-                await self.send_cmd(1003)   # machine_status
+                await self.send_cmd(1002)   # full state (includes machine_status)
                 if tick % 2 == 0:
                     await self.send_cmd(2005)  # canvas channel info
                 tick += 1
