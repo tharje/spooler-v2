@@ -168,3 +168,56 @@ def put_file(host: str, port: int, path: str, local_path: Path, headers: dict | 
         return resp.status, resp.read()
     finally:
         conn.close()
+
+
+CC2_UPLOAD_CHUNK = 1024 * 1024  # Elegoo's SDK sends at most 1 MB per request
+
+
+def put_file_chunked(host: str, port: int, path: str, local_path: Path, remote_name: str,
+                     token: str, chunk_size: int = CC2_UPLOAD_CHUNK,
+                     timeout: float = 60.0) -> dict:
+    """Upload the way Elegoo's elegoo-link SDK does for the Centauri Carbon 2:
+    repeated PUTs of <= 1 MB with a Content-Range, X-File-Name, X-File-MD5 and
+    X-Token header, over one kept-alive connection. Each reply is JSON like
+    {"error_code": 0, "offset": N}. Returns the last reply; raises UploadError
+    if the printer reports a non-zero error_code or a non-200 status."""
+    import json
+    size = local_path.stat().st_size
+    if size <= 0:
+        raise UploadError("Empty upload.")
+    md5 = file_md5(local_path)
+    conn = http.client.HTTPConnection(host, port, timeout=timeout)
+    last: dict = {}
+    try:
+        with open(local_path, "rb") as f:
+            offset = 0
+            while offset < size:
+                data = f.read(min(chunk_size, size - offset))
+                if not data:
+                    raise UploadError("Upload interrupted (file changed while sending).")
+                end = offset + len(data) - 1
+                conn.request("PUT", path, body=data, headers={
+                    "Content-Type": "application/octet-stream",
+                    "Content-Length": str(len(data)),
+                    "Content-Range": f"bytes {offset}-{end}/{size}",
+                    "X-File-Name": remote_name,
+                    "X-File-MD5": md5,
+                    "X-Token": token,
+                    "User-Agent": "ElegooLink/1.3.6",
+                })
+                resp = conn.getresponse()
+                body = resp.read()
+                text = body.decode("utf-8", errors="replace")[:300]
+                if resp.status != 200:
+                    raise UploadError(f"Printer rejected the upload (HTTP {resp.status}): {text}")
+                try:
+                    last = json.loads(body)
+                except ValueError:
+                    raise UploadError(f"Unexpected reply from the printer: {text}")
+                code = last.get("error_code", 0)
+                if code not in (0, None):
+                    raise UploadError(f"Printer rejected the upload (error {code}).")
+                offset += len(data)
+        return last
+    finally:
+        conn.close()

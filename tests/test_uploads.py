@@ -132,14 +132,88 @@ def test_supports_upload_flags():
     from printers.prusa import PrusaConnection
     assert CC1Connection.supports_upload and MoonrakerConnection.supports_upload
     assert PrusaConnection.supports_upload
-    assert not CC2Connection.supports_upload
-    cc2 = CC2Connection("id", "1.2.3.4", "n")
-    d = cc2.to_dict()
-    assert d["supports_upload"] is False and "isn't supported" in d["upload_unsupported_reason"]
+    assert CC2Connection.supports_upload  # follows Elegoo's SDK; unverified on hardware
+    from printers.base import PrinterConnection
+    assert not PrinterConnection.supports_upload
+    assert CC2Connection("id", "1.2.3.4", "n").to_dict()["supports_upload"] is True
 
 
-def test_cc2_upload_raises_readable_error():
+def test_unsupported_printer_upload_raises_readable_error():
     import asyncio
+    from printers.base import PrinterConnection
+    with pytest.raises(uploads.UploadError, match="not supported"):
+        asyncio.run(PrinterConnection("id", "1.2.3.4", "n").upload_file(None, "a.gcode"))
+
+
+class _CC2Printer(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+    requests = []
+    reply = b'{"error_code": 0, "offset": 0}'
+    status = 200
+
+    def do_PUT(self):
+        n = int(self.headers.get("Content-Length", 0))
+        _CC2Printer.requests.append({"path": self.path, "headers": dict(self.headers), "body": self.rfile.read(n)})
+        self.send_response(_CC2Printer.status)
+        self.send_header("Content-Length", str(len(_CC2Printer.reply)))
+        self.end_headers()
+        self.wfile.write(_CC2Printer.reply)
+
+    def log_message(self, *a):
+        pass
+
+
+@pytest.fixture
+def cc2_server():
+    _CC2Printer.requests = []
+    _CC2Printer.reply, _CC2Printer.status = b'{"error_code": 0, "offset": 0}', 200
+    srv = HTTPServer(("127.0.0.1", 0), _CC2Printer)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield srv.server_address[1]
+    srv.shutdown()
+
+
+def test_put_file_chunked_splits_with_content_range_and_headers(tmp_path, cc2_server):
+    data = bytes(range(256)) * 10  # 2560 bytes
+    f = tmp_path / "a.gcode"; f.write_bytes(data)
+    uploads.put_file_chunked("127.0.0.1", cc2_server, "/upload", f, "My file.gcode", "1234", chunk_size=1000)
+    reqs = _CC2Printer.requests
+    assert [r["headers"]["Content-Range"] for r in reqs] == [
+        "bytes 0-999/2560", "bytes 1000-1999/2560", "bytes 2000-2559/2560"]
+    assert b"".join(r["body"] for r in reqs) == data
+    h = reqs[0]["headers"]
+    assert h["X-File-Name"] == "My file.gcode" and h["X-Token"] == "1234"
+    assert h["X-File-MD5"] == uploads.file_md5(f)
+    assert reqs[0]["path"] == "/upload"
+
+
+def test_put_file_chunked_raises_on_printer_error_code(tmp_path, cc2_server):
+    _CC2Printer.reply = b'{"error_code": 9004}'
+    f = tmp_path / "a.gcode"; f.write_bytes(b"G28\n")
+    with pytest.raises(uploads.UploadError, match="9004"):
+        uploads.put_file_chunked("127.0.0.1", cc2_server, "/upload", f, "a.gcode", "123456")
+
+
+def test_put_file_chunked_raises_on_http_error(tmp_path, cc2_server):
+    _CC2Printer.status = 500
+    f = tmp_path / "a.gcode"; f.write_bytes(b"G28\n")
+    with pytest.raises(uploads.UploadError, match="HTTP 500"):
+        uploads.put_file_chunked("127.0.0.1", cc2_server, "/upload", f, "a.gcode", "123456")
+
+
+@pytest.mark.asyncio
+async def test_cc2_upload_uses_port_80_and_default_token_without_access_code(tmp_path, monkeypatch):
     from printers.cc2 import CC2Connection
-    with pytest.raises(uploads.UploadError, match="isn't supported"):
-        asyncio.run(CC2Connection("id", "1.2.3.4", "n").upload_file(None, "a.gcode"))
+    seen = {}
+
+    def fake(host, port, path, lp, name, token, **kw):
+        seen.update(host=host, port=port, path=path, name=name, token=token)
+        return {"error_code": 0}
+    monkeypatch.setattr(uploads, "put_file_chunked", fake)
+    f = tmp_path / "a.gcode"; f.write_bytes(b"G28\n")
+    assert await CC2Connection("pid", "10.0.0.9", "CC2").upload_file(f, "a.gcode") is True
+    assert seen == {"host": "10.0.0.9", "port": 80, "path": "/upload", "name": "a.gcode", "token": "123456"}
+    seen.clear()
+    p = CC2Connection("pid", "10.0.0.9", "CC2", access_code="98765")
+    await p.upload_file(f, "a.gcode")
+    assert seen["token"] == "98765"

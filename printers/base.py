@@ -172,6 +172,9 @@ class PrinterConnection:
             "nozzle_hot_fired": False,
         }
         self.state_reason: dict | None = None
+        # Short label for what a "preparing" printer is doing right now
+        # ("Leveling", "Homing", ...); "" when the protocol can't say.
+        self.phase: str = ""
         self._last_spooler_cmd_at: float | None = None
         self._current_print_pauses: list = []
         # Epoch seconds (not an ISO string) deliberately — the frontend does
@@ -243,6 +246,7 @@ class PrinterConnection:
             "state":           classify_display_state(
                                    self.connected, pi.get("Status"), self._is_homing_between_prints()),
             "state_reason":    self.state_reason,
+            "phase":           self.phase,
             "last_seen":       self.last_seen,
             "attrs":           self.attrs,
             "camera_url":      self.camera_url,
@@ -439,6 +443,7 @@ class PrinterConnection:
                 "code":         str(hint["code"]) if hint.get("code") not in (None, "") else "",
                 "category":     hint.get("category") or "unknown",
                 "message":      hint.get("message") or "",
+                "action":       hint.get("action") or "",
                 "raw":          hint.get("raw") or {},
                 "since":        time.strftime("%Y-%m-%dT%H:%M:%S"),
             }

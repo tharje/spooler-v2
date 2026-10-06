@@ -354,6 +354,14 @@ const _REASON_CATEGORY_LABEL = {
   power_loss:      "Power loss",
   door_open:       "Door open",
   leveling:        "Leveling failed",
+  fan:             "Fan fault",
+  motion:          "Motion fault",
+  sensor:          "Sensor fault",
+  hardware:        "Hardware fault",
+  connection:      "Lost communication with a printer part",
+  system:          "System error",
+  filament_feed:   "Filament feed problem",
+  filament_tangle: "Filament tangled",
   user:            "User action",
   unknown:         "Reason not yet identified",
 };
@@ -381,6 +389,7 @@ function renderReasonBox(printer) {
         <strong>${escHtml(kindLabel)}</strong> ${escHtml(initiator)}
         ${detail ? ` — ${escHtml(detail)}` : ""}
       </div>
+      ${r.action ? `<div class="reason-box-action">${escHtml(r.action)}</div>` : ""}
       ${r.code ? `<div class="reason-box-code">Code: ${escHtml(String(r.code))}</div>` : ""}
     </div>
   `;
@@ -489,7 +498,7 @@ function renderPrinter(printer) {
   const stateLabel = STATE_LABEL[sc] || STATE_LABEL.unknown;
   const badgeText  = (sc === "error" && printer.state_reason?.code)
     ? `${status} (${printer.state_reason.code})`
-    : status;
+    : (printer.phase && ["preparing", "error", "printing"].includes(sc) ? printer.phase : status);
 
   card.innerHTML = `
     <!-- Header -->
