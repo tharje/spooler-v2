@@ -480,6 +480,9 @@ function renderPrinter(printer) {
   const chamber    = printer.status?.TempOfBox        ?? printer.status?.ChamberTemp   ?? 0;
   const chamberTgt = printer.status?.TempTargetBox    ?? 0;
 
+  const curLayer   = printer.status?.PrintInfo?.CurrentLayer ?? 0;
+  const totalLayer = printer.status?.PrintInfo?.TotalLayer   ?? 0;
+  const layerLabel = totalLayer > 0 ? `Layer ${curLayer} / ${totalLayer}` : (curLayer > 0 ? `Layer ${curLayer}` : "");
   const elapsed   = printer.status?.PrintInfo?.PrintTime  ?? 0;
   const remaining = printer.status?.PrintInfo?.RemainTime ?? 0;
   const filamentMm = printer.filament_mm ?? 0;
@@ -542,6 +545,7 @@ function renderPrinter(printer) {
       </div>
       <div class="progress-info">
         <span>Elapsed: ${formatTime(elapsed)}</span>
+        ${layerLabel ? `<span class="progress-layer">${escHtml(layerLabel)}</span>` : ""}
         <span>Remaining: ${formatTime(remaining)}</span>
       </div>
       ${paused

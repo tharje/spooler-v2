@@ -1596,3 +1596,4 @@ main {
 .notif-group-chevron { width: 18px; height: 18px; flex: none; color: var(--accent); transition: transform .15s; }
 .notif-group[open] .notif-group-chevron { transform: rotate(90deg); }
 .notif-group > #notif-channels { padding-top: 10px; }
+.progress-layer { font-weight: 600; color: var(--text); }
