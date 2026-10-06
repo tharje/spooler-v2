@@ -11,6 +11,7 @@ import backup
 import config
 import features
 import persistence
+import push
 
 
 @pytest.fixture(autouse=True)
@@ -32,6 +33,7 @@ def isolated_data_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(backup, "BACKUP_DIR", tmp_path / "backups")
     monkeypatch.setattr(backup, "_VERSION_MARKER", tmp_path / ".last_version")
     monkeypatch.setattr(backup, "_DAILY_MARKER", tmp_path / ".last_daily_backup")
+    monkeypatch.setattr(push, "NOTIF_SETTINGS_FILE", tmp_path / "notification_settings.json")
     monkeypatch.setattr(features, "FEATURES_FILE", tmp_path / "features.json")
     # _FORCE_DISABLED and _on_change_callbacks are plain module-level globals,
     # not file-backed -- without resetting them, a callback registered (or a

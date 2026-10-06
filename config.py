@@ -78,6 +78,16 @@ FIELDS: dict = {
     "slicer.url": Field(
         key="slicer.url", label="Slicer URL", type="url", default="", schemes=("http", "https"),
     ),
+    "ntfy.url": Field(
+        key="ntfy.url", label="ntfy server", type="url", default="https://ntfy.sh",
+        schemes=("http", "https"),
+    ),
+    "ntfy.topic": Field(key="ntfy.topic", label="ntfy topic", type="text", default=""),
+    "ntfy.token": Field(key="ntfy.token", label="ntfy access token (optional)", type="secret", default=""),
+    "telegram.token": Field(key="telegram.token", label="Telegram bot token", type="secret", default=""),
+    "telegram.chat_id": Field(key="telegram.chat_id", label="Telegram chat ID", type="text", default=""),
+    "discord.webhook": Field(key="discord.webhook", label="Discord webhook address", type="secret", default=""),
+    "webhook.url": Field(key="webhook.url", label="Webhook address", type="secret", default=""),
     "backup.interval_days": Field(
         key="backup.interval_days", label="Automatic backup interval (days)", type="int",
         env="SPOOLER_BACKUP_INTERVAL_DAYS", default=1,

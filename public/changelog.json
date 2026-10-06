@@ -7,6 +7,8 @@
       "Report bug button in the footer — pick the printer, describe the issue, and open a prefilled GitHub issue with redacted diagnostics (IPs, serials, names and access codes removed)",
       "CC2: poll the full status instead of machine status only",
       "Secrets at rest are now protected with locked-down file permissions",
+      "Notifications: send to ntfy, Telegram, Discord or any webhook as well as browser push (set up and switched on or off under Settings → Notifications, each with a Send test button)",
+      "New notification events: print started, paused, error (with the cause and code), filament runout, and printer offline / back online; completion, start, pause, error and runout notices can include a camera picture",
       "CC2: error codes now shown with a readable cause (about 33 codes from Elegoo's own firmware source: heaters, fans, sensors, Canvas filament feed, cutter and more), including a suggested fix where Elegoo names one; faults are read from the printer's exception list, and command replies like \"printer busy\" are no longer mistaken for faults",
       "CC2: the status badge now says what the printer is doing while it prepares (Heating nozzle/bed, Homing, Leveling, Loading/Unloading filament, Self-check) instead of just \"Preparing\"",
       "CC1: self-check, leveling, resonance test, PID calibration, filament unloading and file checks outside a print are now shown (with the same activity labels as CC2) instead of looking idle, and the newer status codes Elegoo uses are recognised",

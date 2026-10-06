@@ -1075,8 +1075,51 @@ async function _unsubscribePush() {
   }
 }
 
+// Events added with T10. Each gets an on/off switch, optionally a camera
+// picture switch and one numeric parameter; rendered here instead of as
+// hand-written HTML so the list, the form and the save code can't drift apart.
+const _EXTRA_NOTIF_EVENTS = [
+  { key: "started",         label: "Print started",    desc: "When a print begins", image: true },
+  { key: "paused",          label: "Print paused",     desc: "When a print pauses, with the cause (pauses you start from Spooler aren't announced)", image: true },
+  { key: "error",           label: "Print error",      desc: "When the printer reports an error, with the cause and code when known", image: true },
+  { key: "filament_runout", label: "Filament runout",  desc: "When the printer stops because filament ran out", image: true },
+  { key: "offline",         label: "Printer offline",  desc: "When a printer has been unreachable for a while, and when it comes back",
+    param: { name: "minutes", label: "Minutes offline before notifying", def: 5, min: 1, max: 1440 } },
+];
+
+function _renderExtraNotifEvents(s) {
+  const host = document.getElementById("notif-extra-events");
+  if (!host) return;
+  host.innerHTML = _EXTRA_NOTIF_EVENTS.map(ev => `
+    <div class="notif-row">
+      <div class="notif-info">
+        <span class="notif-label">${escHtml(ev.label)}</span>
+        <span class="notif-desc">${escHtml(ev.desc)}</span>
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="notif-ev-${ev.key}-on" ${s[ev.key]?.enabled ? "checked" : ""} />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    ${ev.image ? `<div class="notif-param"><label class="notif-check"><input type="checkbox" id="notif-ev-${ev.key}-image" ${s[ev.key]?.image ? "checked" : ""} /> Attach a camera picture</label></div>` : ""}
+    ${ev.param ? `<div class="notif-param"><label>${escHtml(ev.param.label)}<input type="number" id="notif-ev-${ev.key}-${ev.param.name}" value="${s[ev.key]?.[ev.param.name] ?? ev.param.def}" min="${ev.param.min}" max="${ev.param.max}" /></label></div>` : ""}
+  `).join("");
+}
+
+function _collectExtraNotifEvents() {
+  const out = {};
+  for (const ev of _EXTRA_NOTIF_EVENTS) {
+    const o = { enabled: document.getElementById(`notif-ev-${ev.key}-on`)?.checked ?? false };
+    if (ev.image) o.image = document.getElementById(`notif-ev-${ev.key}-image`)?.checked ?? false;
+    if (ev.param) o[ev.param.name] = parseFloat(document.getElementById(`notif-ev-${ev.key}-${ev.param.name}`)?.value) || ev.param.def;
+    out[ev.key] = o;
+  }
+  return out;
+}
+
 // Notifications sub-page UI
 async function _populateNotifForm() {
+  await _reloadChannels(false);
   const resp = await fetch("/api/notification-settings").catch(() => null);
   const s = resp?.ok ? await resp.json().catch(() => ({})) : {};
   const set = (id, val) => {
@@ -1092,6 +1135,8 @@ async function _populateNotifForm() {
   set("notif-nozzle-printing-threshold", s.nozzle_printing?.threshold ?? 260);
   set("notif-spool-low-on",              s.spool_low?.enabled       ?? false);
   set("notif-spool-low-threshold",       s.spool_low?.threshold     ?? 100);
+  set("notif-finished-image",            s.finished?.image          ?? false);
+  _renderExtraNotifEvents(s);
   _syncNotifParams();
 }
 
@@ -1232,21 +1277,30 @@ document.getElementById("btn-notif-save")?.addEventListener("click", async () =>
   const gb = id => document.getElementById(id)?.checked ?? false;
   const gv = id => parseFloat(document.getElementById(id)?.value) || 0;
   const s = {
-    finished:        { enabled: gb("notif-finished-on") },
+    finished:        { enabled: gb("notif-finished-on"), image: gb("notif-finished-image") },
     layer:           { enabled: gb("notif-layer-on"),           layer:     gv("notif-layer-number") },
     nozzle_idle:     { enabled: gb("notif-nozzle-idle-on"),     threshold: gv("notif-nozzle-idle-threshold") },
     nozzle_printing: { enabled: gb("notif-nozzle-printing-on"), threshold: gv("notif-nozzle-printing-threshold") },
     spool_low:       { enabled: gb("notif-spool-low-on"),       threshold: gv("notif-spool-low-threshold") },
+    ..._collectExtraNotifEvents(),
   };
+  // Browser push needs this browser's permission. Other channels (ntfy,
+  // Telegram, ...) don't, so a refusal here must not block saving.
   const anyEnabled = Object.values(s).some(v => v.enabled);
-  if (anyEnabled) {
-    const perm = await Notification.requestPermission();
-    if (perm !== "granted") { toast("Notification permission denied in browser settings"); return; }
-    const sub = await _subscribePush();
-    if (!sub) toast("Push subscription failed — notifications may not arrive when app is closed");
-  } else {
-    await _unsubscribePush();
+  if (featureEnabled("notify_webpush") && "Notification" in window) {
+    if (anyEnabled) {
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") {
+        toast("Browser notifications are blocked — other channels still work");
+      } else {
+        const sub = await _subscribePush();
+        if (!sub) toast("Push subscription failed — browser notifications may not arrive when the app is closed");
+      }
+    } else {
+      await _unsubscribePush();
+    }
   }
+  if (!await _saveAllChannelFields()) return;
   const r = await fetch("/api/notification-settings", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1260,7 +1314,7 @@ document.getElementById("btn-notif-save")?.addEventListener("click", async () =>
   }
 });
 
-document.getElementById("btn-notif-test")?.addEventListener("click", async () => {
+async function _testBrowserPush() {
   const perm = await Notification.requestPermission();
   if (perm !== "granted") { toast("Allow notifications in browser settings first"); return; }
   const sub = await _subscribePush();
@@ -1272,7 +1326,139 @@ document.getElementById("btn-notif-test")?.addEventListener("click", async () =>
     const d = await r.json().catch(() => ({}));
     toast(d.error || "Failed to send test notification");
   }
-});
+}
+
+// ─── Notification channels (where notifications are sent) ────────────────────
+// Web push is built in; the rest are configured here with the same field
+// store as Settings → Integrations (/api/integrations), and switched on/off
+// with the same feature switches the server enforces (/api/features).
+const _NOTIF_CHANNELS = [
+  { key: "webpush",  feature: "notify_webpush",  title: "Browser push", prefix: null,
+    help: "Notifications on this device, even when the app is closed. Allow notifications in your browser when asked." },
+  { key: "ntfy",     feature: "notify_ntfy",     title: "ntfy",     prefix: "ntfy.",
+    help: "ntfy.sh or your own ntfy server. Install the ntfy app and subscribe to the topic." },
+  { key: "telegram", feature: "notify_telegram", title: "Telegram", prefix: "telegram.",
+    help: "Create a bot with @BotFather, send it a message, and enter the bot token and your chat ID." },
+  { key: "discord",  feature: "notify_discord",  title: "Discord",  prefix: "discord.",
+    help: "Channel settings → Integrations → Webhooks → copy the webhook address." },
+  { key: "webhook",  feature: "notify_webhook",  title: "Webhook",  prefix: "webhook.",
+    help: "Spooler sends each notification as JSON (POST) to this address." },
+];
+
+function _channelFieldsHtml(ch) {
+  if (!ch.prefix) return "";
+  return integrations.fields.filter(f => f.key.startsWith(ch.prefix)).map(f => {
+    const secret = f.type === "secret";
+    const placeholder = secret ? (f.set ? "•••• (leave blank to keep)" : "Not set") : "";
+    const remove = (secret && f.set && !f.locked)
+      ? `<button type="button" class="btn btn-secondary btn-sm" data-ch-clear="${escAttr(f.key)}">Remove</button>` : "";
+    return `<div class="integration-field">
+      <label>${escHtml(f.label)}
+        <input type="${secret ? "password" : "text"}" data-ch-key="${escAttr(f.key)}"
+               value="${secret ? "" : escAttr(f.value ?? "")}" placeholder="${escAttr(placeholder)}"
+               ${f.locked ? "disabled" : ""} autocomplete="off" />
+      </label>${remove ? `<div class="integration-field-meta">${remove}</div>` : ""}
+    </div>`;
+  }).join("");
+}
+
+function _renderNotifChannels() {
+  const host = document.getElementById("notif-channels");
+  if (!host) return;
+  host.innerHTML = _NOTIF_CHANNELS.map(ch => {
+    const f = features[ch.feature];
+    if (!f) return "";
+    const result = integrations.tests?.[ch.key];
+    const status = f.missing ? "Not set up" : (f.enabled ? "On" : "Off");
+    return `
+    <details class="notif-channel" data-channel="${ch.key}">
+      <summary>
+        <span class="notif-label">${escHtml(ch.title)}</span>
+        <span class="notif-channel-status${f.missing ? " missing" : ""}">${status}</span>
+        <label class="toggle-switch" onclick="event.stopPropagation()">
+          <input type="checkbox" data-ch-feature="${ch.feature}" ${f.enabled ? "checked" : ""} ${f.locked ? "disabled" : ""} />
+          <span class="toggle-slider"></span>
+        </label>
+      </summary>
+      <div class="notif-channel-body">
+        <p class="report-desc">${escHtml(ch.help)}</p>
+        ${_channelFieldsHtml(ch)}
+        <div class="integration-test-row">
+          <button type="button" class="btn btn-secondary btn-sm" data-ch-test="${ch.key}">Send test</button>
+          ${result ? `<span class="integration-test-result ${result.ok ? "ok" : "fail"}">${escHtml(result.message)}</span>` : ""}
+        </div>
+      </div>
+    </details>`;
+  }).join("");
+
+  host.querySelectorAll("input[data-ch-feature]").forEach(input => {
+    input.addEventListener("change", async () => {
+      const key = input.dataset.chFeature, enabled = input.checked;
+      try {
+        const r = await fetch("/api/features", { method: "PATCH", headers: { "Content-Type": "application/json" },
+                                                  body: JSON.stringify({ key, enabled }) });
+        const data = await r.json();
+        if (!r.ok) { toast(data.error || "Could not update", true); input.checked = !enabled; return; }
+        features = {}; data.features.forEach(f => { features[f.key] = f; });
+        _renderNotifChannels();
+      } catch (e) { toast("Could not update: " + e.message, true); input.checked = !enabled; }
+    });
+  });
+  host.querySelectorAll("button[data-ch-clear]").forEach(btn => btn.addEventListener("click", async () => {
+    const r = await fetch("/api/integrations", { method: "PATCH", headers: { "Content-Type": "application/json" },
+                                                  body: JSON.stringify({ clear: [btn.dataset.chClear] }) });
+    if (r.ok) { await _reloadChannels(true); toast("Removed"); } else toast("Could not remove", true);
+  }));
+  host.querySelectorAll("button[data-ch-test]").forEach(btn => btn.addEventListener("click", () => _testChannel(btn.dataset.chTest, btn)));
+}
+
+async function _reloadChannels(keepOpen) {
+  const open = new Set([...document.querySelectorAll("#notif-channels details[open]")].map(d => d.dataset.channel));
+  const r = await fetch("/api/features");
+  if (r.ok) { features = {}; (await r.json()).forEach(f => { features[f.key] = f; }); }
+  await loadIntegrations();
+  _renderNotifChannels();
+  if (keepOpen) open.forEach(k => document.querySelector(`#notif-channels details[data-channel="${k}"]`)?.setAttribute("open", ""));
+}
+
+// Save the typed-in fields of one channel (blank secrets mean "unchanged").
+async function _saveChannelFields(chKey) {
+  const values = {};
+  document.querySelectorAll(`#notif-channels details[data-channel="${chKey}"] [data-ch-key]`).forEach(i => {
+    values[i.dataset.chKey] = i.value;
+  });
+  if (!Object.keys(values).length) return true;
+  const r = await fetch("/api/integrations", { method: "PATCH", headers: { "Content-Type": "application/json" },
+                                                body: JSON.stringify({ values }) });
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    toast(d.error || "Could not save", true);
+    return false;
+  }
+  return true;
+}
+
+async function _testChannel(chKey, btn) {
+  if (chKey === "webpush") { await _testBrowserPush(); return; }
+  btn.disabled = true; btn.textContent = "Sending…";
+  try {
+    if (!await _saveChannelFields(chKey)) return;
+    const r = await fetch(`/api/integrations/${encodeURIComponent(chKey)}/test`, { method: "POST" });
+    const d = await r.json().catch(() => ({}));
+    if (r.status === 403) toast("Switch this channel on first", true);
+    else toast(d.message || (r.ok ? "Sent" : "Failed"), !d.ok);
+  } finally {
+    await _reloadChannels(true);
+  }
+}
+
+// Saving the notification page also saves any channel fields typed into it.
+async function _saveAllChannelFields() {
+  for (const ch of _NOTIF_CHANNELS) {
+    if (ch.prefix && !await _saveChannelFields(ch.key)) return false;
+  }
+  return true;
+}
 
 // ─── Printers panel ────────────────────────────────────────────────────────────
 const printersPanel = document.getElementById("panel-printers");
@@ -1973,7 +2159,7 @@ function _applyFeatures(list) {
 
 const _FEATURE_GROUPS = [
   { title: "Monitoring",    keys: ["camera"] },
-  { title: "Notifications", keys: ["notifications", "notify_webpush"] },
+  { title: "Notifications", keys: ["notifications"] },
   { title: "Data",          keys: ["backup"] },
   { title: "Integrations",  keys: ["spoolman"] },
 ];

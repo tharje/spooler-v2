@@ -37,6 +37,8 @@ from push import (
 from spoolman import get_spoolman_db, get_spoolman_url, spoolman_auth_header, test_spoolman_connection
 import config
 import diagnostics
+import notifiers
+import notify
 import uploads
 
 try:
@@ -611,7 +613,7 @@ class SPHandler(SimpleHTTPRequestHandler):
         elif self.path == "/api/integrations":
             self._json({
                 "fields": config.describe_all(),
-                "tests": {"spoolman": config.last_test_result("spoolman")},
+                "tests": {k: config.last_test_result(k) for k in ("spoolman", *notifiers.CHANNELS)},
                 "server_settings": _server_settings_readonly(),
             })
         elif self.path.startswith("/api/camera/"):
@@ -741,6 +743,9 @@ class SPHandler(SimpleHTTPRequestHandler):
             self._handle_import_filaments()
         elif self.path == "/api/integrations/spoolman/test":
             self._handle_test_spoolman()
+        elif self.path.startswith("/api/integrations/") and self.path.endswith("/test") \
+                and self.path.split("/")[3] in notifiers.CHANNELS:
+            self._handle_test_notifier(self.path.split("/")[3])
         elif self.path == "/api/restore":
             self._handle_restore()
         elif self.path.startswith("/api/v1/"):
@@ -1106,6 +1111,20 @@ class SPHandler(SimpleHTTPRequestHandler):
             self._json({"error": "Some fields could not be updated", "fields": errors}, 400)
             return
         self._json({"ok": True, "fields": config.describe_all()})
+
+    def _handle_test_notifier(self, channel: str):
+        self._read_body()
+        feature = notifiers.CHANNELS[channel][0]
+        if not is_enabled(feature):
+            self._json({"error": "feature_disabled", "feature": feature}, 403)
+            return
+        try:
+            notify.send_test(channel)
+            result = {"ok": True, "message": "Test message sent."}
+        except notifiers.NotifierError as e:
+            result = {"ok": False, "message": str(e)}
+        config.record_test_result(channel, result["ok"], result["message"])
+        self._json(result)
 
     @requires_feature("spoolman")
     def _handle_test_spoolman(self):

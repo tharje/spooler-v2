@@ -1571,3 +1571,12 @@ main {
 .modal-box { max-height: 90vh; overflow-y: auto; }
 .modal-box > * { flex-shrink: 0; }
 .reason-box-action { font-size: 12px; margin-top: 4px; opacity: .9; }
+.notif-check { display: flex; flex-direction: row; align-items: center; gap: 8px; font-size: 13px; }
+.notif-check input { width: auto; }
+.notif-channel { border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 8px; }
+.notif-channel > summary { display: flex; align-items: center; gap: 10px; padding: 10px 12px; cursor: pointer; list-style: none; }
+.notif-channel > summary::-webkit-details-marker { display: none; }
+.notif-channel > summary .notif-label { flex: 1; }
+.notif-channel-status { font-size: 12px; color: var(--text-muted); }
+.notif-channel-status.missing { color: var(--yellow); }
+.notif-channel-body { padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 10px; }

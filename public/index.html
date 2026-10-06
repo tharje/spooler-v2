@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css?v=46" />
+  <link rel="stylesheet" href="style.css?v=48" />
 </head>
 <body>
   <header>
@@ -547,6 +547,9 @@
           <h3>Notifications</h3>
         </div>
         <div class="notif-list">
+          <div class="feature-group-title">Send notifications to</div>
+          <div id="notif-channels"></div>
+          <div class="feature-group-title">Events</div>
 
           <div class="notif-row">
             <div class="notif-info">
@@ -557,6 +560,9 @@
               <input type="checkbox" id="notif-finished-on" />
               <span class="toggle-slider"></span>
             </label>
+          </div>
+          <div class="notif-param">
+            <label class="notif-check"><input type="checkbox" id="notif-finished-image" /> Attach a camera picture</label>
           </div>
 
           <div class="notif-row">
@@ -615,9 +621,10 @@
             <label>Remaining (g)<input type="number" id="notif-spool-low-threshold" value="100" min="1" max="5000" /></label>
           </div>
 
+          <div id="notif-extra-events"></div>
+          <p class="report-desc">Events are sent to every channel that is switched on above.</p>
         </div>
         <div class="modal-actions">
-          <button id="btn-notif-test" class="btn btn-secondary">Send test</button>
           <button id="btn-notif-save" class="btn btn-primary">Save</button>
         </div>
       </div>
@@ -733,7 +740,7 @@
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="/config.js"></script>
-  <script src="app.js?v=62"></script>
+  <script src="app.js?v=64"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});

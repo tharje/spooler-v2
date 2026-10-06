@@ -35,7 +35,7 @@ class Feature:
     description: str
     default: bool
     requires: tuple = ()          # other feature keys that must be on first
-    requires_config: tuple = ()   # config keys that must be set (T8 -- none yet)
+    requires_config: tuple = ()   # config keys that must be set (see config.py)
     risky: bool = False           # UI should confirm before turning this on
 
 
@@ -66,8 +66,28 @@ FEATURES: dict = {
     ),
     "notify_webpush": Feature(
         key="notify_webpush", name="Web push notifications", default=True,
-        description="Browser push notifications (the only channel today).",
+        description="Browser push notifications.",
         requires=("notifications",),
+    ),
+    "notify_ntfy": Feature(
+        key="notify_ntfy", name="ntfy notifications", default=True,
+        description="Send notifications to an ntfy topic (ntfy.sh or your own server).",
+        requires=("notifications",), requires_config=("ntfy.topic",),
+    ),
+    "notify_telegram": Feature(
+        key="notify_telegram", name="Telegram notifications", default=True,
+        description="Send notifications to a Telegram chat through your own bot.",
+        requires=("notifications",), requires_config=("telegram.token", "telegram.chat_id"),
+    ),
+    "notify_discord": Feature(
+        key="notify_discord", name="Discord notifications", default=True,
+        description="Send notifications to a Discord channel through a webhook.",
+        requires=("notifications",), requires_config=("discord.webhook",),
+    ),
+    "notify_webhook": Feature(
+        key="notify_webhook", name="Webhook notifications", default=True,
+        description="POST every notification as JSON to an address you choose.",
+        requires=("notifications",), requires_config=("webhook.url",),
     ),
 }
 
@@ -196,6 +216,7 @@ def requires_feature(key: str):
 
 def describe_all() -> list:
     """Everything the /api/features endpoint and the settings UI need."""
+    import config  # local: config.py must stay importable without this module
     overrides = _load_overrides()
     out = []
     for key, feat in FEATURES.items():
@@ -205,7 +226,7 @@ def describe_all() -> list:
             "description": feat.description,
             "enabled": _effective_enabled(key, overrides),
             "locked": is_force_disabled(key),
-            "missing": bool(feat.requires_config),  # none have config requirements yet (T8)
+            "missing": any(not config.get(k) for k in feat.requires_config),
             "risky": feat.risky,
             "requires": list(feat.requires),
         })

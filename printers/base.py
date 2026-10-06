@@ -14,7 +14,9 @@ import state
 from features import is_enabled
 from persistence import FILAMENT_DENSITY, append_history, filament_mm_to_grams, save_printers
 from printers.protocol import decode_printinfo
-from push import load_notif_settings, send_push_all
+import notify as notifylib
+from push import load_notif_settings
+from snapshot import grab_jpeg
 from spoolman import get_spool_density, spoolman_deduct, spoolman_deduct_spool
 
 # Raw SDCP-style status codes. Shared by the pure transition classifier below
@@ -169,6 +171,8 @@ class PrinterConnection:
         self.camera_connected: bool | None = None
         self.filament_density: float = FILAMENT_DENSITY
         self._task: asyncio.Task | None = None
+        self._offline_task: asyncio.Task | None = None   # delayed "printer offline" notice
+        self._offline_notified = False
         self._last_print_status = None
         self._print_start_time: float | None = None
         self._spool_extrusion: dict  = {}   # spool_id -> mm used this print
@@ -273,6 +277,9 @@ class PrinterConnection:
         }
 
     def stop(self) -> None:
+        if self._offline_task is not None:
+            self._offline_task.cancel()
+            self._offline_task = None
         if self._task:
             self._task.cancel()
 
@@ -341,6 +348,89 @@ class PrinterConnection:
 
     # ── Internal helpers ───────────────────────────────────────────────────────
 
+    # ── Notifications ──────────────────────────────────────────────────────────
+
+    def _emit(self, event: str, title: str, body: str = "", priority: str = "default",
+              extra: dict | None = None) -> None:
+        """Queue a notification for `event` (see notify.EVENT_SETTING). Cheap
+        no-op when the event is off; grabs a camera picture first when the
+        event's setting asks for one. Safe to call from sync code inside the
+        event loop."""
+        if not notifylib.is_event_on(event):
+            return
+        try:
+            asyncio.get_running_loop().create_task(self._emit_async(event, title, body, priority, extra))
+        except RuntimeError:
+            notifylib.notify(notifylib.Notification(event, self.id, title, body, None, priority,
+                                                    self.name, extra or {}))
+
+    async def _emit_async(self, event, title, body, priority, extra) -> None:
+        image = None
+        if notifylib.wants_image(event) and self.camera_url and self.connected:
+            image = await asyncio.get_running_loop().run_in_executor(None, grab_jpeg, self.camera_url)
+        notifylib.notify(notifylib.Notification(event, self.id, title, body, image, priority,
+                                                self.name, extra or {}))
+
+    def _reason_text(self, reason: dict) -> str:
+        parts = []
+        if reason.get("message"):
+            parts.append(reason["message"])
+        if reason.get("code") not in (None, ""):
+            parts.append(f"(code {reason['code']})")
+        if reason.get("action"):
+            parts.append(reason["action"])
+        return " ".join(parts)
+
+    def _notify_reason(self, reason: dict) -> None:
+        """A new pause/error reason was just recorded: tell the user, with the
+        cause. Pauses started from Spooler itself aren't news."""
+        kind, cat = reason["kind"], reason.get("category")
+        if kind == "pause" and reason.get("initiated_by") == "spooler":
+            return
+        text = self._reason_text(reason)
+        extra = {"category": cat, "code": reason.get("code"), "initiated_by": reason.get("initiated_by")}
+        if cat == "filament_runout" and kind in ("pause", "error"):
+            self._emit("filament_runout", f"{self.name} — Filament ran out", text or "Load filament and resume.",
+                       priority="high", extra=extra)
+        elif kind == "error":
+            self._emit("print_error", f"{self.name} — Print error", text or "The printer reported an error.",
+                       priority="urgent", extra=extra)
+        elif kind == "pause":
+            self._emit("print_paused", f"{self.name} — Print paused", text or "The print was paused.",
+                       priority="high", extra=extra)
+
+    def _track_connection_for_notifications(self) -> None:
+        """Delayed 'printer offline' and 'printer back online' notices."""
+        if self.connected:
+            task = getattr(self, "_offline_task", None)
+            if task is not None:
+                task.cancel()
+                self._offline_task = None
+            if getattr(self, "_offline_notified", False):
+                self._offline_notified = False
+                self._emit("printer_online", f"{self.name} — Printer online", "The printer is connected again.")
+        elif getattr(self, "_offline_task", None) is None and not getattr(self, "_offline_notified", False):
+            try:
+                self._offline_task = asyncio.get_running_loop().create_task(self._offline_after_delay())
+            except RuntimeError:
+                pass
+
+    async def _offline_after_delay(self) -> None:
+        minutes = notifylib.event_settings("printer_offline").get("minutes", 5)
+        try:
+            minutes = max(1.0, float(minutes))
+        except (TypeError, ValueError):
+            minutes = 5.0
+        try:
+            await asyncio.sleep(minutes * 60)
+        except asyncio.CancelledError:
+            return
+        self._offline_task = None
+        if not self.connected:
+            self._offline_notified = True
+            self._emit("printer_offline", f"{self.name} — Printer offline",
+                       f"No contact with the printer for {minutes:g} minutes.", priority="high")
+
     def _check_notifications(self) -> None:
         if not is_enabled("notifications"):
             return
@@ -362,15 +452,18 @@ class PrinterConnection:
         _was_printing = last in (2, 3, 4, 5, 6, 7)
         _print_ended  = (is_done or is_idle) and _was_printing
         if s.get("finished", {}).get("enabled") and _print_ended:
+            fname = pi.get("Filename", "")
             if status == 8:
-                send_push_all(f"{self.name} — Print cancelled", "Your print was cancelled.")
+                self._emit("print_cancelled", f"{self.name} — Print cancelled",
+                           f"{fname} was cancelled." if fname else "Your print was cancelled.")
             else:
-                send_push_all(f"{self.name} — Print complete", "Your print is complete.")
+                self._emit("print_complete", f"{self.name} — Print complete",
+                           f"{fname} is done." if fname else "Your print is complete.", extra={"filename": fname})
 
         if s.get("nozzle_idle", {}).get("enabled") and is_idle:
             thr = s["nozzle_idle"].get("threshold", 50)
             if nozzle > thr and not ns["nozzle_idle_fired"]:
-                send_push_all(f"{self.name} — Nozzle hot", f"Nozzle is {round(nozzle)}°C while idle.")
+                self._emit("nozzle_hot_idle", f"{self.name} — Nozzle hot", f"Nozzle is {round(nozzle)}°C while idle.")
                 ns["nozzle_idle_fired"] = True
             elif nozzle <= thr:
                 ns["nozzle_idle_fired"] = False
@@ -380,7 +473,7 @@ class PrinterConnection:
         if s.get("layer", {}).get("enabled") and is_printing:
             target = s["layer"].get("layer", 1)
             if layer >= target and not ns["layer_fired"]:
-                send_push_all(f"{self.name} — Layer {target} reached", f"Currently on layer {layer}.")
+                self._emit("layer_reached", f"{self.name} — Layer {target} reached", f"Currently on layer {layer}.")
                 ns["layer_fired"] = True
             if layer < target:
                 ns["layer_fired"] = False
@@ -390,7 +483,7 @@ class PrinterConnection:
         if s.get("nozzle_printing", {}).get("enabled") and is_printing:
             thr = s["nozzle_printing"].get("threshold", 260)
             if nozzle > thr and not ns["nozzle_hot_fired"]:
-                send_push_all(f"{self.name} — Nozzle overheat", f"Nozzle is {round(nozzle)}°C during print.")
+                self._emit("nozzle_overheat", f"{self.name} — Nozzle overheat", f"Nozzle is {round(nozzle)}°C during print.", priority="high")
                 ns["nozzle_hot_fired"] = True
             elif nozzle <= thr:
                 ns["nozzle_hot_fired"] = False
@@ -407,6 +500,7 @@ class PrinterConnection:
         if self.connected:
             self.last_seen = time.time()
         self._check_notifications()
+        self._track_connection_for_notifications()
         await state.broadcast_to_browsers({
             "type":    "printer_update",
             "printer": self.to_dict(),
@@ -462,6 +556,7 @@ class PrinterConnection:
                 "raw":          hint.get("raw") or {},
                 "since":        time.strftime("%Y-%m-%dT%H:%M:%S"),
             }
+            self._notify_reason(self.state_reason)
             if kind == "pause":
                 self._current_print_pauses.append({
                     "since":        self.state_reason["since"],
@@ -483,6 +578,8 @@ class PrinterConnection:
             self.state_reason = None
             self._current_print_pauses = []
             self._print_start_time = time.time()
+            self._emit("print_started", f"{self.name} — Print started",
+                       pi.get("Filename") or "A print has started.")
             # Initialise per-spool tracking for this print
             self._spool_extrusion = {}
             self._extrusion_snapshot = 0.0

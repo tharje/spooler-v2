@@ -13,7 +13,8 @@ import urllib.request
 import config
 import state as _state
 from persistence import FILAMENT_DENSITY
-from push import load_notif_settings, send_push_all
+import notify
+from push import load_notif_settings
 from state import broadcast_to_browsers
 
 
@@ -187,10 +188,12 @@ def _notify_spool_level(
     if spool_low_cfg.get("enabled") and remaining > 0:
         threshold = float(spool_low_cfg.get("threshold", 100))
         if remaining <= threshold:
-            send_push_all(
-                f"Spool almost empty — {name}",
-                f"{round(remaining)}g remaining on {printer_id}.",
-            )
+            notify.notify(notify.Notification(
+                event="spool_low", printer_id=printer_id,
+                title=f"Spool almost empty — {name}",
+                body=f"{round(remaining)}g remaining on {printer_id}.",
+                extra={"spool_id": result.get("id"), "remaining_g": round(remaining)},
+            ))
 
 
 def spoolman_deduct_spool(
