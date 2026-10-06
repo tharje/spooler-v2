@@ -7,11 +7,11 @@ from printers.cc2 import CC2Connection
 
 
 def _printer():
-    p = CC2Connection("pid", "192.168.10.130", "My Secret Printer", mainboard_id="F013B3B8WZZ9K11",
+    p = CC2Connection("pid", "192.0.2.10", "My Secret Printer", mainboard_id="F013B3B8WZZ9K11",
                       access_code="hunter2code")
     p.attrs = {"Model": "Centauri Carbon 2", "FirmwareVersion": "1.2.3",
                "Hostname": "elegoo-abcd", "MainboardID": "F013B3B8WZZ9K11"}
-    p.status = {"note": "talks to 192.168.10.130 as hunter2code", "mac": "aa:bb:cc:dd:ee:ff"}
+    p.status = {"note": "talks to 192.0.2.10 as hunter2code", "mac": "aa:bb:cc:dd:ee:ff"}
     return p
 
 
@@ -25,9 +25,9 @@ def test_redact_patterns():
 def test_report_has_no_known_secrets(monkeypatch):
     monkeypatch.setattr(state, "printers", {"pid": _printer()})
     diagnostics._buffer.clear()
-    diagnostics._buffer.append("12:00:00 [Printer My Secret Printer] connected to 192.168.10.130 code hunter2code SN F013B3B8WZZ9K11")
+    diagnostics._buffer.append("12:00:00 [Printer My Secret Printer] connected to 192.0.2.10 code hunter2code SN F013B3B8WZZ9K11")
     report = diagnostics.build_report()
-    for secret in ("192.168.10.130", "hunter2code", "My Secret Printer", "F013B3B8WZZ9K11",
+    for secret in ("192.0.2.10", "hunter2code", "My Secret Printer", "F013B3B8WZZ9K11",
                    "elegoo-abcd", "aa:bb:cc:dd:ee:ff"):
         assert secret not in report
     assert "Centauri Carbon 2" in report and "1.2.3" in report and "Spooler version" in report

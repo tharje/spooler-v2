@@ -3,6 +3,7 @@ Web Push (VAPID) support — key management, subscriptions, and send helpers.
 """
 
 import json
+import os
 
 try:
     from pywebpush import webpush, WebPushException
@@ -19,6 +20,10 @@ except ImportError:
 
 from features import is_enabled
 from persistence import DATA_DIR, _atomic_write
+
+# Contact address sent to push services (RFC 8292 "sub" claim). Set VAPID_CONTACT
+# to e.g. mailto:you@example.org if you want push providers to be able to reach you.
+VAPID_CONTACT = os.getenv("VAPID_CONTACT", "mailto:admin@example.com")
 
 VAPID_FILE          = DATA_DIR / "vapid_keys.json"
 PUSH_SUBS_FILE      = DATA_DIR / "push_subscriptions.json"
@@ -107,7 +112,7 @@ def send_push_all(title: str, body: str) -> None:
                 subscription_info=sub,
                 data=json.dumps({"title": title, "body": body}),
                 vapid_private_key=_vapid,
-                vapid_claims={"sub": "mailto:tharje@gmail.com"},
+                vapid_claims={"sub": VAPID_CONTACT},
             )
         except WebPushException as e:
             status = getattr(e.response, "status_code", None) if e.response else None
