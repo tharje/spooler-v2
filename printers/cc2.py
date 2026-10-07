@@ -132,6 +132,7 @@ class CC2Connection(PrinterConnection):
         self._awaiting_file_list  = False
         self._current_filename    = ""
         self._mqtt_serial         = _load_cached_serial(self.id)
+        self._extruded_this_print = False  # this print has had a non-zero duration
         self._unanswered          = 0  # requests sent since the printer last answered this client
         self._prev_active_tray_id = -2  # sentinel: not yet seen
         self._pending_thumb_fut: asyncio.Future | None = None
@@ -685,6 +686,8 @@ class CC2Connection(PrinterConnection):
             "standby":   0,
         }
 
+        if state_str not in ("printing", "paused"):
+            self._extruded_this_print = False
         if sub_status in _SUB_TRANSIENT:
             status_code = _SUB_TRANSIENT[sub_status]
         elif state_str in _STATE_STR:
@@ -694,7 +697,13 @@ class CC2Connection(PrinterConnection):
             # layer 0) with sub_status 1045 (nozzle) / 1405 (bed) -- showing
             # "printing" then is wrong. Before extruding has begun, let the
             # more specific sub_status decide (heating, homing, leveling).
-            if state_str == "printing" and not print_duration and sub_status not in _EXTRUDING_SUBS:
+            if state_str == "printing" and print_duration:
+                self._extruded_this_print = True
+            # Once a print has been under way, a zero duration (seen as the print
+            # wraps up) must not turn it back into "preparing": the end of the
+            # print would then never be recognised (history, light, notification).
+            if (state_str == "printing" and not print_duration and not self._extruded_this_print
+                    and sub_status not in _EXTRUDING_SUBS):
                 if sub_status in _SUB_STABLE:
                     status_code = _SUB_STABLE[sub_status]
                 else:

@@ -772,6 +772,12 @@ class PrinterConnection:
         cur_status = pi.get("Status")
         event = classify_print_transition(self._last_print_status, cur_status)
 
+        # Safety net: a print that had been extruding but whose last status was some other
+        # "busy" one (preparing, stopping, ...) still ended when the printer goes idle/complete.
+        if (event is None and cur_status in _END_STATUSES and self._acct is not None
+                and self._acct.total_mm() > 0 and self._last_print_status in ACTIVE_STATUSES):
+            event = "end"
+
         display_state = classify_display_state(self.connected, cur_status, self._is_busy_between_prints())
         self._update_state_reason(display_state)
 

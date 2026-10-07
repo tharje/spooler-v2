@@ -355,3 +355,25 @@ def test_cc1_status_20_is_leveling_not_heating():
     p.status = {"CurrentStatus": [1], "PrintInfo": {"Status": 20}}
     p._update_phase()
     assert p.phase == "Leveling"
+
+
+def test_zero_duration_at_the_end_of_a_print_does_not_hide_the_end(printer):
+    """Regression: the TPU print on a real CC2 never reached history because, as it wrapped up,
+    state stayed 'printing' with duration 0, which showed as 'preparing' and so the end wasn't seen."""
+    printer._cc2_state["machine_status"] = {"status": 2, "sub_status": 2075}
+    printer._cc2_state["print_status"] = {"state": "printing", "print_duration": 800, "remaining_time_sec": 10}
+    printer._apply_cc2_status()
+    assert printer.status["PrintInfo"]["Status"] == 3
+    printer._cc2_state["machine_status"] = {"status": 2, "sub_status": 2999}
+    printer._cc2_state["print_status"] = {"state": "printing", "print_duration": 0, "remaining_time_sec": 0}
+    printer._apply_cc2_status()
+    assert printer.status["PrintInfo"]["Status"] == 3          # still the same print, not "preparing"
+    printer._cc2_state["print_status"] = {"state": "", "print_duration": 0, "remaining_time_sec": 0}
+    printer._cc2_state["machine_status"] = {"status": 1, "sub_status": 0}
+    printer._apply_cc2_status()
+    assert printer.status["PrintInfo"]["Status"] == 0
+    # and the next print's heating is "preparing" again
+    printer._cc2_state["machine_status"] = {"status": 2, "sub_status": 1045}
+    printer._cc2_state["print_status"] = {"state": "printing", "print_duration": 0, "remaining_time_sec": 900}
+    printer._apply_cc2_status()
+    assert printer.status["PrintInfo"]["Status"] == 15
