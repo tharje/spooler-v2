@@ -12,7 +12,10 @@ import uuid
 
 import state
 from features import is_enabled
-from persistence import FILAMENT_DENSITY, append_history, filament_mm_to_grams, save_printers
+from persistence import (
+    FILAMENT_DENSITY, append_history, filament_mm_to_grams, save_printers,
+    save_snapshot, update_history_entry,
+)
 from printers.protocol import decode_printinfo
 import notify as notifylib
 from push import load_notif_settings
@@ -364,10 +367,43 @@ class PrinterConnection:
             notifylib.notify(notifylib.Notification(event, self.id, title, body, None, priority,
                                                     self.name, extra or {}))
 
+    async def _camera_picture(self, max_age_s: float = 20.0) -> bytes | None:
+        """One JPEG from the camera, or None (no camera, offline, timeout).
+        A picture taken in the last few seconds is reused, so the end-of-print
+        picture and a notification about the same moment cost one grab."""
+        if not self.camera_url or not self.connected:
+            return None
+        cached = getattr(self, "_picture_cache", None)
+        if cached and time.monotonic() - cached[0] < max_age_s:
+            return cached[1]
+        jpeg = await asyncio.get_running_loop().run_in_executor(None, grab_jpeg, self.camera_url)
+        if jpeg:
+            self._picture_cache = (time.monotonic(), jpeg)
+        return jpeg
+
+    async def _save_print_picture(self, entry_id: str) -> None:
+        """Keep a picture of the finished print with its history entry. Runs
+        beside, never inside, history writing and filament deduction."""
+        try:
+            if not is_enabled("print_snapshot") or not is_enabled("camera"):
+                return
+            jpeg = await self._camera_picture()
+            if not jpeg:
+                return
+            loop = asyncio.get_running_loop()
+            if await loop.run_in_executor(None, save_snapshot, entry_id, jpeg) and \
+               await loop.run_in_executor(None, update_history_entry, entry_id, {"snapshot": True}):
+                await state.broadcast_to_browsers({"type": "history_snapshot", "id": entry_id})
+            else:
+                from persistence import delete_snapshots
+                delete_snapshots([entry_id])   # entry vanished meanwhile
+        except Exception as e:
+            print(f"[Printer {self.name}] Print picture skipped: {type(e).__name__}")
+
     async def _emit_async(self, event, title, body, priority, extra) -> None:
         image = None
-        if notifylib.wants_image(event) and self.camera_url and self.connected:
-            image = await asyncio.get_running_loop().run_in_executor(None, grab_jpeg, self.camera_url)
+        if notifylib.wants_image(event):
+            image = await self._camera_picture()
         notifylib.notify(notifylib.Notification(event, self.id, title, body, image, priority,
                                                 self.name, extra or {}))
 
@@ -629,6 +665,7 @@ class PrinterConnection:
                 print(f"[History] {label}: {filename} – {filament_mm:.0f}mm / {filament_g}g"
                       f" (density {density} g/cm³)")
                 await state.broadcast_to_browsers({"type": "history_entry", "entry": entry})
+                asyncio.create_task(self._save_print_picture(entry["id"]))
                 if filament_mm > 0:
                     # Flush + deduct the last active spool immediately
                     self._on_tray_change(None)

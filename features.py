@@ -60,6 +60,11 @@ FEATURES: dict = {
         key="report_problem", name="Report problem", default=True,
         description="Footer button that builds a redacted diagnostics report and opens a prefilled GitHub issue.",
     ),
+    "print_snapshot": Feature(
+        key="print_snapshot", name="Print pictures", default=True,
+        description="Take a camera picture when a print ends and keep it with the print in the history.",
+        requires=("camera",),
+    ),
     "notifications": Feature(
         key="notifications", name="Notifications", default=True,
         description="Master switch for all print notifications.",

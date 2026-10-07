@@ -3,6 +3,7 @@ File-backed persistence: printers list, print history, filament utilities.
 """
 
 import json
+import re
 import math
 import os
 import tempfile
@@ -77,10 +78,10 @@ def filament_mm_to_grams(mm: float, density: float = FILAMENT_DENSITY) -> float:
     return round(vol_cm3 * density, 1)
 
 
-def _atomic_write(path: Path, text: str, mode: int | None = None) -> None:
+def _atomic_write(path: Path, text: "str | bytes", mode: int | None = None) -> None:
     fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
     try:
-        with os.fdopen(fd, "w") as f:
+        with os.fdopen(fd, "wb" if isinstance(text, (bytes, bytearray)) else "w") as f:
             f.write(text)
             f.flush()
             os.fsync(f.fileno())
@@ -141,12 +142,80 @@ def save_tray_map(tray_map: dict) -> None:
 
 
 def append_history(entry: dict) -> None:
+    dropped = []
     with _HISTORY_LOCK:
         history = load_history()
         history.append(entry)
         if len(history) > HISTORY_MAX_ENTRIES:
+            dropped = history[:-HISTORY_MAX_ENTRIES]
             history = history[-HISTORY_MAX_ENTRIES:]
         _atomic_write(HISTORY_FILE, json.dumps(history, indent=2))
+    # The pictures of entries that just fell off the end go with them, so
+    # snapshots/ can't grow past what the history itself holds.
+    delete_snapshots([e.get("id") for e in dropped if e.get("snapshot")])
+
+
+def update_history_entry(entry_id: str, fields: dict) -> bool:
+    """Merge `fields` into the history entry with this id. False if it's gone
+    (e.g. trimmed in the meantime)."""
+    with _HISTORY_LOCK:
+        history = load_history()
+        for e in history:
+            if e.get("id") == entry_id:
+                e.update(fields)
+                _atomic_write(HISTORY_FILE, json.dumps(history, indent=2))
+                return True
+    return False
+
+
+# ── Print snapshots (one picture per finished print, T13) ────────────────────
+
+_SNAPSHOT_ID = re.compile(r"^[0-9a-f]{32}$")
+
+
+def snapshot_dir() -> Path:
+    return DATA_DIR / "snapshots"
+
+
+def snapshot_path(entry_id: str) -> Path | None:
+    """Where this entry's picture lives, or None if the id isn't a plain
+    32-hex history id (never lets a request name an arbitrary path)."""
+    if not isinstance(entry_id, str) or not _SNAPSHOT_ID.match(entry_id):
+        return None
+    return snapshot_dir() / f"{entry_id}.jpg"
+
+
+def save_snapshot(entry_id: str, jpeg: bytes) -> bool:
+    path = snapshot_path(entry_id)
+    if path is None or not jpeg:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_write(path, jpeg)
+    return True
+
+
+def delete_snapshots(entry_ids) -> None:
+    for entry_id in entry_ids:
+        path = snapshot_path(entry_id) if entry_id else None
+        if path is not None:
+            path.unlink(missing_ok=True)
+
+
+def cleanup_orphan_snapshots() -> int:
+    """Remove pictures whose history entry no longer exists (startup)."""
+    folder = snapshot_dir()
+    if not folder.is_dir():
+        return 0
+    keep = {e.get("id") for e in load_history()}
+    removed = 0
+    for f in folder.iterdir():
+        if f.suffix == ".jpg" and f.stem not in keep:
+            f.unlink(missing_ok=True)
+            removed += 1
+        elif f.suffix != ".jpg":
+            f.unlink(missing_ok=True)   # leftover temp files
+            removed += 1
+    return removed
 
 
 def migrate_history_ids() -> None:

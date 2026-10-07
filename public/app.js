@@ -216,6 +216,11 @@ function handleMessage(msg) {
     case "error":
       toast(msg.message, true);
       break;
+    case "history_snapshot": {
+      const h = history.find(e => e.id === msg.id);
+      if (h) { h.snapshot = true; renderHistory(); }
+      break;
+    }
     case "history_entry":
       history.unshift(msg.entry);
       renderHistory();
@@ -2167,7 +2172,7 @@ function _applyFeatures(list) {
 }
 
 const _FEATURE_GROUPS = [
-  { title: "Monitoring",    keys: ["camera"] },
+  { title: "Monitoring",    keys: ["camera", "print_snapshot"] },
   { title: "Notifications", keys: ["notifications"] },
   { title: "Data",          keys: ["backup"] },
   { title: "Integrations",  keys: ["spoolman"] },
@@ -2269,12 +2274,28 @@ function renderHistory() {
     return `<tr>
       <td class="col-date">${escHtml(date)}</td>
       <td>${escHtml(e.printer_name)}</td>
-      <td class="col-file" title="${escAttr(e.filename)}">${escHtml(e.filename || "—")}</td>
+      <td class="col-file" title="${escAttr(e.filename)}">${
+        e.snapshot && e.id && featureEnabled("print_snapshot")
+          ? `<img class="hist-thumb" src="/api/snapshot/${escAttr(e.id)}" alt="Picture of the finished print" loading="lazy" onclick="openSnapshot('${escAttr(e.id)}')" />`
+          : ""}${escHtml(e.filename || "—")}</td>
       <td class="col-filament">${m} m · ${e.filament_g} g</td>
       <td>${formatTime(e.print_time_s)} ${result}</td>
     </tr>`;
   }).join("");
 }
+
+// Full-size picture of a finished print (click or Esc to close).
+function openSnapshot(id) {
+  closeSnapshot();
+  const box = document.createElement("div");
+  box.id = "snap-lightbox";
+  box.className = "snap-lightbox";
+  box.innerHTML = `<img src="/api/snapshot/${escAttr(id)}" alt="Picture of the finished print" />`;
+  box.addEventListener("click", closeSnapshot);
+  document.body.appendChild(box);
+}
+function closeSnapshot() { document.getElementById("snap-lightbox")?.remove(); }
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSnapshot(); });
 
 const historyPanel    = document.getElementById("panel-history");
 const historyBackdrop = document.getElementById("panel-backdrop");

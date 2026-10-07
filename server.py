@@ -60,7 +60,7 @@ import diagnostics
 import uploads
 from backup import check_startup_backup, daily_backup_loop
 from http_handler import run_http, run_https, set_ws_adopter
-from persistence import DATA_DIR, load_printers, load_tray_map, migrate_history_ids
+from persistence import DATA_DIR, cleanup_orphan_snapshots, load_printers, load_tray_map, migrate_history_ids
 from printers import PRINTER_TYPES, make_printer
 from push import init_vapid
 from ws_handler import browser_handler
@@ -112,6 +112,9 @@ async def main() -> None:
     init_vapid()
     check_startup_backup()
     migrate_history_ids()
+    removed = cleanup_orphan_snapshots()
+    if removed:
+        print(f"[Snapshots] Removed {removed} orphaned picture file(s)")
     uploads.remove_stale_uploads()
 
     # Load saved printers

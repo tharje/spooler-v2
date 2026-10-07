@@ -29,7 +29,7 @@ from backup import (
 )
 from features import describe_all as describe_all_features, is_enabled, requires_feature, set_enabled
 from features import FeatureError
-from persistence import DATA_DIR, current_version, load_history, save_printers
+from persistence import DATA_DIR, current_version, load_history, save_printers, snapshot_path
 from push import (
     WEBPUSH_AVAILABLE, add_subscription, get_public_key, has_subscriptions,
     load_notif_settings, remove_subscription, save_notif_settings, send_push_all,
@@ -297,6 +297,24 @@ class SPHandler(SimpleHTTPRequestHandler):
                     conn.close()
                 except Exception:
                     pass
+
+    @requires_feature("print_snapshot")
+    def _handle_snapshot(self):
+        entry_id = urllib.parse.unquote(self.path[len("/api/snapshot/"):].split("?")[0])
+        path = snapshot_path(entry_id)
+        try:
+            data = path.read_bytes() if path else None
+        except OSError:
+            data = None
+        if data is None:
+            self._json({"error": "No picture for that print"}, 404)
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "private, max-age=86400")
+        self.end_headers()
+        self.wfile.write(data)
 
     # ── Thumbnail proxy ───────────────────────────────────────────────────────
     # CC1: http://{ip}:80/thumbnail/{bare_filename}  (no auth needed)
@@ -616,6 +634,8 @@ class SPHandler(SimpleHTTPRequestHandler):
                 "tests": {k: config.last_test_result(k) for k in ("spoolman", *notifiers.CHANNELS)},
                 "server_settings": _server_settings_readonly(),
             })
+        elif self.path.startswith("/api/snapshot/"):
+            self._handle_snapshot()
         elif self.path.startswith("/api/camera/"):
             self._proxy_camera()
         elif self.path.startswith("/api/thumbnail/"):

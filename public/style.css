@@ -1597,3 +1597,6 @@ main {
 .notif-group[open] .notif-group-chevron { transform: rotate(90deg); }
 .notif-group > #notif-channels { padding-top: 10px; }
 .progress-layer { font-weight: 600; color: var(--text); }
+.hist-thumb { width: 40px; height: 30px; object-fit: cover; border-radius: 4px; vertical-align: middle; margin-right: 8px; cursor: zoom-in; border: 1px solid var(--border); }
+.snap-lightbox { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,.85); display: flex; align-items: center; justify-content: center; cursor: zoom-out; }
+.snap-lightbox img { max-width: 94vw; max-height: 90vh; border-radius: 8px; box-shadow: 0 8px 40px rgba(0,0,0,.6); }
