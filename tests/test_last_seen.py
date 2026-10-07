@@ -137,7 +137,17 @@ def test_migration_is_a_noop_when_every_entry_has_an_id():
 
 # ── the browser's clock (runs the real frontend code under node) ────────────
 
-APP_JS = Path(__file__).resolve().parent.parent / "public" / "app.js"
+PUBLIC = Path(__file__).resolve().parent.parent / "public"
+
+
+class _AppJs:
+    """The frontend is split over public/app-*.js; the blocks tested here are found in the whole."""
+    @staticmethod
+    def read_text():
+        return "\n".join(p.read_text() for p in sorted(PUBLIC.glob("app-*.js")))
+
+
+APP_JS = _AppJs()
 
 
 def _run_node(script: str) -> str:

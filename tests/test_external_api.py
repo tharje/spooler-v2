@@ -9,6 +9,7 @@ import pytest
 import api_tokens
 import features
 import http_handler
+import http_external
 import persistence
 
 JPEG = b"\xff\xd8" + b"x" * 40 + b"\xff\xd9"
@@ -259,7 +260,7 @@ def test_spool_names_come_from_spoolman_and_missing_ones_are_null(history):
 def test_api_looks_up_spool_names(history, monkeypatch):
     enable()
     persistence.update_history_entry(A, {"spools": [{"id": 5, "g": 12.4}]})
-    monkeypatch.setattr(http_handler, "get_spool_index", lambda: {5: {"name": "Elegoo PETG", "material": "PETG",
+    monkeypatch.setattr(http_external, "get_spool_index", lambda: {5: {"name": "Elegoo PETG", "material": "PETG",
                                                                       "vendor": "Elegoo", "color_hex": None}})
     key, _ = api_tokens.create("x", "read")
     item = jcall("GET", f"/api/external/v1/history/{A}", key)[1]

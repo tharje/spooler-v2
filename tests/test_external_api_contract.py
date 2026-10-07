@@ -16,6 +16,7 @@ import pytest
 import api_tokens
 import features
 import http_handler
+import http_external
 import persistence
 import state
 
@@ -98,7 +99,7 @@ def api(monkeypatch):
     persistence.save_snapshot(A, b"\xff\xd8x\xff\xd9")
     from printers.cc1 import CC1Connection
     monkeypatch.setattr(state, "printers", {"p2": CC1Connection("p2", "10.0.0.2", "CC1")})
-    monkeypatch.setattr(http_handler, "get_spool_index", lambda: {2: {"name": "Elegoo PETG", "material": "PETG",
+    monkeypatch.setattr(http_external, "get_spool_index", lambda: {2: {"name": "Elegoo PETG", "material": "PETG",
                                                                       "vendor": "Elegoo", "color_hex": "FF0000"}})
     read, _ = api_tokens.create("r", "read")
     write, _ = api_tokens.create("w", "write")
