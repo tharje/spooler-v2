@@ -19,7 +19,7 @@ import threading
 import time
 
 import state
-from features import describe_all
+from features import _auth_on, describe_all
 from persistence import current_version
 
 LOG_LINES = 400
@@ -130,6 +130,7 @@ def build_report(printer_id: str | None = None) -> str:
         f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}",
         f"Spooler version: {current_version()}",
         f"Python: {platform.python_version()}  OS: {platform.system()} {platform.release()}",
+        f"Login: {'on' if _auth_on() else 'OFF (AUTH_ENABLED=false)'}",
         "",
         "== Features ==",
         json.dumps(features, indent=2),

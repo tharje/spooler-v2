@@ -150,6 +150,7 @@ function connect() {
     send({ action: "list_printers" });
     loadHistory();
     loadLedger();
+    loadSecurityStatus();
     fetchSpools();
   };
 
@@ -2090,6 +2091,26 @@ document.getElementById("btn-api-create")?.addEventListener("click", async () =>
   _renderApiTokens();
 });
 
+
+// ─── Login-off warning ───────────────────────────────────────────────────────
+// With AUTH_ENABLED=false anyone on the network can use Spooler; say so, for as
+// long as that is the case (footer, and on the Features page).
+async function loadSecurityStatus() {
+  try {
+    const r = await fetch("/api/security-status");
+    if (!r.ok) return;
+    const { auth_enabled } = await r.json();
+    document.getElementById("auth-warning").hidden = auth_enabled !== false;
+    document.getElementById("features-auth-warning").hidden = auth_enabled !== false;
+  } catch (_) { /* server may not be ready yet */ }
+}
+document.getElementById("auth-warning")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  _openSettings();
+  _showSettingsPage(_settingsFeaturesPage);
+  _renderFeaturesList();
+});
+
 // ─── Feature flags ───────────────────────────────────────────────────────────
 async function loadFeatures() {
   try {
@@ -2320,7 +2341,7 @@ function _renderFeaturesList() {
     const rows = group.keys.filter(k => features[k]).map(key => {
       const f = features[key];
       const lockedNote = f.locked
-        ? `<div class="feature-locked-note">Locked off by server configuration</div>`
+        ? `<div class="feature-locked-note">${escHtml(f.lock_reason || "Locked off by server configuration")}</div>`
         : "";
       return `
         <div class="feature-row">

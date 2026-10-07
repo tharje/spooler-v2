@@ -37,6 +37,9 @@ class Feature:
     requires: tuple = ()          # other feature keys that must be on first
     requires_config: tuple = ()   # config keys that must be set (see config.py)
     risky: bool = False           # UI should confirm before turning this on
+    # Can act on the printers (heat, move, ...) or hand out access to them: only
+    # allowed while login is on, since without it anyone on the network could.
+    requires_auth: bool = False
 
 
 FEATURES: dict = {
@@ -130,6 +133,20 @@ def is_force_disabled(key: str) -> bool:
     return key in _FORCE_DISABLED
 
 
+AUTH_LOCK_REASON = ("Requires login. This can't be used while login is switched off "
+                    "(AUTH_ENABLED=false), because anyone on the network could use it.")
+
+
+def _auth_on() -> bool:
+    import auth     # read at call time: AUTH_ENABLED is the live setting, not a snapshot
+    return bool(auth.AUTH_ENABLED)
+
+
+def auth_locked(key: str) -> bool:
+    """True when `key` needs login but login is off."""
+    return key in FEATURES and FEATURES[key].requires_auth and not _auth_on()
+
+
 def _requires_satisfied(key: str, overrides: dict) -> bool:
     feat = FEATURES[key]
     return all(_effective_enabled(r, overrides) for r in feat.requires)
@@ -138,7 +155,7 @@ def _requires_satisfied(key: str, overrides: dict) -> bool:
 def _effective_enabled(key: str, overrides: dict) -> bool:
     if key not in FEATURES:
         return False
-    if is_force_disabled(key):
+    if is_force_disabled(key) or auth_locked(key):
         return False
     stored = overrides.get(key)
     enabled = stored if stored is not None else FEATURES[key].default
@@ -167,6 +184,8 @@ def set_enabled(key: str, value: bool) -> list:
         raise FeatureError(f"Unknown feature: {key!r}")
     if is_force_disabled(key):
         raise FeatureError(f"{key!r} is locked off by SPOOLER_FORCE_DISABLE.")
+    if value and auth_locked(key):
+        raise FeatureError(f"{FEATURES[key].name}: {AUTH_LOCK_REASON}")
 
     with _lock:
         overrides = _load_overrides()
@@ -239,7 +258,9 @@ def describe_all() -> list:
             "name": feat.name,
             "description": feat.description,
             "enabled": _effective_enabled(key, overrides),
-            "locked": is_force_disabled(key),
+            "locked": is_force_disabled(key) or auth_locked(key),
+            "lock_reason": (AUTH_LOCK_REASON if auth_locked(key)
+                            else "Locked off by server configuration" if is_force_disabled(key) else None),
             "missing": any(not config.get(k) for k in feat.requires_config),
             "risky": feat.risky,
             "requires": list(feat.requires),

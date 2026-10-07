@@ -1749,3 +1749,9 @@ main {
 .ledger-error { margin-top: 3px; color: var(--red); word-break: break-word; }
 .ledger-row.discarded .ledger-state { color: var(--text-muted); }
 .ledger-actions { display: flex; flex-direction: column; gap: 6px; flex: none; }
+
+/* ─── Login switched off ─────────────────────────────────────────────────── */
+.footer-warning { color: var(--yellow); font-weight: 600; text-decoration: none; margin-left: 14px; font-size: 12px; }
+.footer-warning:hover { text-decoration: underline; }
+.login-off-note { border: 1px solid var(--yellow); background: rgba(234,179,8,.1); border-radius: var(--radius-sm);
+  padding: 10px 12px; font-size: 12px; margin: 0 0 12px; }

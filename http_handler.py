@@ -859,6 +859,9 @@ class SPHandler(SimpleHTTPRequestHandler):
             self._json({"tokens": api_tokens.list_tokens(), "max": api_tokens.MAX_TOKENS})
         elif self.path == "/api/spoolman-ledger":
             self._handle_ledger_list()
+        elif self.path == "/api/security-status":
+            import auth
+            self._json({"auth_enabled": bool(auth.AUTH_ENABLED)})
         elif self.path.split("?")[0] == "/api/stats":
             self._handle_stats()
         elif self.path.split("?")[0] == "/api/history.csv":

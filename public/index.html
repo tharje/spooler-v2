@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css?v=61" />
+  <link rel="stylesheet" href="style.css?v=62" />
 </head>
 <body>
   <header>
@@ -390,6 +390,8 @@
   <!-- Footer -->
   <footer class="app-footer">
     <span class="footer-brand">Spooler v2</span>
+    <a id="auth-warning" class="footer-warning" href="#" hidden
+       title="Login is switched off (AUTH_ENABLED=false): anyone on your network can use Spooler, including features that need login.">⚠ Login is off</a>
     <span class="footer-right">
       <button id="btn-report-problem" class="footer-version report-btn" title="Report a bug"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M8 2l1.9 1.9M16 2l-1.9 1.9"/><path d="M9 7.1V6a3 3 0 0 1 6 0v1.1"/><path d="M12 20a6 6 0 0 1-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3a6 6 0 0 1-6 6z"/><path d="M12 20v-9M6.5 13H2M17.5 13H22M6 18l-2.5 2M18 18l2.5 2M6 9L3.5 7M18 9l2.5-2"/></svg>Report bug</button>
       <button id="version-badge" class="footer-version" title="Release notes">v…</button>
@@ -712,6 +714,7 @@
           </button>
           <h3>Features</h3>
         </div>
+        <p id="features-auth-warning" class="login-off-note" hidden>⚠ Login is switched off (<code>AUTH_ENABLED=false</code>). Anyone on your network can use Spooler, so features that act on the printers are locked off.</p>
         <div id="features-list" class="features-list"></div>
       </div>
       <!-- Integrations sub-page -->
@@ -811,7 +814,7 @@
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="/config.js"></script>
-  <script src="app.js?v=77"></script>
+  <script src="app.js?v=78"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});

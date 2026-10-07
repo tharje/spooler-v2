@@ -92,7 +92,7 @@ def test_describe_all_shape():
     keys = {e["key"] for e in entries}
     assert keys == set(features.FEATURES)
     for e in entries:
-        assert set(e) == {"key", "name", "description", "enabled", "locked", "missing", "risky", "requires"}
+        assert set(e) == {"key", "name", "description", "enabled", "locked", "lock_reason", "missing", "risky", "requires"}
 
 
 # ── requires_feature decorator ───────────────────────────────────────────────
