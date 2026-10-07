@@ -6,6 +6,8 @@ Local web GUI for **Elegoo Centauri Carbon** FDM 3D printers (CC1 and CC2). Moni
 ![Prusa](https://img.shields.io/badge/Prusa%20(PrusaLink)-experimental-orange)
 ![Klipper](https://img.shields.io/badge/Klipper%20(Moonraker)-experimental-orange)
 
+> **Disclaimer.** Spooler is an independent project and is not affiliated with, endorsed by, or supported by ELEGOO, Prusa Research, or the Klipper/Moonraker projects. ELEGOO, Centauri Carbon, Prusa, PrusaLink, Klipper and Moonraker are trademarks or names of their respective owners and are used here only to say which printers Spooler works with.
+
 > **Branches**
 > - `main` — latest stable release. This is what the Docker image (`ghcr.io/tharje/spooler-v2:latest`) is built from.
 > - `dev` — active development. New features and fixes land here first and are tested before being merged to `main`.
@@ -292,11 +294,11 @@ If you run a firmware version that works, add it to `tested_firmware.json` in th
 
 CC2 support would not have been possible without these projects:
 
-- [CentauriCarbon2](https://github.com/elegooofficial/CentauriCarbon2) by Elegoo (official) — firmware source; full MQTT method table (`method.h`), print state strings (`print_stats.cpp`), Canvas/AMS RFID filament struct (`canvas_dev.h`), sub_status codes, `gcode_move` speed/extrude factor fields
-- [centauri-sentinel](https://github.com/LegalMarc/centauri-sentinel) by LegalMarc — MQTT client details, topic structure, partial-status deep-merge, MJPEG grabber
-- [elegoo-homeassistant](https://github.com/danielcherubini/elegoo-homeassistant) by danielcherubini — CC2 MQTT transport, access-code config, sub_status constants and method 1046 file metadata
-- [elegoo-link](https://github.com/ELEGOO-3D/elegoo-link) by ELEGOO-3D — CC2 MQTT method reference (method 1045 thumbnail, method 1046 file detail)
-- [CentauriCarbon](https://github.com/elegooofficial/CentauriCarbon) by Elegoo (official) — CC1 firmware source; the error codes the printer shows on its screen
+- [CentauriCarbon2](https://github.com/elegooofficial/CentauriCarbon2) by Elegoo (official, GPL-3.0) — firmware source; full MQTT method table (`method.h`), print state strings (`print_stats.cpp`), Canvas/AMS RFID filament struct (`canvas_dev.h`), sub_status codes, `gcode_move` speed/extrude factor fields
+- [centauri-sentinel](https://github.com/LegalMarc/centauri-sentinel) by LegalMarc (MIT) — MQTT client details, topic structure, partial-status deep-merge, MJPEG grabber
+- [elegoo-homeassistant](https://github.com/danielcherubini/elegoo-homeassistant) by danielcherubini (MIT) — CC2 MQTT transport, access-code config, sub_status constants and method 1046 file metadata
+- [elegoo-link](https://github.com/ELEGOO-3D/elegoo-link) by ELEGOO-3D (Apache-2.0) — CC2 MQTT method reference (method 1045 thumbnail, method 1046 file detail)
+- [CentauriCarbon](https://github.com/elegooofficial/CentauriCarbon) by Elegoo (official, GPL-3.0) — CC1 firmware source; the error codes the printer shows on its screen (the English wording of those messages in `printers/error_codes.py` is taken from the firmware's `translation.csv`)
 - [sdcp-centauri-carbon](https://github.com/WalkerFrederick/sdcp-centauri-carbon) by WalkerFrederick — SDCP v3.0 protocol documentation (CC1)
 - [pycentauri](https://github.com/tholterhus/pycentauri) by tholterhus — notes on Centauri Carbon firmware behaviour (connection slots, quirks)
 - centauri-carbon-dashboard (open source) — CC1 print speed control reference (SDCP Cmd 403 / PrintSpeedPct)

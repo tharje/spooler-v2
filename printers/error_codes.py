@@ -79,6 +79,8 @@ CC2_ERROR_CODES = {
 # Elegoo's open-source CC1 firmware (github.com/elegooofficial/CentauriCarbon,
 # firmware/app/e100/app_top.cpp for the code, firmware/resources/e100/
 # translation.csv for the English text -- quoted/condensed, not invented).
+# That repository is GPL-3.0; the messages below are taken from it under that
+# licence (compatible with this project's AGPL-3.0).
 # NOT yet seen arriving over SDCP: CC1's WebSocket status isn't known to carry
 # these codes, so nothing looks them up until a real capture shows where they
 # come from (see printers/cc1.py _protocol_reason_hint). 101-104, 304 and
