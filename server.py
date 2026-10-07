@@ -9,6 +9,7 @@ import contextlib
 import logging
 import os
 import ssl as _ssl
+import signal
 import sys
 import threading
 from pathlib import Path
@@ -262,7 +263,21 @@ async def main() -> None:
         else:
             print("  HTTPS: disabled (HTTPS_ENABLED=false)")
         print("─" * 50 + "\n")
-        await asyncio.Future()  # run forever
+        stop = asyncio.Event()
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            try:
+                loop.add_signal_handler(sig, stop.set)
+            except (NotImplementedError, RuntimeError):
+                pass
+        await stop.wait()   # run until docker stop / Ctrl-C
+        # Save the running prints' filament figures so the next start carries on from here.
+        for p in list(state.printers.values()):
+            try:
+                p.save_accounting_now()
+            except Exception as e:
+                print(f"[Shutdown] Could not save accounting for {p.name}: {e}")
+        print("Shutting down.")
 
 
 if __name__ == "__main__":
