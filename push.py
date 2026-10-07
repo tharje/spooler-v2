@@ -115,7 +115,8 @@ def send_push_all(title: str, body: str) -> None:
                 vapid_claims={"sub": VAPID_CONTACT},
             )
         except WebPushException as e:
-            status = getattr(e.response, "status_code", None) if e.response else None
+            # `is not None`: a requests.Response is falsy for 4xx/5xx, so `if e.response` never matched.
+            status = getattr(e.response, "status_code", None) if e.response is not None else None
             if status in (404, 410):
                 dead.append(sub)
             else:

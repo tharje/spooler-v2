@@ -502,3 +502,18 @@ async def test_shutdown_saves_the_running_prints_figures(make_printer):
     status(p, 13, 45, tray=0)
     p.save_accounting_now()
     assert printaccount.load_active("pid1").total_mm() == 45
+
+
+@pytest.mark.asyncio
+async def test_print_that_ends_from_a_busy_status_is_still_recorded(make_printer):
+    """The printer's last status before idle was not 'printing' (e.g. 15 'preparing'): the print still ended."""
+    p = make_printer()
+    status(p, 0, tray=0); await p._check_print_transition()
+    status(p, 13, 0, tray=0); await p._check_print_transition()
+    status(p, 13, 700, tray=0); await p._check_print_transition()
+    status(p, 15, 0, tray=0); await p._check_print_transition()     # busy, counter shows 0
+    status(p, 0, 0, tray=0); await p._check_print_transition()      # idle
+    [e] = ledger.all_entries()
+    assert e["mm"] == 700
+    assert persistence.load_history()[0]["filament_mm"] == 700
+    assert printaccount.load_active("pid1") is None
