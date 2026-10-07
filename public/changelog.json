@@ -27,7 +27,8 @@
       "Web Push contact address is now configurable (VAPID_CONTACT) instead of hardcoded",
       "Filament catalogue import moved from the Spools panel to Settings → Integrations, now with a brand dropdown so you can import any brand from SpoolmanDB (Elegoo preselected)",
       "Webhook notifications now carry a schema_version, a unique id per event and a UTC timestamp, so a receiver can spot the same event twice (documented in docs/external-api.md)",
-      "The frontend and the HTTP handler are split into smaller files (no change in behaviour)"
+      "The frontend and the HTTP handler are split into smaller files (no change in behaviour)",
+      "CC2: Spooler now re-registers with the printer when it stops answering (the light button and other commands could be silently ignored after the printer dropped the registration)"
     ]
   },
   {
