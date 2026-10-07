@@ -5,6 +5,7 @@ HTTP request handler: static files + /api/ routes.
 import asyncio
 import http.client
 import json
+import re
 import ssl
 import socket
 import subprocess
@@ -29,7 +30,7 @@ from backup import (
 )
 from features import describe_all as describe_all_features, is_enabled, requires_feature, set_enabled
 from features import FeatureError
-from persistence import DATA_DIR, current_version, load_history, save_printers, snapshot_path
+from persistence import DATA_DIR, current_version, load_history, save_printers, snapshot_path, update_history_entry
 from push import (
     WEBPUSH_AVAILABLE, add_subscription, get_public_key, has_subscriptions,
     load_notif_settings, remove_subscription, save_notif_settings, send_push_all,
@@ -37,8 +38,10 @@ from push import (
 from spoolman import get_spoolman_db, get_spoolman_url, spoolman_auth_header, test_spoolman_connection
 import config
 import diagnostics
+import api_tokens
 import notifiers
 import notify
+import stats
 import uploads
 
 try:
@@ -298,6 +301,165 @@ class SPHandler(SimpleHTTPRequestHandler):
                 except Exception:
                     pass
 
+    def _stats_params(self):
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        one = lambda k: (q.get(k) or [""])[0].strip() or None
+        return one("from"), one("to"), one("printer")
+
+    def _handle_create_api_token(self):
+        try:
+            body = json.loads(self._read_body() or b"{}")
+            key, record = api_tokens.create(str(body.get("name", "")), str(body.get("scope", "read")))
+        except ValueError as e:
+            self._json({"error": str(e)}, 400)
+            return
+        except Exception:
+            self._json({"error": "Bad request"}, 400)
+            return
+        self._json({"key": key, "token": record})      # the only time the key is ever shown
+
+    def _apply_reference(self, entry_id: str, body) -> tuple:
+        """Shared by the browser and the external API: set one print's
+        reference number. Returns (status, payload)."""
+        if not isinstance(body, dict) or set(body) - {"reference"}:
+            return 400, {"error": "Only 'reference' can be changed"}
+        try:
+            fields = {"reference": stats.clean_reference(body.get("reference"))}
+        except ValueError as e:
+            return 400, {"error": str(e)}
+        if not entry_id or not update_history_entry(entry_id, fields):
+            return 404, {"error": "No such print"}
+        if _ws_loop is not None:
+            asyncio.run_coroutine_threadsafe(
+                state.broadcast_to_browsers({"type": "history_update", "id": entry_id, "fields": fields}),
+                _ws_loop,
+            )
+        return 200, {"ok": True, **fields}
+
+    @requires_feature("statistics")
+    def _handle_history_update(self):
+        """Edit the user-owned fields of one print. Only `reference` for now."""
+        entry_id = urllib.parse.unquote(self.path[len("/api/history/"):].split("?")[0])
+        try:
+            body = json.loads(self._read_body() or b"{}")
+        except Exception:
+            self._json({"error": "Bad request"}, 400)
+            return
+        code, payload = self._apply_reference(entry_id, body)
+        self._json(payload, code)
+
+    # ── External API (other programs, API-key auth) ──────────────────────────
+
+    def _handle_external(self, method: str) -> None:
+        self._cors = True
+        base = "/api/external/v1"
+        if not is_enabled("external_api"):
+            self._json({"error": "feature_disabled", "feature": "external_api"}, 403)
+            return
+        client = self.client_address[0]
+        if api_tokens.is_blocked(client):
+            self._json({"error": "Too many failed attempts, try again later"}, 429)
+            return
+        header = self.headers.get("Authorization", "")
+        key = header[7:].strip() if header[:7].lower() == "bearer " else ""
+        owner = api_tokens.verify(key)
+        if owner is None:
+            api_tokens.record_failure(client)
+            body = json.dumps({"error": "Missing or invalid API key (send 'Authorization: Bearer <key>')"}).encode()
+            self.send_response(401)
+            self.send_header("WWW-Authenticate", 'Bearer realm="spooler"')
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        parsed = urllib.parse.urlparse(self.path)
+        path = urllib.parse.unquote(parsed.path).rstrip("/")
+        q = urllib.parse.parse_qs(parsed.query)
+        one = lambda k: (q.get(k) or [""])[0].strip() or None
+        m = re.fullmatch(re.escape(base) + r"/history/([0-9a-f]{32})(/picture)?", path)
+
+        if method == "PATCH":
+            if not m or m.group(2):
+                self._json({"error": "Not found"}, 404)
+                return
+            if owner["scope"] != "write":
+                self._json({"error": "This key is read-only"}, 403)
+                return
+            try:
+                body = json.loads(self._read_body() or b"{}")
+            except Exception:
+                self._json({"error": "Bad request"}, 400)
+                return
+            code, payload = self._apply_reference(m.group(1), body)
+            self._json(payload, code)
+            return
+
+        if path == base:
+            self._json({"name": "Spooler external API", "version": 1, "scope": owner["scope"],
+                        "endpoints": ["GET /history", "GET /history/{id}", "GET /history/{id}/picture",
+                                      "PATCH /history/{id}", "GET /stats"]})
+        elif path == f"{base}/history":
+            try:
+                limit = min(500, max(1, int(one("limit") or 50)))
+                offset = max(0, int(one("offset") or 0))
+            except ValueError:
+                self._json({"error": "limit and offset must be numbers"}, 400)
+                return
+            result = one("result")
+            if result not in (None, "complete", "cancelled", "error"):
+                self._json({"error": "result must be complete, cancelled or error"}, 400)
+                return
+            rows = stats.query_history(load_history(), one("from"), one("to"), one("printer"),
+                                       one("q"), one("reference"), result)
+            self._json({"total": len(rows), "limit": limit, "offset": offset,
+                        "items": [stats.public_entry(e) for e in rows[offset:offset + limit]]})
+        elif path == f"{base}/stats":
+            self._json(stats.compute_stats(load_history(), one("from"), one("to"), one("printer")))
+        elif m:
+            entry = next((e for e in load_history() if e.get("id") == m.group(1)), None)
+            if entry is None:
+                self._json({"error": "No such print"}, 404)
+            elif not m.group(2):
+                self._json(stats.public_entry(entry))
+            else:
+                picture = snapshot_path(m.group(1)) if entry.get("snapshot") else None
+                try:
+                    data = picture.read_bytes() if picture else None
+                except OSError:
+                    data = None
+                if data is None:
+                    self._json({"error": "No picture for that print"}, 404)
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "image/jpeg")
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Cache-Control", "private, max-age=86400")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(data)
+        else:
+            self._json({"error": "Not found"}, 404)
+
+    @requires_feature("statistics")
+    def _handle_stats(self):
+        lo, hi, printer = self._stats_params()
+        self._json(stats.compute_stats(load_history(), lo, hi, printer))
+
+    @requires_feature("statistics")
+    def _handle_history_csv(self):
+        lo, hi, printer = self._stats_params()
+        data = stats.history_csv(load_history(), lo, hi, printer)
+        self.send_response(200)
+        self.send_header("Content-Type", "text/csv; charset=utf-8")
+        self.send_header("Content-Disposition", 'attachment; filename="spooler-history.csv"')
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(data)
+
     @requires_feature("print_snapshot")
     def _handle_snapshot(self):
         entry_id = urllib.parse.unquote(self.path[len("/api/snapshot/"):].split("?")[0])
@@ -515,6 +677,9 @@ class SPHandler(SimpleHTTPRequestHandler):
     # ── HTTP verbs ────────────────────────────────────────────────────────────
 
     def do_GET(self):
+        if self.path.startswith("/api/external/"):
+            self._handle_external("GET")
+            return
         # Auth-exempt routes
         if self.path == "/cert.pem":
             data = CERT_FILE.read_bytes() if CERT_FILE.exists() else b""
@@ -634,6 +799,12 @@ class SPHandler(SimpleHTTPRequestHandler):
                 "tests": {k: config.last_test_result(k) for k in ("spoolman", *notifiers.CHANNELS)},
                 "server_settings": _server_settings_readonly(),
             })
+        elif self.path == "/api/api-tokens":
+            self._json({"tokens": api_tokens.list_tokens(), "max": api_tokens.MAX_TOKENS})
+        elif self.path.split("?")[0] == "/api/stats":
+            self._handle_stats()
+        elif self.path.split("?")[0] == "/api/history.csv":
+            self._handle_history_csv()
         elif self.path.startswith("/api/snapshot/"):
             self._handle_snapshot()
         elif self.path.startswith("/api/camera/"):
@@ -707,6 +878,9 @@ class SPHandler(SimpleHTTPRequestHandler):
                 super().do_GET()
 
     def do_PATCH(self):
+        if self.path.startswith("/api/external/"):
+            self._handle_external("PATCH")
+            return
         if not self._check_auth():
             return
         if self.path == "/api/features":
@@ -714,6 +888,9 @@ class SPHandler(SimpleHTTPRequestHandler):
             return
         if self.path == "/api/integrations":
             self._handle_patch_integrations()
+            return
+        if self.path.startswith("/api/history/"):
+            self._handle_history_update()
             return
         if proxy_spoolman_enabled() and self.path.startswith("/api/v1/"):
             self._proxy_spoolman_ui("PATCH", self.path, self._read_body())
@@ -725,6 +902,10 @@ class SPHandler(SimpleHTTPRequestHandler):
 
     def do_DELETE(self):
         if not self._check_auth():
+            return
+        if self.path.startswith("/api/api-tokens/"):
+            ok = api_tokens.revoke(urllib.parse.unquote(self.path[len("/api/api-tokens/"):]))
+            self._json({"ok": True} if ok else {"error": "No such key"}, 200 if ok else 404)
             return
         if proxy_spoolman_enabled() and self.path.startswith("/api/v1/"):
             self._proxy_spoolman_ui("DELETE", self.path)
@@ -759,6 +940,8 @@ class SPHandler(SimpleHTTPRequestHandler):
             self._handle_notif_settings()
         elif self.path == "/api/push-test":
             self._handle_push_test()
+        elif self.path == "/api/api-tokens":
+            self._handle_create_api_token()
         elif self.path == "/api/import-filaments":
             self._handle_import_filaments()
         elif self.path == "/api/integrations/spoolman/test":
@@ -781,7 +964,7 @@ class SPHandler(SimpleHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.end_headers()
 
     # ── Complex POST handlers ─────────────────────────────────────────────────
@@ -1160,6 +1343,8 @@ class SPHandler(SimpleHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        if getattr(self, "_cors", False):
+            self.send_header("Access-Control-Allow-Origin", "*")   # token-only API: no cookies involved
         self.end_headers()
         self.wfile.write(body)
 

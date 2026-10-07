@@ -8,11 +8,13 @@ import features
 from features import FeatureError, is_enabled, on_change, requires_feature, set_enabled
 
 
-def test_all_registered_features_default_on():
-    # Every feature currently registered defaults on -- matches current
-    # real-world behavior (all four already work with no configuration).
+# Features that must be switched on deliberately (they open Spooler to other programs).
+DEFAULT_OFF = {"external_api"}
+
+
+def test_all_registered_features_default_on_except_the_opt_in_ones():
     for key in features.FEATURES:
-        assert is_enabled(key) is True
+        assert is_enabled(key) is (key not in DEFAULT_OFF), key
 
 
 def test_is_enabled_rejects_unknown_key():

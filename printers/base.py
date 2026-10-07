@@ -20,7 +20,7 @@ from printers.protocol import decode_printinfo
 import notify as notifylib
 from push import load_notif_settings
 from snapshot import grab_jpeg
-from spoolman import get_spool_density, spoolman_deduct, spoolman_deduct_spool
+from spoolman import get_spool_density, last_spool_info, spoolman_deduct, spoolman_deduct_spool
 
 # Raw SDCP-style status codes. Shared by the pure transition classifier below
 # and (for PRINTING) by _check_notifications's "was it actively printing"
@@ -699,7 +699,14 @@ class PrinterConnection:
                     "error_message": reason["message"] if reason and reason["kind"] == "error" and reason["message"] else None,
                     "initiated_by":  reason["initiated_by"] if reason else None,
                     "pauses":        list(self._current_print_pauses),
+                    "started_at":    (time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(self._print_start_time))
+                                      if self._print_start_time else None),
                 }
+                info = last_spool_info(self.id)
+                if info.get("material"):
+                    entry["material"] = info["material"]
+                if info.get("vendor"):
+                    entry["vendor"] = info["vendor"]
                 await loop.run_in_executor(None, append_history, entry)
                 label = {"complete": "Completed", "error": "Error"}.get(end_state, "Cancelled")
                 print(f"[History] {label}: {filename} – {filament_mm:.0f}mm / {filament_g}g"
@@ -711,6 +718,9 @@ class PrinterConnection:
                     # Flush + deduct the last active spool immediately
                     self._on_tray_change(None)
                     if self._spool_extrusion:
+                        spools = [{"id": sid, "g": filament_mm_to_grams(mm, density)}
+                                  for sid, mm in self._spool_extrusion.items()]
+                        loop.run_in_executor(None, update_history_entry, entry["id"], {"spools": spools})
                         # Log per-spool breakdown (deduction already fired in _on_tray_change)
                         for spool_id, mm in self._spool_extrusion.items():
                             g = filament_mm_to_grams(mm, density)

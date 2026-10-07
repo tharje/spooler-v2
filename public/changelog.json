@@ -16,6 +16,8 @@
       "CC1: a clear message when the printer refuses the connection because all 5 of its connection slots are in use",
       "A camera picture is saved with each finished, cancelled or failed print and shown as a thumbnail in the print history (click for full size); it can be switched off under Settings → Features, and old pictures are removed together with their history entries",
       "Optional per printer (Settings → Printers → edit, Centauri Carbon only): the light turns on when a print starts and off when it ends, after the end-of-print picture has been taken",
+      "API access (Settings → API access, off by default): other programs can use an API key to read the print history, pictures and statistics and change reference numbers; keys are shown once, stored hashed, and open only this API (see API.md)",
+      "New Stats & history page (Stats in the side menu, replaces History): an Overview tab with prints, success rate, print time and filament for 7 days, 30 days, 12 months, all time or a custom period (per printer if you like) with a chart per day/week/month, filament by material, results and why prints stopped, and a Prints tab where you can search and open any print to see its picture, result and cause, times, filament, material, spools, pauses, and give it a reference number; CSV export includes the reference (Settings → Features → Statistics)",
       "Printer cards show the current layer (e.g. \"Layer 25 / 120\") next to the elapsed and remaining time",
       "CC2: emergency stop, power-loss recovery, filament loading/unloading, leveling, homing and self-checks outside a print are now shown instead of looking idle",
       "Web Push contact address is now configurable (VAPID_CONTACT) instead of hardcoded",

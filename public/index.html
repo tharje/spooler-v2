@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css?v=56" />
+  <link rel="stylesheet" href="style.css?v=60" />
 </head>
 <body>
   <header>
@@ -42,11 +42,11 @@
   <div class="app-body">
 
   <nav class="sidenav">
-    <button id="btn-history" class="sidenav-item" title="Filament history">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+    <button id="btn-stats" class="sidenav-item" title="Statistics and print history">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <line x1="6" y1="20" x2="6" y2="11"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="18" y1="20" x2="18" y2="14"/>
       </svg>
-      <span>History</span>
+      <span>Stats</span>
     </button>
     <button id="btn-spools" class="sidenav-item" title="Filament spools (Reel)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -154,29 +154,40 @@
     </div>
   </div>
 
-  <!-- History panel -->
-  <div id="panel-history" class="side-panel">
+  <!-- Statistics panel -->
+  <div id="panel-stats" class="side-panel stats-panel">
     <div class="side-panel-header">
       <div class="title-row">
-        <h3>Filament History</h3>
-        <div class="history-totals" id="history-totals"></div>
-        <button id="btn-history-close" class="btn btn-secondary btn-sm">Close</button>
+        <h3>Stats &amp; history</h3>
+        <a id="btn-stats-csv" class="btn btn-secondary btn-sm" href="#" download title="Download the history as a spreadsheet (CSV)">Export CSV</a>
+        <button id="btn-stats-close" class="btn btn-secondary btn-sm">Close</button>
       </div>
     </div>
     <div class="side-panel-body">
-      <table class="history-table" id="history-table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Printer</th>
-            <th>File</th>
-            <th>Filament</th>
-            <th>Time</th>
-          </tr>
-        </thead>
-        <tbody id="history-tbody"></tbody>
-      </table>
-      <p id="history-empty" style="display:none;text-align:center;color:var(--text-muted);padding:40px">No prints logged yet.</p>
+      <div class="stats-tabs seg" id="stats-tabs" role="tablist">
+        <button type="button" data-tab="overview" class="active">Overview</button>
+        <button type="button" data-tab="prints">Prints</button>
+      </div>
+      <div id="stats-filterbar">
+        <div class="stats-filters">
+          <div class="seg" id="stats-range" role="group" aria-label="Period">
+            <button type="button" data-range="7">7 days</button>
+            <button type="button" data-range="30" class="active">30 days</button>
+            <button type="button" data-range="365">12 months</button>
+            <button type="button" data-range="all">All</button>
+            <button type="button" data-range="custom">Custom</button>
+          </div>
+          <select id="stats-printer" aria-label="Printer"><option value="">All printers</option></select>
+          <input type="search" id="stats-search" placeholder="Search file or reference" aria-label="Search prints" hidden />
+        </div>
+        <div class="stats-custom" id="stats-custom" hidden>
+          <label>From <input type="date" id="stats-from" /></label>
+          <label>To <input type="date" id="stats-to" /></label>
+        </div>
+      </div>
+      <div id="stats-body" class="stats-body"></div>
+      <div id="prints-body" class="prints-body" hidden></div>
+      <div id="print-detail" class="print-detail" hidden></div>
     </div>
   </div>
   <!-- Spools panel -->
@@ -463,6 +474,13 @@
             <span>Integrations</span>
             <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
           </button>
+          <button class="settings-menu-item" id="btn-settings-goto-api">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+            </svg>
+            <span>API access</span>
+            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
           <div class="settings-menu-item settings-toggle-row">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
@@ -720,6 +738,38 @@
           <div id="integrations-server-settings-list" class="integrations-server-grid"></div>
         </div>
       </div>
+      <!-- API access sub-page -->
+      <div id="settings-api" style="display:none">
+        <div class="settings-subpage-header">
+          <button id="btn-settings-back-api" class="settings-back-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+          <h3>API access</h3>
+        </div>
+        <p class="report-desc">Lets another program read your print history, pictures and statistics, and change reference numbers, using a key you create here. A key opens only this API, nothing else in Spooler. See API.md for the endpoints.</p>
+        <div class="notif-row option-row">
+          <div class="notif-info">
+            <span class="notif-label">Allow API access</span>
+            <span class="notif-desc" id="api-address"></span>
+          </div>
+          <label class="toggle-switch">
+            <input id="api-enabled" type="checkbox" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="feature-group-title">API keys</div>
+        <div id="api-token-list"></div>
+        <div id="api-new-key" class="api-new-key" hidden></div>
+        <div class="feature-group-title">Create a key</div>
+        <div class="api-create">
+          <input id="api-key-name" type="text" maxlength="60" placeholder="Name, e.g. the program using it" />
+          <select id="api-key-scope">
+            <option value="read">Read only</option>
+            <option value="write">Read + change reference numbers</option>
+          </select>
+          <button id="btn-api-create" class="btn btn-primary btn-sm">Create</button>
+        </div>
+      </div>
       <!-- Change password sub-page -->
       <div id="settings-change-password" style="display:none">
         <div class="settings-subpage-header">
@@ -759,7 +809,7 @@
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="/config.js"></script>
-  <script src="app.js?v=72"></script>
+  <script src="app.js?v=75"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});

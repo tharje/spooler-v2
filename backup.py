@@ -40,6 +40,7 @@ BACKUP_FILES = [
     "push_subscriptions.json",
     "vapid_keys.json",
     "auth.json",
+    "api_tokens.json",
 ]
 
 # Fields inside specific files to redact when a backup is created without

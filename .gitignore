@@ -10,6 +10,7 @@ printers.json
 history.json
 tray_map.json
 auth.json
+api_tokens.json
 integrations.json
 notification_settings.json
 push_subscriptions.json

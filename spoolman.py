@@ -96,6 +96,16 @@ def get_spoolman_db() -> list:
     return _spoolman_db
 
 
+_last_spool_info: dict = {}   # printer_id -> what the last density lookup saw
+
+
+def last_spool_info(printer_id: str) -> dict:
+    """Material/vendor/spool id of the spool get_spool_density() last found
+    for this printer ({} if none or Spoolman was unreachable). Lets the history
+    record the material without a second request."""
+    return dict(_last_spool_info.get(printer_id) or {})
+
+
 def get_spool_density(printer_id: str) -> float:
     """Return the filament density (g/cm³) for the spool assigned to this printer.
 
@@ -103,13 +113,20 @@ def get_spool_density(printer_id: str) -> float:
     Designed to run in a thread pool executor.
     """
     loc = _printer_location(printer_id)
+    _last_spool_info.pop(printer_id, None)
     try:
         base = get_spoolman_url()
         url = f"{base}/api/v1/spool?location={urllib.parse.quote(loc)}"
         with urllib.request.urlopen(_spoolman_request(url), timeout=3) as resp:
             data = json.loads(resp.read())
         if data:
-            density = data[0].get("filament", {}).get("density")
+            filament = data[0].get("filament", {}) or {}
+            _last_spool_info[printer_id] = {
+                "spool_id": data[0].get("id"),
+                "material": filament.get("material") or None,
+                "vendor":   (filament.get("vendor") or {}).get("name") or None,
+            }
+            density = filament.get("density")
             if density and float(density) > 0:
                 return float(density)
     except Exception:
