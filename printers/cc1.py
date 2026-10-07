@@ -24,12 +24,15 @@ except ImportError:
 
 PRINTER_PORT = 3030
 
-# What a busy CC1 is doing, from Elegoo's SDK enums. PrintInfo.Status first
+# What a busy CC1 is doing, from Elegoo's SDK enums. 20 = leveling was seen on a
+# real CC1 (2026-10-07: PrintInfo.Status 20 with nozzle 140 and bed 60 already at
+# target while the printer was leveling); the SDK-derived labels for 15, 16 and 19
+# are not verified and disagree with printers/base.py's comments. PrintInfo.Status first
 # (a print's own steps), then the machine-level CurrentStatus mode.
 _PHASE_BY_PRINT_STATUS = {
     1: "Homing", 10: "Checking file", 11: "Checking printer", 15: "Leveling",
     16: "Heating", 17: "Resonance test", 18: "Starting print", 19: "Leveling",
-    20: "Heating", 21: "Homing", 22: "Resonance test",
+    20: "Leveling", 21: "Homing", 22: "Resonance test",
     23: "Loading filament", 24: "Unloading filament",
     25: "Filament unload problem", 26: "Filament unload paused",
 }

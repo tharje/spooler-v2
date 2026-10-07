@@ -346,3 +346,12 @@ def test_reregister_publishes_a_new_request(printer):
     assert topic == "elegoo/SN123/api_register"
     assert body["client_id"] == "cli1" and body["request_id"] != old
     assert printer._mqtt_registered is False and printer._unanswered == 0
+
+
+def test_cc1_status_20_is_leveling_not_heating():
+    """Seen on a real CC1: PrintInfo.Status 20 while leveling, temperatures already at target."""
+    from printers.cc1 import CC1Connection
+    p = CC1Connection("pid1", "10.0.0.6", "Test CC1", mainboard_id="MB")
+    p.status = {"CurrentStatus": [1], "PrintInfo": {"Status": 20}}
+    p._update_phase()
+    assert p.phase == "Leveling"
