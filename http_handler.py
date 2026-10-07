@@ -54,6 +54,7 @@ CERT_FILE = DATA_DIR / "cert.pem"
 KEY_FILE  = DATA_DIR / "key.pem"
 
 MAX_BODY = 100 * 1024 * 1024  # 100 MB
+EXTERNAL_MAX_BODY = 16 * 1024  # the external API only ever takes a few bytes of JSON
 _uploads_lock = threading.Lock()
 _uploads_active: set = set()  # printer ids with an upload in flight
 
@@ -432,7 +433,15 @@ class SPHandler(SimpleHTTPRequestHandler):
                 self._json({"error": "This key is read-only"}, 403)
                 return
             try:
-                body = json.loads(self._read_body() or b"{}")
+                length = int(self.headers.get("Content-Length", 0) or 0)
+            except ValueError:
+                self._json({"error": "Bad Content-Length"}, 400)
+                return
+            if length > EXTERNAL_MAX_BODY:
+                self._json({"error": "Request body too large"}, 413)
+                return
+            try:
+                body = json.loads(self.rfile.read(length) if length else b"{}")
             except Exception:
                 self._json({"error": "Bad request"}, 400)
                 return

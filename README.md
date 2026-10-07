@@ -39,7 +39,7 @@ Open **`http://<server-ip>:8080`** in your browser. On first visit you will be p
 - **Stats & history** – statistics per period and printer, every past print with the picture taken when it ended, its details and a reference number you can put on it; CSV export
 - **Notifications** – browser push, ntfy, Telegram, Discord or any webhook, for print started/complete/cancelled/paused/error, filament runout, printer offline/online, hot nozzle, layer checkpoint and low spool, optionally with a camera picture
 - **Automatic light** – per printer (Centauri Carbon): light on when a print starts, off when it ends
-- **External API** – let other programs (for example a CRM) read the print history and pictures and set reference numbers, using API keys ([API.md](API.md))
+- **External API** – let other programs (for example a CRM) read the print history and pictures and set reference numbers, using API keys ([docs/external-api.md](docs/external-api.md))
 - **Controls** – pause, resume, stop, light toggle
 - **Auto-discovery** – finds printers on the local network automatically
 - **Persistence** – printers, history and spool data saved between restarts
@@ -203,7 +203,7 @@ Settings → **Printers** → pick a Centauri Carbon → **Options** → *Automa
 
 ## External API
 
-Other programs can read the print history, pictures and statistics and change reference numbers through a small HTTP API with API keys. It is off until you switch it on under Settings → **API access**. See [API.md](API.md).
+Other programs can read the print history, pictures and statistics and change reference numbers through a small HTTP API with API keys. It is off until you switch it on under Settings → **API access**. See [docs/external-api.md](docs/external-api.md).
 
 ## Reporting problems
 
