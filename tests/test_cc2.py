@@ -296,3 +296,53 @@ def test_known_extruding_sub_status_with_zero_duration_still_printing(printer):
     printer._cc2_state["print_status"] = {"state": "printing", "print_duration": 0, "remaining_time_sec": 100}
     printer._apply_cc2_status()
     assert printer.to_dict()["state"] == "printing"
+
+
+# ── registration: only our own counts, and a silent printer gets re-registered ──
+
+def _reg(client_id, error="ok"):
+    return _FakeMessage("elegoo/SN123/req1/register_response", {"client_id": client_id, "error": error})
+
+
+def _run(coro):
+    import asyncio
+    return asyncio.new_event_loop().run_until_complete(coro)
+
+
+def test_another_clients_registration_does_not_count_as_ours(printer):
+    printer._mqtt_registered = False
+    _run(printer._handle_mqtt_message(_reg("1_PC_4242")))
+    assert printer._mqtt_registered is False
+
+
+def test_our_own_registration_counts(printer, monkeypatch):
+    printer._mqtt_registered = False
+    sent = []
+
+    async def fake_send(cmd, data=None):
+        sent.append(cmd)
+        return True
+    monkeypatch.setattr(printer, "send_cmd", fake_send)
+    _run(printer._handle_mqtt_message(_reg("cli1")))
+    assert printer._mqtt_registered is True and 1002 in sent
+
+
+def test_answer_resets_the_unanswered_counter(printer):
+    printer._unanswered = 5
+    _run(printer._handle_mqtt_message(_FakeMessage("elegoo/SN123/cli1/api_response", {"method": 1029, "result": {"error_code": 0}})))
+    assert printer._unanswered == 0
+
+
+def test_reregister_publishes_a_new_request(printer):
+    published = []
+
+    class _Client:
+        async def publish(self, topic, payload):
+            published.append((topic, json.loads(payload)))
+    printer._mqtt_client = _Client()
+    old = printer._mqtt_request_id
+    _run(printer._reregister())
+    topic, body = published[0]
+    assert topic == "elegoo/SN123/api_register"
+    assert body["client_id"] == "cli1" and body["request_id"] != old
+    assert printer._mqtt_registered is False and printer._unanswered == 0

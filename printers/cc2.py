@@ -112,6 +112,10 @@ def _cc2_phase(ms_status, sub_status, status_code) -> str:
     return _PHASE_BY_SUB.get(sub_status) or _PHASE_BY_MS.get(ms_status, "")
 
 
+# Requests (polled every 5 s) without any answer before we register again.
+UNANSWERED_LIMIT = 6
+
+
 class CC2Connection(PrinterConnection):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, printer_type="cc2", **kwargs)
@@ -128,6 +132,7 @@ class CC2Connection(PrinterConnection):
         self._awaiting_file_list  = False
         self._current_filename    = ""
         self._mqtt_serial         = _load_cached_serial(self.id)
+        self._unanswered          = 0  # requests sent since the printer last answered this client
         self._prev_active_tray_id = -2  # sentinel: not yet seen
         self._pending_thumb_fut: asyncio.Future | None = None
         self._pending_meta_fut:  asyncio.Future | None = None
@@ -222,10 +227,23 @@ class CC2Connection(PrinterConnection):
             payload["params"] = data
         try:
             await self._mqtt_client.publish(topic, json.dumps(payload))
+            self._unanswered += 1
             return True
         except Exception as e:
             print(f"[Printer {self.name}] MQTT send error: {e}")
             return False
+
+    async def _reregister(self) -> None:
+        self._mqtt_registered = False
+        self._unanswered = 0
+        self._mqtt_request_id = uuid.uuid4().hex[:16]
+        try:
+            await self._mqtt_client.publish(
+                f"elegoo/{self._mqtt_serial}/api_register",
+                json.dumps({"client_id": self._mqtt_client_id, "request_id": self._mqtt_request_id}),
+            )
+        except Exception as e:
+            print(f"[Printer {self.name}] MQTT re-register error: {e}")
 
     async def _mqtt_status_poller(self) -> None:
         # Full state (1002), not just machine_status (1003) -- the printer's
@@ -239,9 +257,23 @@ class CC2Connection(PrinterConnection):
         # Verified live (2026-10-06): 1002's response is a strict superset of
         # 1003's (same machine_status block, plus print_status/extruder/etc).
         tick = 0
+        unreg = 0
         while True:
             await asyncio.sleep(5)
-            if self._mqtt_registered:
+            if self._mqtt_registered and self._unanswered >= UNANSWERED_LIMIT:
+                # The printer has stopped answering us although its status
+                # broadcasts still arrive: our registration is gone (the printer
+                # only keeps a few clients). Commands such as the light would be
+                # ignored silently, so register again.
+                print(f"[Printer {self.name}] No answer to {self._unanswered} requests — registering again")
+                await self._reregister()
+            elif not self._mqtt_registered and self._mqtt_serial and self._mqtt_client:
+                unreg += 1
+                if unreg >= UNANSWERED_LIMIT:   # registration never completed: ask again
+                    unreg = 0
+                    await self._reregister()
+            elif self._mqtt_registered:
+                unreg = 0
                 await self.send_cmd(1002)   # full state (includes machine_status)
                 if tick % 2 == 0:
                     await self.send_cmd(2005)  # canvas channel info
@@ -258,6 +290,10 @@ class CC2Connection(PrinterConnection):
         if "register_response" in topic:
             try:
                 p = json.loads(message.payload.decode())
+                # We subscribe with a wildcard, so this may be ANOTHER client's
+                # (the Elegoo app, a slicer) registration. Only our own counts.
+                if p.get("client_id") not in (None, self._mqtt_client_id):
+                    return
                 if p.get("error") == "ok":
                     self._mqtt_registered = True
                     self.connected = True
@@ -283,6 +319,7 @@ class CC2Connection(PrinterConnection):
             return
 
         if "api_response" in topic:
+            self._unanswered = 0
             inner  = payload.get("result")
 
             if self._awaiting_file_list and isinstance(inner, dict) and "file_list" in inner:
