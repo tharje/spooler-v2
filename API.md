@@ -41,6 +41,9 @@ Prints, newest first.
 | `q` | text found in the file name or the reference (case-insensitive) |
 | `reference` | exact reference number |
 | `result` | `complete`, `cancelled` or `error` |
+| `ended_after` | only prints that ended strictly later than this date or `YYYY-MM-DDTHH:MM:SS` ("what is new since my last sync") |
+| `order` | `desc` (newest first, default) or `asc` (oldest first) |
+| `include` | `raw` adds a `raw` object to every item: the stored record exactly as Spooler has it, so nothing is lost if Spooler stores more later |
 | `limit`, `offset` | paging; `limit` defaults to 50, at most 500 |
 
 ```
@@ -58,13 +61,15 @@ curl -H "Authorization: Bearer $KEY" \
       "started_at": "2026-10-05T20:14:00",
       "printer_id": "42b27b5a…", "printer_name": "CC2",
       "file": "benchy.gcode",
-      "result": "complete",
+      "result": "complete", "result_label": "Finished",
       "cause": null,
       "print_time_s": 3038,
-      "filament_m": 4.145, "filament_g": 12.4,
+      "filament_mm": 4144.5, "filament_m": 4.145, "filament_g": 12.4,
       "material": "PETG", "vendor": "Elegoo",
-      "spools": [{"id": 2, "g": 12.4}],
-      "pauses": [],
+      "spools": [{"id": 2, "g": 12.4, "name": "Elegoo PETG Pro", "material": "PETG", "vendor": "Elegoo", "color_hex": "FF0000"}],
+      "pauses": [{"since": "2026-10-05T20:40:00", "until": "2026-10-05T20:43:10", "duration_s": 190,
+                  "category": "filament_runout", "category_label": "Filament runout",
+                  "initiated_by": "printer", "initiated_by_label": "The printer itself"}],
       "reference": "042",
       "has_picture": true,
       "picture_url": "/api/external/v1/history/3c47d263…/picture"
@@ -73,9 +78,17 @@ curl -H "Authorization: Bearer $KEY" \
 }
 ```
 
-Notes: `result` is `complete`, `cancelled` (stopped) or `error`. For the last two `cause` has
-`message`, `category`, `code` and `initiated_by` where the printer reported them. `material`,
-`vendor`, `started_at`, `spools` and `pauses` are missing on older prints. `reference` is `""` when none is set.
+Notes:
+
+- `result` is `complete`, `cancelled` (stopped) or `error`; `result_label` is the same in plain words.
+- For the last two, `cause` has the raw `message`, `category`, `code` and `initiated_by` where the printer reported
+  them, readable versions (`category_label`, `initiated_by_label`) and a ready-made `text` such as
+  `Hotend isn't heating (code 103)`.
+- `spools` carry the Spoolman spool id and the grams used from it, plus the spool's name, material, vendor and
+  colour looked up in Spoolman at request time (`null` when Spoolman can't be reached or the spool is gone).
+- `material`, `vendor`, `started_at`, `spools` and `pauses` are missing on older prints (`null` / empty).
+  `reference` is `""` when none is set.
+- Add `?include=raw` when you want literally everything Spooler stored about a print.
 
 ### `GET /history/{id}`
 
@@ -109,9 +122,27 @@ Open browsers showing the print list update by themselves.
 The same numbers as the Stats page. Query: `from`, `to`, `printer` (as above). Returns totals,
 results, hours, grams, filament by material and by printer, why prints stopped, and a per-day/week/month series.
 
+### `GET /printers`
+
+Your printers: `id`, `name`, `type` (`cc1`, `cc2`, `prusa`, `moonraker`), `connected` and `state`.
+No addresses or access codes. The `id` matches `printer_id` on the prints.
+
 ### `GET /`
 
 Name, version and the scope of the key you used.
+
+## Linking prints to customers (a CRM)
+
+Spooler does not know about customers; keep that link in your own system.
+
+- **Key:** a print's `id` never changes, so store `id` against the customer or order in your CRM.
+- **Reference number:** put your order or customer number on the print (`PATCH`, or type it on the print's page in
+  Spooler) and look prints up again with `GET /history?reference=…`. It shows in Spooler and in the CSV export too.
+- **Syncing new prints:** remember the `ended_at` of the last print you imported, then ask for
+  `GET /history?ended_after=<that>&order=asc&limit=500` and import what comes back. Poll every few minutes; Spooler
+  does not call out to other programs. (If you want a push when a print ends, Spooler's webhook notification channel
+  can post to an address of yours.)
+- **Pictures:** fetch `picture_url` when you need the image; it is a plain JPEG.
 
 ## Errors
 

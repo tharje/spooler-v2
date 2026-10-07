@@ -35,7 +35,7 @@ from push import (
     WEBPUSH_AVAILABLE, add_subscription, get_public_key, has_subscriptions,
     load_notif_settings, remove_subscription, save_notif_settings, send_push_all,
 )
-from spoolman import get_spoolman_db, get_spoolman_url, spoolman_auth_header, test_spoolman_connection
+from spoolman import get_spool_index, get_spoolman_db, get_spoolman_url, spoolman_auth_header, test_spoolman_connection
 import config
 import diagnostics
 import api_tokens
@@ -350,6 +350,13 @@ class SPHandler(SimpleHTTPRequestHandler):
 
     # ── External API (other programs, API-key auth) ──────────────────────────
 
+    def _external_entry(self, entry: dict, query: dict) -> dict:
+        """One print for the external API, with spool names looked up in
+        Spoolman (when it's reachable) and the stored entry attached on request."""
+        index = get_spool_index() if entry.get("spools") and is_enabled("spoolman") else None
+        include = (query.get("include") or [""])[0].split(",")
+        return stats.public_entry(entry, spool_index=index, include_raw="raw" in include)
+
     def _handle_external(self, method: str) -> None:
         self._cors = True
         base = "/api/external/v1"
@@ -400,7 +407,7 @@ class SPHandler(SimpleHTTPRequestHandler):
         if path == base:
             self._json({"name": "Spooler external API", "version": 1, "scope": owner["scope"],
                         "endpoints": ["GET /history", "GET /history/{id}", "GET /history/{id}/picture",
-                                      "PATCH /history/{id}", "GET /stats"]})
+                                      "PATCH /history/{id}", "GET /stats", "GET /printers"]})
         elif path == f"{base}/history":
             try:
                 limit = min(500, max(1, int(one("limit") or 50)))
@@ -412,10 +419,23 @@ class SPHandler(SimpleHTTPRequestHandler):
             if result not in (None, "complete", "cancelled", "error"):
                 self._json({"error": "result must be complete, cancelled or error"}, 400)
                 return
-            rows = stats.query_history(load_history(), one("from"), one("to"), one("printer"),
-                                       one("q"), one("reference"), result)
+            order = one("order")
+            if order not in (None, "asc", "desc"):
+                self._json({"error": "order must be asc or desc"}, 400)
+                return
+            try:
+                rows = stats.query_history(load_history(), one("from"), one("to"), one("printer"),
+                                           one("q"), one("reference"), result, one("ended_after"),
+                                           oldest_first=(order == "asc"))
+            except ValueError as e:
+                self._json({"error": str(e)}, 400)
+                return
+            page = rows[offset:offset + limit]
             self._json({"total": len(rows), "limit": limit, "offset": offset,
-                        "items": [stats.public_entry(e) for e in rows[offset:offset + limit]]})
+                        "items": [self._external_entry(e, q) for e in page]})
+        elif path == f"{base}/printers":
+            self._json({"items": [{"id": p.id, "name": p.name, "type": p.printer_type, "connected": p.connected,
+                                   "state": p.to_dict().get("state")} for p in state.printers.values()]})
         elif path == f"{base}/stats":
             self._json(stats.compute_stats(load_history(), one("from"), one("to"), one("printer")))
         elif m:
@@ -423,7 +443,7 @@ class SPHandler(SimpleHTTPRequestHandler):
             if entry is None:
                 self._json({"error": "No such print"}, 404)
             elif not m.group(2):
-                self._json(stats.public_entry(entry))
+                self._json(self._external_entry(entry, q))
             else:
                 picture = snapshot_path(m.group(1)) if entry.get("snapshot") else None
                 try:

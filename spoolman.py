@@ -96,6 +96,37 @@ def get_spoolman_db() -> list:
     return _spoolman_db
 
 
+_spool_index_cache: tuple = (0.0, {})
+SPOOL_INDEX_TTL = 60.0
+
+
+def get_spool_index() -> dict:
+    """{spool id: {name, material, vendor, color_hex}} for every spool in
+    Spoolman (archived ones too), cached for a minute. {} when Spoolman can't
+    be reached. Blocking: call from a request thread or executor."""
+    global _spool_index_cache
+    at, cached = _spool_index_cache
+    if cached and time.time() - at < SPOOL_INDEX_TTL:
+        return cached
+    try:
+        url = f"{get_spoolman_url()}/api/v1/spool?allow_archived=true"
+        with urllib.request.urlopen(_spoolman_request(url), timeout=3) as resp:
+            data = json.loads(resp.read())
+        index = {}
+        for sp in data:
+            f = sp.get("filament") or {}
+            index[sp.get("id")] = {
+                "name": " ".join(x for x in ((f.get("vendor") or {}).get("name"), f.get("material"), f.get("name")) if x) or None,
+                "material": f.get("material") or None,
+                "vendor": (f.get("vendor") or {}).get("name") or None,
+                "color_hex": f.get("color_hex") or None,
+            }
+        _spool_index_cache = (time.time(), index)
+        return index
+    except Exception:
+        return cached or {}
+
+
 _last_spool_info: dict = {}   # printer_id -> what the last density lookup saw
 
 

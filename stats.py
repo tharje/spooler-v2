@@ -231,19 +231,58 @@ def history_csv(history: list, from_ts=None, to_ts=None, printer_id=None) -> byt
 
 # ── shape and queries for the external API ───────────────────────────────────
 
-def public_entry(e: dict, base: str = "/api/external/v1") -> dict:
-    """One print as another program should see it: stable names, no internals."""
+# Plain-English texts for the codes the app stores, so another program doesn't
+# have to translate them (the raw codes are always included too).
+RESULT_LABELS = {"complete": "Finished", "cancelled": "Stopped", "error": "Failed"}
+CATEGORY_LABELS = {
+    "filament_runout": "Filament runout", "nozzle_clog": "Nozzle clog", "thermal": "Thermal issue",
+    "collision": "Collision detected", "power_loss": "Power loss", "door_open": "Door open",
+    "leveling": "Leveling failed", "fan": "Fan fault", "motion": "Motion fault", "sensor": "Sensor fault",
+    "hardware": "Hardware fault", "connection": "Lost communication with a printer part",
+    "system": "System error", "filament_feed": "Filament feed problem", "filament_tangle": "Filament tangled",
+    "user": "Stopped by the user", "unknown": "Cause not known",
+}
+INITIATOR_LABELS = {"spooler": "Spooler", "printer": "The printer itself", "unknown": "Printer screen, app or unknown"}
+
+
+def _label(table: dict, value):
+    return table.get(value) if value else None
+
+
+def public_entry(e: dict, base: str = "/api/external/v1", spool_index: dict | None = None,
+                 include_raw: bool = False) -> dict:
+    """One print as another program should see it: stable names, readable
+    texts next to the raw codes, and (with include_raw) the stored entry as is."""
     state = end_state_of(e)
     has_picture = bool(e.get("snapshot"))
     cause = None
     if state != "complete":
+        category = e.get("stop_reason")
+        text = e.get("error_message") or _label(CATEGORY_LABELS, category) or CATEGORY_LABELS["unknown"]
+        if e.get("error_code"):
+            text = f"{text} (code {e['error_code']})"
         cause = {
+            "text": text,
             "message": e.get("error_message"),
-            "category": e.get("stop_reason"),
+            "category": category,
+            "category_label": _label(CATEGORY_LABELS, category),
             "code": e.get("error_code"),
             "initiated_by": e.get("initiated_by"),
+            "initiated_by_label": _label(INITIATOR_LABELS, e.get("initiated_by")),
         }
-    return {
+    spools = []
+    for sp in e.get("spools") or []:
+        info = (spool_index or {}).get(sp.get("id")) or {}
+        spools.append({"id": sp.get("id"), "g": sp.get("g"), "name": info.get("name"), "material": info.get("material"),
+                       "vendor": info.get("vendor"), "color_hex": info.get("color_hex")})
+    pauses = []
+    for p in e.get("pauses") or []:
+        pauses.append({
+            "since": p.get("since"), "until": p.get("until"), "duration_s": p.get("duration_s"),
+            "category": p.get("category"), "category_label": _label(CATEGORY_LABELS, p.get("category")),
+            "initiated_by": p.get("initiated_by"), "initiated_by_label": _label(INITIATOR_LABELS, p.get("initiated_by")),
+        })
+    out = {
         "id": e.get("id"),
         "ended_at": e.get("timestamp"),
         "started_at": e.get("started_at"),
@@ -251,25 +290,37 @@ def public_entry(e: dict, base: str = "/api/external/v1") -> dict:
         "printer_name": e.get("printer_name"),
         "file": e.get("filename"),
         "result": state,                       # complete | cancelled | error
+        "result_label": RESULT_LABELS[state],
         "cause": cause,
         "print_time_s": _seconds(e),
+        "filament_mm": round(float(e.get("filament_mm") or 0), 1),
         "filament_m": round((e.get("filament_mm") or 0) / 1000, 3),
         "filament_g": round(_grams(e), 1),
         "material": e.get("material"),
         "vendor": e.get("vendor"),
-        "spools": e.get("spools") or [],
-        "pauses": e.get("pauses") or [],
+        "spools": spools,
+        "pauses": pauses,
         "reference": e.get("reference") or "",
         "has_picture": has_picture,
         "picture_url": f"{base}/history/{e.get('id')}/picture" if has_picture and e.get("id") else None,
     }
+    if include_raw:
+        out["raw"] = dict(e)
+    return out
 
 
 def query_history(history: list, from_ts=None, to_ts=None, printer_id=None, text=None,
-                  reference=None, result=None) -> list:
-    """Newest first. `text` matches file name or reference (case-insensitive);
-    `reference` is an exact match; `result` is complete | cancelled | error."""
+                  reference=None, result=None, ended_after=None, oldest_first=False) -> list:
+    """Newest first unless oldest_first. `text` matches file name or reference
+    (case-insensitive); `reference` is an exact match; `result` is complete |
+    cancelled | error; `ended_after` keeps prints that ended strictly later than
+    that timestamp (for "what's new since my last sync")."""
     rows = filter_entries(history, from_ts, to_ts, printer_id)
+    if ended_after:
+        cutoff = _parse_ts(ended_after) or _parse_day(ended_after)
+        if cutoff is None:
+            raise ValueError("ended_after must be a date or a date and time")
+        rows = [e for e in rows if _parse_ts(e.get("timestamp")) > cutoff]
     if reference not in (None, ""):
         rows = [e for e in rows if (e.get("reference") or "") == reference]
     if text:
@@ -277,5 +328,6 @@ def query_history(history: list, from_ts=None, to_ts=None, printer_id=None, text
         rows = [e for e in rows if q in f"{e.get('filename') or ''} {e.get('reference') or ''}".lower()]
     if result:
         rows = [e for e in rows if end_state_of(e) == result]
-    rows.reverse()
+    if not oldest_first:
+        rows.reverse()
     return rows

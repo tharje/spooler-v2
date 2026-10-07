@@ -213,3 +213,97 @@ def test_picture_cannot_be_edited_or_deleted(history):
     assert jcall("PATCH", f"/api/external/v1/history/{A}/picture", wk, {"reference": "1"})[0] == 404
     assert call("DELETE", f"/api/external/v1/history/{A}", wk)[0] in (401, 302)
     assert persistence.snapshot_path(A).exists()
+
+
+# ── everything a CRM needs ───────────────────────────────────────────────────
+
+def _full_entry():
+    return {"id": C, "timestamp": "2026-10-07T09:00:00", "started_at": "2026-10-07T08:00:00", "printer_id": "p1",
+            "printer_name": "CC2", "filename": "kunde-ordre.gcode", "filament_mm": 4144.5, "filament_g": 12.4,
+            "print_time_s": 3600, "end_state": "cancelled", "stop_reason": "filament_runout", "initiated_by": "printer",
+            "material": "PETG", "vendor": "Elegoo", "snapshot": False, "future_field": {"x": 1},
+            "spools": [{"id": 2, "g": 8.0}, {"id": 99, "g": 4.4}],
+            "pauses": [{"since": "2026-10-07T08:30:00", "until": "2026-10-07T08:33:00", "duration_s": 180,
+                        "initiated_by": "spooler", "category": "user"}]}
+
+
+def test_readable_texts_sit_next_to_the_raw_codes():
+    import stats
+    e = stats.public_entry(_full_entry())
+    assert e["result"] == "cancelled" and e["result_label"] == "Stopped"
+    assert e["cause"]["category"] == "filament_runout" and e["cause"]["category_label"] == "Filament runout"
+    assert e["cause"]["initiated_by"] == "printer" and e["cause"]["initiated_by_label"] == "The printer itself"
+    assert e["cause"]["text"] == "Filament runout"
+    p = e["pauses"][0]
+    assert p["duration_s"] == 180 and p["category_label"] == "Stopped by the user" and p["initiated_by_label"] == "Spooler"
+    assert e["filament_mm"] == 4144.5 and e["filament_m"] == 4.144
+
+
+def test_error_cause_text_includes_message_and_code():
+    import stats
+    e = stats.public_entry({"id": B, "timestamp": "2026-10-05T10:00:00", "end_state": "error",
+                            "error_message": "Hotend isn't heating", "error_code": "103"})
+    assert e["cause"]["text"] == "Hotend isn't heating (code 103)"
+    assert stats.public_entry({"id": B, "timestamp": "x", "end_state": "complete"})["cause"] is None
+
+
+def test_spool_names_come_from_spoolman_and_missing_ones_are_null(history):
+    import stats
+    index = {2: {"name": "Elegoo PETG Pro", "material": "PETG", "vendor": "Elegoo", "color_hex": "FF0000"}}
+    e = stats.public_entry(_full_entry(), spool_index=index)
+    assert e["spools"][0] == {"id": 2, "g": 8.0, "name": "Elegoo PETG Pro", "material": "PETG",
+                              "vendor": "Elegoo", "color_hex": "FF0000"}
+    assert e["spools"][1]["id"] == 99 and e["spools"][1]["name"] is None and e["spools"][1]["g"] == 4.4
+
+
+def test_api_looks_up_spool_names(history, monkeypatch):
+    enable()
+    persistence.update_history_entry(A, {"spools": [{"id": 5, "g": 12.4}]})
+    monkeypatch.setattr(http_handler, "get_spool_index", lambda: {5: {"name": "Elegoo PETG", "material": "PETG",
+                                                                      "vendor": "Elegoo", "color_hex": None}})
+    key, _ = api_tokens.create("x", "read")
+    item = jcall("GET", f"/api/external/v1/history/{A}", key)[1]
+    assert item["spools"][0]["name"] == "Elegoo PETG"
+
+
+def test_raw_includes_every_stored_field_on_request(history):
+    enable()
+    persistence.update_history_entry(A, {"future_field": {"x": 1}})
+    key, _ = api_tokens.create("x", "read")
+    assert "raw" not in jcall("GET", f"/api/external/v1/history/{A}", key)[1]
+    raw = jcall("GET", f"/api/external/v1/history/{A}?include=raw", key)[1]["raw"]
+    assert raw["future_field"] == {"x": 1} and raw["snapshot"] is True and raw["id"] == A
+    items = jcall("GET", "/api/external/v1/history?include=raw", key)[1]["items"]
+    assert all("raw" in i for i in items)
+
+
+def test_new_since_last_sync_oldest_first(history):
+    enable()
+    key, _ = api_tokens.create("x", "read")
+    d = jcall("GET", "/api/external/v1/history?ended_after=2026-10-05T10:00:00&order=asc", key)[1]
+    assert [i["id"] for i in d["items"]] == [A]                    # B ended exactly at the cutoff: not "after"
+    d = jcall("GET", "/api/external/v1/history?order=asc", key)[1]
+    assert [i["id"] for i in d["items"]] == [B, A]
+    assert jcall("GET", "/api/external/v1/history?ended_after=2026-10-06", key)[1]["total"] == 1
+    assert jcall("GET", "/api/external/v1/history?ended_after=banana", key)[0] == 400
+    assert jcall("GET", "/api/external/v1/history?order=sideways", key)[0] == 400
+
+
+def test_printers_list_has_no_secrets(history, monkeypatch):
+    enable()
+    from printers.cc1 import CC1Connection
+    p = CC1Connection("pid1", "10.9.9.9", "Bench", access_code="s3cret")
+    monkeypatch.setattr(http_handler.state, "printers", {"pid1": p})
+    key, _ = api_tokens.create("x", "read")
+    s, hdrs, body = call("GET", "/api/external/v1/printers", key)
+    d = json.loads(body)
+    assert s == 200 and d["items"][0]["id"] == "pid1" and d["items"][0]["name"] == "Bench"
+    assert b"s3cret" not in body and b"10.9.9.9" not in body
+
+
+def test_list_and_single_have_the_same_shape(history):
+    enable()
+    key, _ = api_tokens.create("x", "read")
+    listed = jcall("GET", "/api/external/v1/history", key)[1]["items"][0]
+    single = jcall("GET", f"/api/external/v1/history/{listed['id']}", key)[1]
+    assert listed == single
