@@ -457,3 +457,48 @@ def test_ledger_http_actions_and_gating(sm):
     assert r.out[0] == 404
     assert http_handler.SPHandler._handle_ledger_list._feature_gate == "spoolman"
     assert http_handler.SPHandler._handle_ledger_action._feature_gate == "spoolman"
+
+
+@pytest.mark.asyncio
+async def test_print_that_finished_while_spooler_was_off_uses_the_printers_final_figure(make_printer):
+    p = make_printer()
+    a = PrintAccounting(current_spool=1, filename="a.gcode")
+    a.observe(500.0)                                              # all that was saved before the stop
+    printaccount.save_active("pid1", a)
+    status(p, 9, 1800, tray=0); await p._check_print_transition() # restarted after it completed: printer still says 1800
+    [e] = ledger.all_entries()
+    assert e["mm"] == 1800
+
+
+@pytest.mark.asyncio
+async def test_a_different_file_running_after_restart_flushes_the_old_print_and_starts_fresh(make_printer):
+    p = make_printer()
+    a = PrintAccounting(current_spool=1, filename="old.gcode")
+    a.observe(500.0)
+    printaccount.save_active("pid1", a)
+    status(p, 13, 40, tray=0); await p._check_print_transition()  # a.gcode is running now
+    [e] = ledger.all_entries()
+    assert e["mm"] == 500 and "not running" in e["note"]          # the old print still counted
+    assert p._acct.print_id != a.print_id and p._acct.filename == "a.gcode"
+
+
+@pytest.mark.asyncio
+async def test_missing_filename_after_restart_still_resumes_the_saved_print(make_printer):
+    a = PrintAccounting(current_spool=1, filename="a.gcode")
+    a.observe(500.0)
+    printaccount.save_active("pid1", a)
+    q = make_printer()
+    q.status = {"PrintInfo": {"Status": 13, "TotalExtrusion": 600, "Filename": ""}}
+    await q._check_print_transition()
+    assert q._acct.print_id == a.print_id and q._acct.total_mm() == 600
+
+
+@pytest.mark.asyncio
+async def test_shutdown_saves_the_running_prints_figures(make_printer):
+    p = make_printer()
+    status(p, 0, tray=0); await p._check_print_transition()
+    status(p, 13, 0, tray=0); await p._check_print_transition()
+    status(p, 13, 30, tray=0); await p._check_print_transition()   # too little for a throttled save
+    status(p, 13, 45, tray=0)
+    p.save_accounting_now()
+    assert printaccount.load_active("pid1").total_mm() == 45

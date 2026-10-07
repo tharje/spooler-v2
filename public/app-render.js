@@ -24,12 +24,13 @@ function renderPrinter(printer) {
   const stale     = isStale(printer);
   card.classList.toggle("card-stale", stale);
 
-  const nozzle     = printer.status?.TempOfNozzle    ?? printer.status?.NozzleTemp    ?? 0;
-  const nozzleTgt  = printer.status?.TempTargetNozzle?? printer.status?.NozzleTempTarget ?? 0;
-  const bed        = printer.status?.TempOfHotbed     ?? printer.status?.BedTemp       ?? 0;
-  const bedTgt     = printer.status?.TempTargetHotbed ?? printer.status?.BedTempTarget ?? 0;
-  const chamber    = printer.status?.TempOfBox        ?? printer.status?.ChamberTemp   ?? 0;
-  const chamberTgt = printer.status?.TempTargetBox    ?? 0;
+  // An offline printer's last temperatures are history, not a reading: show "--".
+  const nozzle     = !connected ? 0 : printer.status?.TempOfNozzle    ?? printer.status?.NozzleTemp    ?? 0;
+  const nozzleTgt  = !connected ? 0 : printer.status?.TempTargetNozzle?? printer.status?.NozzleTempTarget ?? 0;
+  const bed        = !connected ? 0 : printer.status?.TempOfHotbed     ?? printer.status?.BedTemp       ?? 0;
+  const bedTgt     = !connected ? 0 : printer.status?.TempTargetHotbed ?? printer.status?.BedTempTarget ?? 0;
+  const chamber    = !connected ? 0 : printer.status?.TempOfBox        ?? printer.status?.ChamberTemp   ?? 0;
+  const chamberTgt = !connected ? 0 : printer.status?.TempTargetBox    ?? 0;
 
   const curLayer   = printer.status?.PrintInfo?.CurrentLayer ?? 0;
   const totalLayer = printer.status?.PrintInfo?.TotalLayer   ?? 0;

@@ -297,6 +297,13 @@ class PrinterConnection:
             "filament_g":      filament_mm_to_grams(filament_mm, self.filament_density),
         }
 
+    def save_accounting_now(self) -> None:
+        """Called when Spooler shuts down: write the running print's filament
+        figures to disk now, so a restart carries on from here."""
+        if self._acct is not None:
+            self._observe_extrusion()
+            self._save_accounting(force=True)
+
     def stop(self) -> None:
         if self._offline_task is not None:
             self._offline_task.cancel()
@@ -774,17 +781,25 @@ class PrinterConnection:
         saved = load_active(self.id) if first_status else None
 
         if first_status and not now_active and saved is not None:
-            # Spooler was off while a print ended: don't lose what it used.
+            # Spooler was off while a print ended: don't lose what it used. If the
+            # printer still shows that print's final figure, use it rather than
+            # the last one we had time to save.
+            if cur_status == 9 and pi.get("Filename") == saved.filename:
+                saved.observe(pi.get("TotalExtrusion", 0) or 0)
             await self._flush_orphaned_accounting(saved)
         elif first_status and now_active:
             # First thing seen after (re)start is a print in progress: carry on
             # where we left off instead of treating it as a new print.
-            if saved is not None and (not saved.filename or saved.filename == pi.get("Filename", saved.filename)):
+            if saved is not None and (not saved.filename or not pi.get("Filename")
+                                      or saved.filename == pi.get("Filename")):
                 self._acct = saved
                 self._print_start_time = saved.started_at
                 print(f"[Printer {self.name}] Resumed filament accounting for the running print "
                       f"({saved.total_mm():.0f} mm so far)")
             else:
+                if saved is not None:
+                    # The saved print is a different one: it ended while Spooler was stopped.
+                    await self._flush_orphaned_accounting(saved)
                 self._acct = PrintAccounting(current_spool=self._tray_spool(), filename=pi.get("Filename", ""),
                                              started_at=None)
                 self._print_start_time = None
