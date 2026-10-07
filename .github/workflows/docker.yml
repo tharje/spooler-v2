@@ -3,6 +3,9 @@ name: Publish Docker image
 on:
   push:
     branches: [main]
+    # Releases and pre-releases: v2.3.0 -> :2.3.0 + :latest, v2.3.0-beta.1 -> :2.3.0-beta.1 + :beta.
+    # :latest never points to a pre-release (see scripts/docker-tags.sh).
+    tags: ["v*"]
 
 jobs:
   # Duplicated from tests.yml rather than referenced: GitHub Actions has no
@@ -41,11 +44,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Work out the image tags
+        id: tags
+        run: |
+          changelog_version="$(python3 -c "import json; print(json.load(open('public/changelog.json'))[0]['version'])")"
+          tags="$(scripts/docker-tags.sh "$GITHUB_REF" "$GITHUB_REF_NAME" "$GITHUB_SHA" "$changelog_version")"
+          echo "Publishing: $tags"
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+
       - uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: |
-            ghcr.io/tharje/spooler-v2:latest
-            ghcr.io/tharje/spooler-v2:${{ github.sha }}
+          tags: ${{ steps.tags.outputs.tags }}
