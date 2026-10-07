@@ -9,8 +9,10 @@ service can never stall printer monitoring or the other channels.
 
 import concurrent.futures
 import threading
+import uuid
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 import notifiers
 from features import is_enabled
@@ -55,6 +57,9 @@ class Notification:
     printer_name: str = ""
     extra: dict = field(default_factory=dict)
     time: str = field(default_factory=lambda: time.strftime("%Y-%m-%dT%H:%M:%S%z"))
+    # One id per event (not per channel), so a receiver can spot the same event twice.
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
 
 
 def event_settings(event: str) -> dict:

@@ -68,3 +68,17 @@ def test_the_workflow_uses_the_script_and_triggers_on_tags_and_main_only():
 def test_changelog_top_entry_is_what_the_tag_check_reads():
     top = json.loads((ROOT / "public" / "changelog.json").read_text())[0]["version"]
     assert isinstance(top, str) and top
+
+
+def test_current_changelog_version_is_a_valid_tag():
+    """The version the app shows is the one a release tag must carry: tagging
+    v<top changelog version> passes the check and a pre-release never gets :latest."""
+    import json
+    from pathlib import Path
+    top = json.loads((Path(__file__).resolve().parent.parent / "public" / "changelog.json").read_text())[0]["version"]
+    code, out, err = tags(f"refs/tags/v{top}", f"v{top}", top)
+    assert code == 0, err
+    if "-" in top:
+        assert f"{IMG}:beta" in out and f"{IMG}:latest" not in out
+    else:
+        assert f"{IMG}:latest" in out

@@ -207,6 +207,41 @@ JSON `{"error": "…"}` with one of these statuses:
 | `413` | request body too large (over 16 KB) |
 | `429` | too many wrong keys from your address; try again later |
 
+## Webhook payload
+
+The generic webhook channel (Settings → Notifications → Webhook) sends one JSON `POST` per event to your address.
+
+```json
+{
+  "schema_version": 1,
+  "id": "6f1b6a3e-8a52-4a5e-9d0f-2c1d3f6a7b10",
+  "timestamp": "2026-10-07T13:45:12Z",
+  "event": "print_paused",
+  "printer_id": "0f3c9d1e-...",
+  "printer": "Bench",
+  "title": "Bench paused",
+  "body": "Filament runout",
+  "priority": "high",
+  "time": "2026-10-07T15:45:12+0200",
+  "has_image": false,
+  "details": {"code": 109}
+}
+```
+
+| Field | Type | Meaning |
+|---|---|---|
+| `schema_version` | integer | Version of this payload format. Currently `1`. |
+| `id` | string | A unique id (UUID) for the event. The same event always carries the same id, so a receiver can tell it has already seen it. |
+| `timestamp` | string | When the event happened, ISO 8601 in UTC (`...Z`). |
+| `event` | string | `print_started`, `print_complete`, `print_cancelled`, `print_paused`, `print_error`, `filament_runout`, `printer_offline`, `printer_online`, `firmware_changed`, `nozzle_hot_idle`, `nozzle_overheat`, `layer_reached`, `spool_low`, or `test` |
+| `printer_id`, `printer` | string | The printer's id and name. |
+| `title`, `body`, `priority` | string | The notification text; `priority` is `low`, `default`, `high` or `urgent`. |
+| `time` | string | Local time with offset (kept for older receivers; prefer `timestamp`). |
+| `has_image` | boolean | `true` when the notification has a camera picture (the webhook does not carry the picture). |
+| `details` | object | Only present when there is more to say (for example an error code). Its keys depend on the event. |
+
+The same versioning policy as the API applies: within `schema_version` 1, **fields can be added, never removed, renamed or changed in type or meaning**, so ignore fields you don't know. A breaking change gets a new `schema_version`. Delivery is best effort: a webhook that fails is not retried, and each event is sent once per channel, so `id` is there for receivers that also get events some other way. Contract tests (`tests/test_webhook_contract.py`) fail if a field here disappears or changes type.
+
 ## Versioning and compatibility
 
 The path carries the version: `/api/external/v1`. Within `v1`:

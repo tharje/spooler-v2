@@ -1,7 +1,7 @@
 [
   {
-    "version": "2.3.0-beta",
-    "date": "2026-10-06",
+    "version": "2.3.0-beta.1",
+    "date": "2026-10-07",
     "changes": [
       "Upload files to the printer from the UI (CC1, CC2, Klipper/Moonraker, Prusa/PrusaLink) — CC2 uses the same chunked upload as ElegooSlicer and is not yet confirmed on real hardware",
       "Report bug button in the footer — pick the printer, describe the issue, and open a prefilled GitHub issue with redacted diagnostics (IPs, serials, names and access codes removed)",
@@ -25,9 +25,12 @@
       "Printer cards show the current layer (e.g. \"Layer 25 / 120\") next to the elapsed and remaining time",
       "CC2: emergency stop, power-loss recovery, filament loading/unloading, leveling, homing and self-checks outside a print are now shown instead of looking idle",
       "Web Push contact address is now configurable (VAPID_CONTACT) instead of hardcoded",
-      "Filament catalogue import moved from the Spools panel to Settings → Integrations, now with a brand dropdown so you can import any brand from SpoolmanDB (Elegoo preselected)"
+      "Filament catalogue import moved from the Spools panel to Settings → Integrations, now with a brand dropdown so you can import any brand from SpoolmanDB (Elegoo preselected)",
+      "Webhook notifications now carry a schema_version, a unique id per event and a UTC timestamp, so a receiver can spot the same event twice (documented in docs/external-api.md)",
+      "The frontend and the HTTP handler are split into smaller files (no change in behaviour)"
     ]
-  },  {
+  },
+  {
     "version": "2.2.6",
     "date": "2026-10-05",
     "changes": [
