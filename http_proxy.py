@@ -21,6 +21,7 @@ class ProxyMixin:
         printer_id = urllib.parse.unquote(self.path[len("/api/camera/"):].split("?")[0])
         p = state.printers.get(printer_id)
         if not p or not p.camera_url:
+            print(f"[Camera] {p.name if p else printer_id}: no camera address known (yet)")
             self._json({"error": "Camera not available"}, 404)
             return
         conn = None
@@ -33,6 +34,7 @@ class ProxyMixin:
             conn.request("GET", path)
             upstream = conn.getresponse()
             if upstream.status != 200:
+                print(f"[Camera] {p.name}: the printer's camera answered HTTP {upstream.status}")
                 self._json({"error": f"camera returned {upstream.status}"}, 503)
                 return
             try:
@@ -51,9 +53,10 @@ class ProxyMixin:
                 self.wfile.write(chunk)
                 self.wfile.flush()
         except (ConnectionResetError, BrokenPipeError):
-            pass
-        except Exception:
-            pass
+            pass    # the browser closed the picture
+        except Exception as e:
+            # Said once per failure so "no camera feed" can be told apart from a printer that won't serve it.
+            print(f"[Camera] {p.name}: could not read the printer's camera ({type(e).__name__}: {e})")
         finally:
             if conn:
                 try:
