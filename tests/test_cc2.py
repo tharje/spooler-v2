@@ -377,3 +377,10 @@ def test_zero_duration_at_the_end_of_a_print_does_not_hide_the_end(printer):
     printer._cc2_state["print_status"] = {"state": "printing", "print_duration": 0, "remaining_time_sec": 900}
     printer._apply_cc2_status()
     assert printer.status["PrintInfo"]["Status"] == 15
+
+def test_phase_is_blank_when_the_printer_is_offline(printer):
+    printer._cc2_state["machine_status"] = {"status": 5, "sub_status": 2901}
+    printer._apply_cc2_status()
+    assert printer.to_dict()["phase"] == "Leveling"
+    printer.connected = False
+    assert printer.to_dict()["phase"] == "" and printer.to_dict()["state"] == "offline"

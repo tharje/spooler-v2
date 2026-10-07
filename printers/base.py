@@ -278,7 +278,7 @@ class PrinterConnection:
             "state":           classify_display_state(
                                    self.connected, pi.get("Status"), self._is_busy_between_prints()),
             "state_reason":    self.state_reason,
-            "phase":           self.phase,
+            "phase":           self.phase if self.connected else "",   # stale once the printer is gone
             "last_seen":       self.last_seen,
             "firmware_version": self.firmware_version,
             "firmware_tested":  firmware.is_tested(self.printer_type, self.firmware_version),
