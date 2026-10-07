@@ -127,12 +127,17 @@ def _discord_send(n) -> None:
 
 # ── Generic webhook ──────────────────────────────────────────────────────────
 
+# Fields may be added within a schema_version, never removed or renamed (docs/external-api.md).
+WEBHOOK_SCHEMA_VERSION = 1
+
+
 def _webhook_send(n) -> None:
     url = config.get("webhook.url")
     if not url:
         raise NotifierError("No webhook address is set.")
     _check_http_url(url, "The webhook address")
     payload = {
+        "schema_version": WEBHOOK_SCHEMA_VERSION, "id": n.id, "timestamp": n.timestamp,
         "event": n.event, "printer_id": n.printer_id, "printer": n.printer_name,
         "title": n.title, "body": n.body, "priority": n.priority,
         "time": n.time, "has_image": bool(n.image),
