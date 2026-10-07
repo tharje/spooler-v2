@@ -1,0 +1,19 @@
+{
+  "_comment": "Firmware versions that have actually been run with Spooler on real printers. Exact versions or patterns with * (case-insensitive). Add a version here in the same PR as any fix it needs; see 'Tested firmware' in the README.",
+  "cc1": {
+    "tested": ["V0.4.0-o"],
+    "notes": {"V0.4.0-o": "OpenCentauri patched firmware"}
+  },
+  "cc2": {
+    "tested": ["02.01.00.00"],
+    "notes": {}
+  },
+  "moonraker": {
+    "tested": [],
+    "notes": {}
+  },
+  "prusa": {
+    "tested": [],
+    "notes": {}
+  }
+}

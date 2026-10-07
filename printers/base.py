@@ -20,6 +20,7 @@ from printers.protocol import decode_printinfo
 import notify as notifylib
 from push import load_notif_settings
 from snapshot import grab_jpeg
+import firmware
 import ledger
 from printaccount import PrintAccounting, clear_active, load_active, save_active
 from spoolman import get_spool_density, last_spool_info
@@ -279,6 +280,9 @@ class PrinterConnection:
             "state_reason":    self.state_reason,
             "phase":           self.phase,
             "last_seen":       self.last_seen,
+            "firmware_version": self.firmware_version,
+            "firmware_tested":  firmware.is_tested(self.printer_type, self.firmware_version),
+            "firmware_note":    firmware.note_for(self.printer_type, self.firmware_version),
             # The server's clock when this was sent, so a browser whose clock
             # differs can compare last_seen against the server's "now".
             "server_time":     time.time(),
@@ -649,6 +653,36 @@ class PrinterConnection:
             ns["nozzle_hot_fired"] = False
 
         ns["last_status"] = status
+
+    @property
+    def firmware_version(self) -> str | None:
+        """The printer's firmware/software version as it reports it, if it does."""
+        v = (self.attrs or {}).get("FirmwareVersion")
+        return str(v) if v else None
+
+    def _note_firmware(self) -> None:
+        """Log (and optionally notify about) the first time a firmware version
+        is seen on this printer, and whenever it changes -- the moment things
+        typically break. Safe to call on every update."""
+        version = self.firmware_version
+        if not version or version == getattr(self, "_fw_noted", None):
+            return
+        self._fw_noted = version
+        previous = firmware.last_seen(self.id)
+        if previous == version:
+            return
+        try:
+            firmware.remember(self.id, version)
+        except OSError:
+            pass
+        tested = firmware.is_tested(self.printer_type, version)
+        verdict = "" if tested else " It has not been tested with this version of Spooler." if tested is False else ""
+        if previous is None:
+            print(f"[Printer {self.name}] Firmware {version}.{verdict}")
+            return
+        print(f"[Printer {self.name}] Firmware changed: {previous} -> {version}.{verdict}")
+        self._emit("firmware_changed", f"{self.name} — Firmware changed",
+                   f"{previous} → {version}.{verdict}", extra={"from": previous, "to": version, "tested": tested})
 
     def _mark_seen(self) -> None:
         """Record that the printer itself just said something (a message

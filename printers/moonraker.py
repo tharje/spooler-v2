@@ -102,6 +102,7 @@ class MoonrakerConnection(PrinterConnection):
                 if not self.connected:
                     self.connected = True
                     print(f"[Printer {self.name}] Connected!")
+                    await self._fetch_version()
                     await self._broadcast_state()
                 self._apply_status(raw.get("result", {}).get("status", {}))
                 await self._check_print_transition()
@@ -116,6 +117,19 @@ class MoonrakerConnection(PrinterConnection):
                 await asyncio.sleep(POLL_INTERVAL * 3)
                 continue
             await asyncio.sleep(POLL_INTERVAL)
+
+    async def _fetch_version(self) -> None:
+        """Klipper's own version from /printer/info (software_version). Not yet
+        confirmed against a real Moonraker host; any failure just leaves the
+        version unknown."""
+        try:
+            info = await self._req("GET", "/printer/info")
+            version = ((info or {}).get("result") or {}).get("software_version")
+            if version:
+                self.attrs = {**(self.attrs or {}), "FirmwareVersion": str(version)}
+                self._note_firmware()
+        except Exception as e:
+            print(f"[Printer {self.name}] Could not read the Klipper version: {type(e).__name__}")
 
     # ── Status mapping ────────────────────────────────────────────────────────
 

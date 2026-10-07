@@ -597,6 +597,7 @@ class CC2Connection(PrinterConnection):
                 "MainboardID":     s.get("sn", self.attrs.get("MainboardID", "")),
                 "Hostname":        s.get("hostname", self.attrs.get("Hostname", "")),
             }
+            self._note_firmware()
 
         print_duration = ps.get("print_duration", 0) or 0
         remaining      = ps.get("remaining_time_sec", 0) or 0

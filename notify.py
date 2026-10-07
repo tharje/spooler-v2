@@ -26,6 +26,7 @@ EVENT_SETTING = {
     "filament_runout": "filament_runout",
     "printer_offline": "offline",
     "printer_online":  "offline",
+    "firmware_changed": "firmware",
     "nozzle_hot_idle": "nozzle_idle",
     "nozzle_overheat": "nozzle_printing",
     "layer_reached":   "layer",

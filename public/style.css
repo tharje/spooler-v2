@@ -1755,3 +1755,7 @@ main {
 .footer-warning:hover { text-decoration: underline; }
 .login-off-note { border: 1px solid var(--yellow); background: rgba(234,179,8,.1); border-radius: var(--radius-sm);
   padding: 10px 12px; font-size: 12px; margin: 0 0 12px; }
+
+.fw-badge { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 999px; font-size: 10px; font-weight: 700;
+  color: var(--yellow); border: 1px solid var(--yellow); text-decoration: none; vertical-align: 1px; }
+.fw-badge:hover { background: rgba(234,179,8,.15); }

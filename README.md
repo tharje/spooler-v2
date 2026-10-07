@@ -269,6 +269,12 @@ Tests run offline against fixtures — no real printer or Spoolman instance need
 
 `GET /api/health` reports version, uptime, and per-printer connection status (name/type/connected, no IPs or access codes). No login required — it's what the Docker `HEALTHCHECK` and any external uptime monitoring hit.
 
+## Tested firmware
+
+Spooler talks to printers with reverse-engineered protocols, which can break when a manufacturer changes its firmware. The firmware versions known to work are listed in [`printers/tested_firmware.json`](printers/tested_firmware.json) (exact versions, or patterns with `*`, per printer type). A printer running anything else shows a small yellow **untested firmware** notice on its card — information only, nothing is blocked — and Spooler logs when a printer's firmware changes (you can also get a notification: Settings → Notifications → *Firmware changed*).
+
+If you run a firmware version that works, add it to `tested_firmware.json` in the same pull request as any fix it needed (and say in the PR how you tested). If it doesn't work, please open an issue with the version.
+
 ## Stack
 
 - **Backend** – Python 3.12, `asyncio`, `websockets`, `aiomqtt`, `bcrypt`

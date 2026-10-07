@@ -327,6 +327,21 @@ function isActivelyPrinting(printer) {
   return ["printing", "preparing"].includes(s);
 }
 
+
+// firmware-badge:begin
+// Firmware that hasn't been tested with this version of Spooler gets a small
+// yellow notice (information only; nothing is blocked). An unknown version
+// (firmware_tested == null) and a tested one show nothing.
+const _FIRMWARE_ISSUES_URL = "https://github.com/tharje/spooler-v2/issues";
+function firmwareBadgeHtml(printer) {
+  if (printer.firmware_tested !== false || !printer.firmware_version) return "";
+  const tip = `Firmware ${printer.firmware_version} has not been tested with this version of Spooler. ` +
+              `If something doesn't work as expected, it may be the firmware. Please report it on GitHub.`;
+  return ` <a class="fw-badge" href="${_FIRMWARE_ISSUES_URL}" target="_blank" rel="noopener" ` +
+         `title="${escAttr(tip)}" aria-label="${escAttr(tip)}">⚠ untested firmware</a>`;
+}
+// firmware-badge:end
+
 // clock-sync:begin
 // last_seen is the SERVER's epoch time. The browser's clock may differ, so every
 // printer message carries server_time and we keep the difference as an offset;
@@ -537,7 +552,7 @@ function renderPrinter(printer) {
       <div class="status-dot ${sc}" role="img" aria-label="${escAttr(stateLabel)}" title="${escAttr(stateLabel)}"></div>
       <div class="card-header-info">
         <div class="card-title">${escHtml(printer.name)}</div>
-        <div class="card-subtitle">${escHtml(printer.ip)}${printer.attrs?.FirmwareVersion ? ` · fw ${escHtml(printer.attrs.FirmwareVersion)}` : ""}</div>
+        <div class="card-subtitle">${escHtml(printer.ip)}${printer.firmware_version ? ` · fw ${escHtml(printer.firmware_version)}` : ""}${firmwareBadgeHtml(printer)}</div>
       </div>
       <span class="status-badge ${sc}">${escHtml(badgeText)}</span>
       <button class="card-files-btn" onclick="openFileBrowser('${escAttr(printer.id)}')" title="Browse files">
@@ -1138,6 +1153,7 @@ const _EXTRA_NOTIF_EVENTS = [
   { key: "paused",          label: "Print paused",     desc: "When a print pauses, with the cause (pauses you start from Spooler aren't announced)", image: true },
   { key: "error",           label: "Print error",      desc: "When the printer reports an error, with the cause and code when known", image: true },
   { key: "filament_runout", label: "Filament runout",  desc: "When the printer stops because filament ran out", image: true },
+  { key: "firmware",        label: "Firmware changed", desc: "When a printer reports a different firmware version than before (and whether it is tested with Spooler)" },
   { key: "offline",         label: "Printer offline",  desc: "When a printer has been unreachable for a while, and when it comes back",
     param: { name: "minutes", label: "Minutes offline before notifying", def: 5, min: 1, max: 1440 } },
 ];

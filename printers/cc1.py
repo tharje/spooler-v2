@@ -276,6 +276,7 @@ class CC1Connection(PrinterConnection):
             mbid = self.attrs.get("MainboardID")
             if mbid and not self.mainboard_id:
                 self.mainboard_id = mbid
+            self._note_firmware()
             await self._broadcast_state()
             return
 
@@ -289,6 +290,7 @@ class CC1Connection(PrinterConnection):
                 mbid = payload.get("MainboardID")
                 if mbid and not self.mainboard_id:
                     self.mainboard_id = mbid
+                self._note_firmware()
         elif cmd == CMD_STATUS:
             if payload and payload != {"Ack": 0}:
                 self.status = payload
