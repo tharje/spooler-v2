@@ -15,6 +15,7 @@
       "CC1: if the printer rejects Start/Pause/Stop/Resume (busy, file not found, file check failed, wrong model), Spooler now tells you why instead of staying silent; a CC1 print that stops with an error points you to the printer's screen",
       "CC1: a clear message when the printer refuses the connection because all 5 of its connection slots are in use",
       "A camera picture is saved with each finished, cancelled or failed print and shown as a thumbnail in the print history (click for full size); it can be switched off under Settings → Features, and old pictures are removed together with their history entries",
+      "Optional per printer (Settings → Printers → edit, Centauri Carbon only): the light turns on when a print starts and off when it ends, after the end-of-print picture has been taken",
       "Printer cards show the current layer (e.g. \"Layer 25 / 120\") next to the elapsed and remaining time",
       "CC2: emergency stop, power-loss recovery, filament loading/unloading, leveling, homing and self-checks outside a print are now shown instead of looking idle",
       "Web Push contact address is now configurable (VAPID_CONTACT) instead of hardcoded",

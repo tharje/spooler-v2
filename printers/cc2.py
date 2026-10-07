@@ -534,6 +534,10 @@ class CC2Connection(PrinterConnection):
     # 80, see uploads.put_file_chunked and spooler-cc2-research.md. Verify with
     # a small file before relying on it, as with the CC1 path before it.
     supports_upload = True
+    supports_light = True
+
+    async def set_light(self, on: bool) -> bool:
+        return await self.send_cmd(CMD_LIGHT, {"LightStatus": {"SecondLight": bool(on)}})
 
     async def upload_file(self, local_path, remote_name: str, start_after: bool = False) -> bool:
         from uploads import UploadError, forward_timeout, put_file_chunked

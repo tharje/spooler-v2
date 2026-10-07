@@ -145,6 +145,9 @@ class PrinterConnection:
     # Subclasses that implement upload_file() set this True; the UI disables
     # the upload button for printers where it stays False.
     supports_upload: bool = False
+    # Subclasses that can switch the chamber light from Spooler set this True
+    # and implement set_light(); the auto-light option is only offered then.
+    supports_light: bool = False
     upload_unsupported_reason: str = "File upload is not supported for this printer type."
 
     def __init__(
@@ -174,6 +177,8 @@ class PrinterConnection:
         self.camera_connected: bool | None = None
         self.filament_density: float = FILAMENT_DENSITY
         self._task: asyncio.Task | None = None
+        # Light on when a print starts, off when it ends (per-printer option).
+        self.auto_light: bool = False
         self._offline_task: asyncio.Task | None = None   # delayed "printer offline" notice
         self._offline_notified = False
         self._last_print_status = None
@@ -274,6 +279,8 @@ class PrinterConnection:
             "camera_url":      self.camera_url,
             "camera_connected": self.camera_connected,
             "supports_upload": self.supports_upload,
+            "supports_light":  self.supports_light,
+            "auto_light":      self.auto_light and self.supports_light,
             "upload_unsupported_reason": None if self.supports_upload else self.upload_unsupported_reason,
             "filament_mm":     round(filament_mm, 1),
             "filament_g":      filament_mm_to_grams(filament_mm, self.filament_density),
@@ -341,6 +348,37 @@ class PrinterConnection:
     async def start_print_file(self, filename: str, print_opts: dict | None = None) -> bool:
         from printers.protocol import CMD_START
         return await self.send_cmd(CMD_START, {"Filename": filename})
+
+    async def set_light(self, on: bool) -> bool:
+        """Switch the printer's light. Only meaningful where supports_light."""
+        return False
+
+    def _light_state(self) -> bool | None:
+        ls = self.status.get("LightStatus")
+        if isinstance(ls, dict) and "SecondLight" in ls:
+            return bool(ls["SecondLight"])
+        return None
+
+    async def _auto_light(self, on: bool) -> None:
+        """Apply the auto-light option. Never raises: the light is a
+        convenience and must not disturb print tracking."""
+        if not (self.auto_light and self.supports_light and self.connected):
+            return
+        if self._light_state() is on:
+            return
+        try:
+            await self.set_light(on)
+        except Exception as e:
+            print(f"[Printer {self.name}] Auto light {'on' if on else 'off'} failed: {type(e).__name__}")
+
+    async def _finish_print_extras(self, entry_id: str | None) -> None:
+        """After a print ends: the end picture first (the light must still be
+        on for it), then the light."""
+        try:
+            if entry_id:
+                await self._save_print_picture(entry_id)
+        finally:
+            await self._auto_light(False)
 
     async def upload_file(self, local_path, remote_name: str, start_after: bool = False) -> bool:
         """Send a file already on disk to the printer's storage, optionally
@@ -610,12 +648,14 @@ class PrinterConnection:
         display_state = classify_display_state(self.connected, cur_status, self._is_busy_between_prints())
         self._update_state_reason(display_state)
 
+        extras_started = False
         if event == "start":
             self.state_reason = None
             self._current_print_pauses = []
             self._print_start_time = time.time()
             self._emit("print_started", f"{self.name} — Print started",
                        pi.get("Filename") or "A print has started.")
+            asyncio.create_task(self._auto_light(True))
             # Initialise per-spool tracking for this print
             self._spool_extrusion = {}
             self._extrusion_snapshot = 0.0
@@ -665,7 +705,8 @@ class PrinterConnection:
                 print(f"[History] {label}: {filename} – {filament_mm:.0f}mm / {filament_g}g"
                       f" (density {density} g/cm³)")
                 await state.broadcast_to_browsers({"type": "history_entry", "entry": entry})
-                asyncio.create_task(self._save_print_picture(entry["id"]))
+                extras_started = True
+                asyncio.create_task(self._finish_print_extras(entry["id"]))
                 if filament_mm > 0:
                     # Flush + deduct the last active spool immediately
                     self._on_tray_change(None)
@@ -679,5 +720,8 @@ class PrinterConnection:
                         loop.run_in_executor(
                             None, spoolman_deduct, self.id, filament_g, loop,
                         )
+
+        if event == "end" and not extras_started:
+            asyncio.create_task(self._finish_print_extras(None))   # no history entry, still switch the light off
 
         self._last_print_status = cur_status

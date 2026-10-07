@@ -894,6 +894,24 @@ function _renderSettingsPrinters() {
 
 let _settingsEditingPrinterId = null;
 
+// Per-printer options (the "Options" box on the printer edit page). Each
+// option row has an `data-option-for` list of printer types it applies to;
+// rows that don't apply are hidden, and the whole box hides when none apply.
+// To add an option: add a .option-row inside #settings-edit-options in
+// index.html with data-option-for="cc1 cc2 ..." and read/write it where
+// "auto_light" is handled in _settingsEditPrinter and the save handler.
+function _syncPrinterOptions(type) {
+  const box = document.getElementById("settings-edit-options");
+  if (!box) return;
+  let any = false;
+  box.querySelectorAll(".option-row").forEach(row => {
+    const applies = (row.dataset.optionFor || "").split(/\s+/).includes(type);
+    row.style.display = applies ? "" : "none";
+    any = any || applies;
+  });
+  box.style.display = any ? "" : "none";
+}
+
 function _settingsEditPrinter(id) {
   _settingsEditingPrinterId = id || null;
   const p = id ? printers[id] : null;
@@ -934,6 +952,8 @@ function _settingsEditPrinter(id) {
     : curType === "moonraker" ? "API key (optional)"
     : curType === "prusa" ? "API key from PrusaLink settings" : "12345";
 
+  _syncPrinterOptions(curType);
+  document.getElementById("settings-edit-autolight").checked = !!p?.auto_light;
   document.getElementById("btn-settings-printer-remove").style.display = isNew ? "none" : "";
   document.getElementById("btn-settings-printer-save").textContent = isNew ? "Add Printer" : "Save";
 
@@ -978,6 +998,7 @@ document.getElementById("btn-settings-back-printer-edit")?.addEventListener("cli
   _showSettingsPage(_settingsPrintersPage);
 });
 document.getElementById("settings-edit-type")?.addEventListener("change", function () {
+  _syncPrinterOptions(this.value);
   const needsKey = this.value === "cc2" || this.value === "prusa" || this.value === "moonraker";
   document.getElementById("settings-edit-access-code-label").style.display = needsKey ? "" : "none";
   document.getElementById("settings-edit-access-code-text").textContent =
@@ -990,12 +1011,13 @@ document.getElementById("btn-settings-printer-save")?.addEventListener("click", 
   const name = document.getElementById("settings-edit-name").value.trim();
   const ip   = document.getElementById("settings-edit-ip").value.trim();
   const access_code = document.getElementById("settings-edit-access-code").value.trim();
+  const auto_light = document.getElementById("settings-edit-autolight").checked;
   if (!ip) { toast("IP address is required"); return; }
   if (_settingsEditingPrinterId) {
-    send({ action: "update_printer", printer_id: _settingsEditingPrinterId, name, ip, access_code });
+    send({ action: "update_printer", printer_id: _settingsEditingPrinterId, name, ip, access_code, auto_light });
   } else {
     const printer_type = document.getElementById("settings-edit-type").value;
-    send({ action: "add_printer", ip, name: name || undefined, printer_type, access_code });
+    send({ action: "add_printer", ip, name: name || undefined, printer_type, access_code, auto_light });
   }
   _renderSettingsPrinters();
   _showSettingsPage(_settingsPrintersPage);
@@ -1110,7 +1132,7 @@ function _renderExtraNotifEvents(s) {
         <span class="toggle-slider"></span>
       </label>
     </div>
-    ${ev.image ? `<div class="notif-param"><label class="notif-check"><input type="checkbox" id="notif-ev-${ev.key}-image" ${s[ev.key]?.image ? "checked" : ""} /> Attach a camera picture</label></div>` : ""}
+    ${ev.image ? `<div class="notif-param"><label class="notif-chip"><input type="checkbox" id="notif-ev-${ev.key}-image" ${s[ev.key]?.image ? "checked" : ""} /><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> Include photo</span></label></div>` : ""}
     ${ev.param ? `<div class="notif-param"><label>${escHtml(ev.param.label)}<input type="number" id="notif-ev-${ev.key}-${ev.param.name}" value="${s[ev.key]?.[ev.param.name] ?? ev.param.def}" min="${ev.param.min}" max="${ev.param.max}" /></label></div>` : ""}
   `).join("");
 }

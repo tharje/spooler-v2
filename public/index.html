@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css?v=52" />
+  <link rel="stylesheet" href="style.css?v=56" />
 </head>
 <body>
   <header>
@@ -533,6 +533,19 @@
           <input id="settings-edit-access-code" type="password" placeholder="12345" maxlength="64" />
           <span class="input-hint">Found on the printer under Settings → Network.</span>
         </label>
+        <div id="settings-edit-options" class="printer-options" style="display:none">
+          <div class="feature-group-title">Options</div>
+          <div id="settings-edit-autolight-label" class="notif-row option-row" data-option-for="cc1 cc2">
+            <div class="notif-info">
+              <span class="notif-label">Automatic light</span>
+              <span class="notif-desc">On when a print starts, off when it ends</span>
+            </div>
+            <label class="toggle-switch">
+              <input id="settings-edit-autolight" type="checkbox" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
         <div class="modal-actions">
           <button id="btn-settings-printer-remove" class="btn btn-danger" style="display:none">Remove</button>
           <button id="btn-settings-printer-save" class="btn btn-primary">Save</button>
@@ -568,7 +581,7 @@
             </label>
           </div>
           <div class="notif-param">
-            <label class="notif-check"><input type="checkbox" id="notif-finished-image" /> Attach a camera picture</label>
+            <label class="notif-chip"><input type="checkbox" id="notif-finished-image" /><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> Include photo</span></label>
           </div>
 
           <div class="notif-row">
@@ -746,7 +759,7 @@
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="/config.js"></script>
-  <script src="app.js?v=68"></script>
+  <script src="app.js?v=72"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});

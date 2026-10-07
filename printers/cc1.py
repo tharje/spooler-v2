@@ -165,6 +165,10 @@ class CC1Connection(PrinterConnection):
                 await self.send_cmd(CMD_CANVAS, {})
 
     supports_upload = True
+    supports_light = True
+
+    async def set_light(self, on: bool) -> bool:
+        return await self.send_cmd(CMD_LIGHT, {"LightStatus": {"SecondLight": bool(on), "RgbLight": [0, 0, 0]}})
 
     async def upload_file(self, local_path, remote_name: str, start_after: bool = False) -> bool:
         # UNVERIFIED against real hardware: single-chunk variant of the SDCP

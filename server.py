@@ -130,6 +130,7 @@ async def main() -> None:
             entry["name"],
             access_code=entry.get("access_code", ""),
         )
+        pc.auto_light = bool(entry.get("auto_light", False))
         state.printers[pc.id] = pc
         pc._task = asyncio.create_task(pc.start())
     if state.printers:

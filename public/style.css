@@ -1600,3 +1600,16 @@ main {
 .hist-thumb { width: 40px; height: 30px; object-fit: cover; border-radius: 4px; vertical-align: middle; margin-right: 8px; cursor: zoom-in; border: 1px solid var(--border); }
 .snap-lightbox { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,.85); display: flex; align-items: center; justify-content: center; cursor: zoom-out; }
 .snap-lightbox img { max-width: 94vw; max-height: 90vh; border-radius: 8px; box-shadow: 0 8px 40px rgba(0,0,0,.6); }
+.option-row { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; background: var(--surface2); }
+.printer-options { margin-top: 18px; }
+.printer-options .feature-group-title { margin-bottom: 8px; }
+.printer-options .option-row + .option-row { margin-top: 8px; }
+.notif-param:has(.notif-chip) { padding: 2px 0 12px; }
+.notif-chip { display: inline-flex; width: auto; cursor: pointer; }
+.notif-chip input { position: absolute; opacity: 0; width: 0; height: 0; }
+.notif-chip span { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 12px; border-radius: 999px;
+  border: 1px solid var(--border); color: var(--text-muted); background: var(--surface2); transition: border-color .15s, color .15s, background .15s; }
+.notif-chip span svg { width: 14px; height: 14px; }
+.notif-chip:hover span { border-color: var(--accent); }
+.notif-chip input:checked + span { border-color: var(--accent); color: var(--accent); background: rgba(255,107,43,.12); font-weight: 600; }
+.notif-chip input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }

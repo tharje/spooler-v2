@@ -161,6 +161,7 @@ async def handle_browser_message(ws, raw: str) -> None:
             return
         pid = uuid.uuid4().hex
         pc = make_printer(printer_type, pid, ip, name, access_code=access_code)
+        pc.auto_light = bool(msg.get("auto_light")) and pc.supports_light
         state.printers[pid] = pc
         pc._task = asyncio.create_task(pc.start())
         await loop.run_in_executor(None, save_printers, state.printers)
@@ -194,6 +195,8 @@ async def handle_browser_message(ws, raw: str) -> None:
         if new_code and new_code != p.access_code:
             p.access_code = new_code
             needs_reconnect = True
+        if "auto_light" in msg:
+            p.auto_light = bool(msg["auto_light"]) and p.supports_light
         if needs_reconnect:
             p.stop()
             p._task = asyncio.create_task(p.start())

@@ -104,6 +104,7 @@ def save_printers(printers: dict) -> None:
             "name":         p.name,
             "printer_type": p.printer_type,
             "access_code":  p.access_code,
+            "auto_light":   bool(getattr(p, "auto_light", False)),
         }
         for p in printers.values()
     ]
