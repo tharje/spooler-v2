@@ -355,3 +355,11 @@ def test_cc1_status_20_is_leveling_not_heating():
     p.status = {"CurrentStatus": [1], "PrintInfo": {"Status": 20}}
     p._update_phase()
     assert p.phase == "Leveling"
+
+
+def test_phase_is_blank_when_the_printer_is_offline(printer):
+    printer._cc2_state["machine_status"] = {"status": 5, "sub_status": 2901}
+    printer._apply_cc2_status()
+    assert printer.to_dict()["phase"] == "Leveling"
+    printer.connected = False
+    assert printer.to_dict()["phase"] == "" and printer.to_dict()["state"] == "offline"
