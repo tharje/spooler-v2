@@ -198,6 +198,7 @@ document.addEventListener("visibilitychange", () => {
 function handleMessage(msg) {
   switch (msg.type) {
     case "printer_update":
+      _noteServerTime(msg.printer.server_time);
       printers[msg.printer.id] = msg.printer;
       renderPrinter(msg.printer);
       if (msg.printer.id === _currentFilePrinterId) updateUploadUi();
@@ -320,21 +321,32 @@ function isActivelyPrinting(printer) {
   return ["printing", "preparing"].includes(s);
 }
 
+// clock-sync:begin
+// last_seen is the SERVER's epoch time. The browser's clock may differ, so every
+// printer message carries server_time and we keep the difference as an offset;
+// "now" for any comparison with last_seen is then the server's now.
+let _clockOffsetS = 0;
+function _noteServerTime(serverEpochS) {
+  if (typeof serverEpochS === "number" && isFinite(serverEpochS)) _clockOffsetS = serverEpochS - Date.now() / 1000;
+}
+function _serverNowS() { return Date.now() / 1000 + _clockOffsetS; }
+
 // Data goes stale faster while actively printing (30s) than otherwise (2min)
 // -- a frozen temperature reading matters a lot more mid-print than while idle.
 function isStale(printer) {
   if (!printer.connected || printer.last_seen == null) return false; // offline is its own distinct state
   const thresholdS = isActivelyPrinting(printer) ? 30 : 120;
-  return (Date.now() / 1000 - printer.last_seen) > thresholdS;
+  return (_serverNowS() - printer.last_seen) > thresholdS;
 }
 
 function formatAgo(epochSeconds) {
-  const diff = Math.max(0, Math.round(Date.now() / 1000 - epochSeconds));
+  const diff = Math.max(0, Math.round(_serverNowS() - epochSeconds));
   if (diff < 60) return `${diff}s ago`;
   const mins = Math.round(diff / 60);
   if (mins < 60) return `${mins}m ago`;
   return `${Math.round(mins / 60)}h ago`;
 }
+// clock-sync:end
 
 // Returns the printer object that currently has this spool loaded as its active tray, or null.
 function getSpoolActivePrinter(spoolId) {

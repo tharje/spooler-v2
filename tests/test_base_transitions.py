@@ -301,33 +301,25 @@ async def test_cancelled_end_state_has_no_error_fields(printer):
 
 # ── last_seen (T4) ────────────────────────────────────────────────────────────
 
-@pytest.mark.asyncio
-async def test_broadcast_state_marks_last_seen_while_connected(printer):
+def test_mark_seen_records_the_time(printer):
     assert printer.last_seen is None
-    _set_status(printer, 0)
-    await printer._broadcast_state()
+    printer._mark_seen()
     assert printer.last_seen is not None
     assert printer.last_seen <= time.time()
 
 
 @pytest.mark.asyncio
-async def test_broadcast_state_does_not_mark_last_seen_when_disconnected(printer):
-    printer.connected = False
+async def test_broadcast_state_never_touches_last_seen(printer):
+    # last_seen moved out of _broadcast_state (I2): broadcasting also happens
+    # for browser-side reasons and says nothing about the printer.
     _set_status(printer, 0)
     await printer._broadcast_state()
     assert printer.last_seen is None
-
-
-@pytest.mark.asyncio
-async def test_disconnect_does_not_refresh_a_previous_last_seen(printer):
-    _set_status(printer, 2)
+    printer.last_seen = 1000.0
     await printer._broadcast_state()
-    first_seen = printer.last_seen
-    assert first_seen is not None
-
     printer.connected = False
-    await printer._broadcast_state()  # simulates the disconnect notification broadcast
-    assert printer.last_seen == first_seen  # not bumped by the disconnect itself
+    await printer._broadcast_state()       # a disconnect notice
+    assert printer.last_seen == 1000.0
 
 
 def test_to_dict_exposes_last_seen(printer):

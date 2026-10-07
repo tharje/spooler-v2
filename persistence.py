@@ -224,17 +224,18 @@ def migrate_history_ids() -> None:
     that predates it (added alongside end_state/stop_reason/etc.). Safe to
     call on every startup — a no-op once every entry already has one.
 
-    Deliberately called outside append_history's lock (load_history() here
-    does a plain read, the write below takes _HISTORY_LOCK on its own) —
-    threading.Lock isn't reentrant, so nesting this inside an already-held
-    _HISTORY_LOCK would deadlock.
+    The read and the write happen under one hold of _HISTORY_LOCK so no
+    append can slip in between them and be overwritten. load_history() does
+    not take the lock itself, so calling it while holding it is fine; just
+    don't call this from code that already holds _HISTORY_LOCK (the lock isn't
+    reentrant).
     """
-    history = load_history()
-    changed = False
-    for entry in history:
-        if "id" not in entry:
-            entry["id"] = uuid.uuid4().hex
-            changed = True
-    if changed:
-        with _HISTORY_LOCK:
+    with _HISTORY_LOCK:
+        history = load_history()
+        changed = False
+        for entry in history:
+            if "id" not in entry:
+                entry["id"] = uuid.uuid4().hex
+                changed = True
+        if changed:
             _atomic_write(HISTORY_FILE, json.dumps(history, indent=2))

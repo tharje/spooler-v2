@@ -249,6 +249,7 @@ class CC1Connection(PrinterConnection):
             print(f"[Printer {self.name}] Active tray changed → {active_tray}, spool {spool_id}")
 
     async def _handle_message(self, raw: str) -> None:
+        self._mark_seen()
         dump_raw_message(self.id, "cc1_ws", raw)
         try:
             msg = json.loads(raw)

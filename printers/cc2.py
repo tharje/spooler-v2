@@ -250,6 +250,10 @@ class CC2Connection(PrinterConnection):
     async def _handle_mqtt_message(self, message) -> None:
         topic = str(message.topic)
         dump_raw_message(self.id, f"cc2_mqtt:{topic}", message.payload)
+        # Only what the printer sent counts. With the cold-start wildcard
+        # subscription the broker also echoes our own requests back.
+        if topic.endswith(("/api_status", "/api_response", "/register_response")):
+            self._mark_seen()
 
         if "register_response" in topic:
             try:

@@ -97,6 +97,7 @@ class MoonrakerConnection(PrinterConnection):
         while True:
             try:
                 raw = await self._req("GET", _QUERY_PATH)
+                self._mark_seen()
                 fail_streak = 0
                 if not self.connected:
                     self.connected = True

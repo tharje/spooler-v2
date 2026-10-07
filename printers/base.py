@@ -275,6 +275,9 @@ class PrinterConnection:
             "state_reason":    self.state_reason,
             "phase":           self.phase,
             "last_seen":       self.last_seen,
+            # The server's clock when this was sent, so a browser whose clock
+            # differs can compare last_seen against the server's "now".
+            "server_time":     time.time(),
             "attrs":           self.attrs,
             "camera_url":      self.camera_url,
             "camera_connected": self.camera_connected,
@@ -566,13 +569,15 @@ class PrinterConnection:
 
         ns["last_status"] = status
 
+    def _mark_seen(self) -> None:
+        """Record that the printer itself just said something (a message
+        received, a poll that succeeded)."""
+        self.last_seen = time.time()
+
     async def _broadcast_state(self) -> None:
-        # Only mark "seen" while actually connected -- _broadcast_state() is
-        # also called right after a disconnect (connected already flipped to
-        # False by the caller) to notify browsers of that, which is not a
-        # sign of life from the printer and must not refresh the timestamp.
-        if self.connected:
-            self.last_seen = time.time()
+        # last_seen is NOT touched here: this runs for browser-side reasons too
+        # (a renamed printer, a disconnect notice) that say nothing about the
+        # printer. Protocols call _mark_seen() where they actually hear from it.
         self._check_notifications()
         self._track_connection_for_notifications()
         await state.broadcast_to_browsers({

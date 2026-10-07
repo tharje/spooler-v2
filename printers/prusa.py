@@ -71,6 +71,7 @@ class PrusaConnection(PrinterConnection):
                     self._req("GET", "/api/v1/status"),
                     self._safe_job(),
                 )
+                self._mark_seen()
                 fail_streak = 0
                 if not self.connected:
                     self.connected = True
