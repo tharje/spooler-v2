@@ -92,6 +92,26 @@ HTTPS_ENABLED = os.getenv("HTTPS_ENABLED", "true").lower() != "false"
 auth.set_auth_file(DATA_DIR / "auth.json")
 
 
+async def _ledger_sender() -> None:
+    """Keep trying to deliver filament deductions to Spoolman (see ledger.py)."""
+    import ledger
+    import spoolman
+    from features import is_enabled
+    loop = asyncio.get_running_loop()
+
+    def on_sent(entry, result):
+        spoolman._notify_spool_level(result, entry["printer_id"], loop)
+
+    def on_change(summary):
+        asyncio.run_coroutine_threadsafe(
+            state.broadcast_to_browsers({"type": "ledger_update", **summary}), loop)
+
+    import config
+    config.on_change("spoolman.", lambda key, value: ledger.kick())     # new URL/credentials: try again now
+    await ledger.sender_loop(lambda: is_enabled("spoolman"), spoolman.spoolman_use,
+                             spoolman.find_spool_at_location, on_sent, on_change)
+
+
 async def main() -> None:
     diagnostics.install_log_capture()
     if ws_serve is None:
@@ -140,6 +160,7 @@ async def main() -> None:
 
     asyncio.create_task(session_cleanup_loop())
     asyncio.create_task(daily_backup_loop())
+    asyncio.create_task(_ledger_sender())
 
     # Let the plain HTTP server (port HTTP_PORT) also adopt WebSocket upgrade
     # requests it sees — combo mode, so single-port tunnels/proxies work.

@@ -39,6 +39,7 @@ from spoolman import get_spool_index, get_spoolman_db, get_spoolman_url, spoolma
 import config
 import diagnostics
 import api_tokens
+import ledger
 import notifiers
 import notify
 import stats
@@ -305,6 +306,41 @@ class SPHandler(SimpleHTTPRequestHandler):
         q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
         one = lambda k: (q.get(k) or [""])[0].strip() or None
         return one("from"), one("to"), one("printer")
+
+    def _ledger_changed(self) -> None:
+        ledger.kick()
+        if _ws_loop is not None:
+            asyncio.run_coroutine_threadsafe(
+                state.broadcast_to_browsers({"type": "ledger_update", **ledger.summary()}), _ws_loop)
+
+    @requires_feature("spoolman")
+    def _handle_ledger_list(self):
+        """Deductions not (yet) taken by Spoolman, plus recent ones that were
+        discarded, so it is visible when filament use wasn't counted."""
+        names = {p.id: p.name for p in state.printers.values()}
+        files = {e.get("id"): e.get("filename") for e in load_history()}
+        cutoff = time.time() - 30 * 86400
+        items = []
+        for e in ledger.all_entries():
+            keep = e["status"] in ledger.UNSENT or (e["status"] == "discarded" and e.get("created_at", 0) >= cutoff)
+            if not keep:
+                continue
+            items.append({**e, "printer_name": names.get(e.get("printer_id")) or e.get("location"),
+                          "filename": files.get(e.get("history_id"))})
+        items.sort(key=lambda x: x.get("created_at", 0), reverse=True)
+        self._json({"summary": ledger.summary(), "items": items})
+
+    @requires_feature("spoolman")
+    def _handle_ledger_action(self, action: str):
+        self._read_body()
+        rest = urllib.parse.unquote(self.path[len("/api/spoolman-ledger/"):].split("?")[0])
+        eid = rest[:-len("/retry")] if action == "retry" else rest
+        ok = ledger.retry_now(eid) if action == "retry" else ledger.discard(eid, "Discarded by the user")
+        if not ok:
+            self._json({"error": "No such deduction waiting to be sent"}, 404)
+            return
+        self._ledger_changed()
+        self._json({"ok": True})
 
     def _handle_create_api_token(self):
         try:
@@ -821,6 +857,8 @@ class SPHandler(SimpleHTTPRequestHandler):
             })
         elif self.path == "/api/api-tokens":
             self._json({"tokens": api_tokens.list_tokens(), "max": api_tokens.MAX_TOKENS})
+        elif self.path == "/api/spoolman-ledger":
+            self._handle_ledger_list()
         elif self.path.split("?")[0] == "/api/stats":
             self._handle_stats()
         elif self.path.split("?")[0] == "/api/history.csv":
@@ -923,6 +961,9 @@ class SPHandler(SimpleHTTPRequestHandler):
     def do_DELETE(self):
         if not self._check_auth():
             return
+        if self.path.startswith("/api/spoolman-ledger/"):
+            self._handle_ledger_action("discard")
+            return
         if self.path.startswith("/api/api-tokens/"):
             ok = api_tokens.revoke(urllib.parse.unquote(self.path[len("/api/api-tokens/"):]))
             self._json({"ok": True} if ok else {"error": "No such key"}, 200 if ok else 404)
@@ -962,6 +1003,8 @@ class SPHandler(SimpleHTTPRequestHandler):
             self._handle_push_test()
         elif self.path == "/api/api-tokens":
             self._handle_create_api_token()
+        elif self.path.startswith("/api/spoolman-ledger/") and self.path.endswith("/retry"):
+            self._handle_ledger_action("retry")
         elif self.path == "/api/import-filaments":
             self._handle_import_filaments()
         elif self.path == "/api/integrations/spoolman/test":

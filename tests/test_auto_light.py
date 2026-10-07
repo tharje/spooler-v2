@@ -92,8 +92,6 @@ async def test_light_goes_off_even_when_the_picture_step_fails(printer):
 @pytest.mark.asyncio
 async def test_print_start_and_end_drive_the_light(printer, monkeypatch):
     monkeypatch.setattr(base, "get_spool_density", lambda pid: 1.24)
-    monkeypatch.setattr(base, "spoolman_deduct", lambda *a, **k: None)
-    monkeypatch.setattr(base, "spoolman_deduct_spool", lambda *a, **k: None)
 
     async def noop(msg):
         pass

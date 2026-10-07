@@ -41,6 +41,7 @@ BACKUP_FILES = [
     "vapid_keys.json",
     "auth.json",
     "api_tokens.json",
+    "spoolman_ledger.json",
 ]
 
 # Fields inside specific files to redact when a backup is created without

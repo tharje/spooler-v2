@@ -149,6 +149,7 @@ function connect() {
     // must not linger as stale data once the connection is back.
     send({ action: "list_printers" });
     loadHistory();
+    loadLedger();
     fetchSpools();
   };
 
@@ -216,6 +217,10 @@ function handleMessage(msg) {
       break;
     case "error":
       toast(msg.message, true);
+      break;
+    case "ledger_update":
+      _setLedgerBadge(msg);
+      if (spoolsPanel.classList.contains("open")) loadLedger();
       break;
     case "history_update": {
       const h = history.find(e => e.id === msg.id);
@@ -3124,6 +3129,97 @@ async function deleteSpool(spoolId) {
   }
 }
 
+
+// ─── Filament deductions waiting for Spoolman (T22) ───────────────────────────
+// Spooler writes every deduction to a ledger before sending it; this shows the
+// ones Spoolman hasn't taken (yet), lets you retry or discard them, and puts a
+// badge on the Spools button when something needs a person.
+let _ledgerItems = [];
+
+function _ledgerStatusText(e) {
+  if (e.status === "discarded") return `Not deducted — ${e.last_error || "discarded"}`;
+  if (e.status === "sending") return "Sending…";
+  if (e.status === "failed" && e.next_try_at == null) return "Waiting for your decision";
+  if (e.status === "failed") return `Failed ${e.attempts}× — will try again ${_ledgerWhen(e.next_try_at)}`;
+  return "Waiting to be sent";
+}
+function _ledgerWhen(epoch) {
+  const s = Math.round(epoch - _serverNowS());
+  if (s <= 5) return "shortly";
+  if (s < 90) return `in ${s}s`;
+  if (s < 5400) return `in ${Math.round(s / 60)} min`;
+  return `in ${Math.round(s / 3600)} h`;
+}
+
+function renderLedger() {
+  const card = document.getElementById("ledger-card");
+  if (!card) return;
+  if (!_ledgerItems.length) { card.hidden = true; card.replaceChildren(); return; }
+  const unsent = _ledgerItems.filter(e => ["pending", "sending", "failed"].includes(e.status));
+  card.hidden = false;
+  const head = _el("div", "ledger-head");
+  head.append(_el("strong", null, unsent.length
+    ? `${unsent.length} filament deduction${unsent.length === 1 ? "" : "s"} not yet in Spoolman`
+    : "Recent filament that was not deducted"));
+  const rows = _ledgerItems.map(e => {
+    const row = _el("div", `ledger-row ${e.status}`);
+    const sp = e.spool_id != null ? (spools.find(x => x.id === e.spool_id) || null) : null;
+    const spoolText = e.spool_id == null ? "unknown spool" : (sp ? spoolName(sp) : `spool #${e.spool_id}`);
+    const main = _el("div", "ledger-main");
+    main.append(_el("div", "ledger-title", `${_fmtNum(e.grams, 1)} g from ${spoolText}`));
+    main.append(_el("div", "ledger-meta", `${e.printer_name || "Printer"}${e.filename ? " · " + e.filename : ""} · ${new Date(e.created_at * 1000).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}`));
+    main.append(_el("div", "ledger-state", _ledgerStatusText(e)));
+    if (e.status === "failed" && e.last_error) main.append(_el("div", "ledger-error", e.last_error));
+    if (e.note) main.append(_el("div", "ledger-meta", e.note));
+    row.append(main);
+    if (["pending", "failed"].includes(e.status)) {
+      const retry = _el("button", "btn btn-secondary btn-sm", "Try again now");
+      retry.type = "button";
+      retry.addEventListener("click", () => _ledgerAction(e.id, "retry"));
+      const drop = _el("button", "btn btn-secondary btn-sm", "Discard");
+      drop.type = "button";
+      drop.addEventListener("click", () => {
+        if (confirm(`Discard ${_fmtNum(e.grams, 1)} g from ${spoolText}? Spoolman will NOT be told about this filament.`)) _ledgerAction(e.id, "discard");
+      });
+      const act = _el("div", "ledger-actions");
+      act.append(retry, drop);
+      row.append(act);
+    }
+    return row;
+  });
+  card.replaceChildren(head, ...rows);
+}
+
+async function _ledgerAction(id, action) {
+  try {
+    const r = await fetch(`/api/spoolman-ledger/${encodeURIComponent(id)}${action === "retry" ? "/retry" : ""}`,
+                          { method: action === "retry" ? "POST" : "DELETE" });
+    if (!r.ok) { const d = await r.json().catch(() => ({})); toast(d.error || "Could not do that", true); }
+    else toast(action === "retry" ? "Trying again" : "Discarded");
+  } catch (e) { toast("Could not do that: " + e.message, true); }
+  loadLedger();
+}
+
+function _setLedgerBadge(summary) {
+  const b = document.getElementById("spools-badge");
+  if (!b) return;
+  const n = summary?.attention || 0;
+  b.hidden = n === 0;
+  b.textContent = n ? String(n) : "";
+}
+
+async function loadLedger() {
+  if (!featureEnabled("spoolman")) { _ledgerItems = []; renderLedger(); _setLedgerBadge(null); return; }
+  try {
+    const r = await fetch("/api/spoolman-ledger");
+    if (!r.ok) return;
+    const d = await r.json();
+    _ledgerItems = d.items || [];
+    _setLedgerBadge(d.summary);
+    renderLedger();
+  } catch (_) { /* server may not be ready yet */ }
+}
+
 // Spools side panel
 const spoolsPanel = document.getElementById("panel-spools");
 const btnSpools   = document.getElementById("btn-spools");
@@ -3133,6 +3229,7 @@ const openSpools = () => {
   historyBackdrop.classList.add("open");
   btnSpools.classList.add("active");
   fetchSpools();
+  loadLedger();
 };
 const closeSpools = () => {
   spoolsPanel.classList.remove("open");

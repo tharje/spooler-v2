@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css?v=60" />
+  <link rel="stylesheet" href="style.css?v=61" />
 </head>
 <body>
   <header>
@@ -55,6 +55,7 @@
         <line x1="2" y1="12" x2="8" y2="12"/><line x1="16" y1="12" x2="22" y2="12"/>
       </svg>
       <span>Spools</span>
+      <span id="spools-badge" class="nav-badge" hidden aria-label="Filament deductions need attention"></span>
     </button>
     <a id="btn-slicer" class="sidenav-item" title="Open slicer" target="_blank" rel="noopener" hidden>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -208,6 +209,7 @@
       </div>
     </div>
     <div class="side-panel-body">
+      <div id="ledger-card" class="ledger-card" hidden></div>
       <div id="spools-list"></div>
       <p id="spools-empty" style="display:none;text-align:center;color:var(--text-muted);padding:40px">No spools yet. Click <strong>Add Spool</strong> to get started.</p>
     </div>
@@ -809,7 +811,7 @@
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="/config.js"></script>
-  <script src="app.js?v=76"></script>
+  <script src="app.js?v=77"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});

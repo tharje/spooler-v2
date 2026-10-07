@@ -20,7 +20,9 @@ from printers.protocol import decode_printinfo
 import notify as notifylib
 from push import load_notif_settings
 from snapshot import grab_jpeg
-from spoolman import get_spool_density, last_spool_info, spoolman_deduct, spoolman_deduct_spool
+import ledger
+from printaccount import PrintAccounting, clear_active, load_active, save_active
+from spoolman import get_spool_density, last_spool_info
 
 # Raw SDCP-style status codes. Shared by the pure transition classifier below
 # and (for PRINTING) by _check_notifications's "was it actively printing"
@@ -183,9 +185,11 @@ class PrinterConnection:
         self._offline_notified = False
         self._last_print_status = None
         self._print_start_time: float | None = None
-        self._spool_extrusion: dict  = {}   # spool_id -> mm used this print
-        self._extrusion_snapshot: float = 0.0  # TotalExtrusion at last tray swap
-        self._current_print_spool: int | None = None
+        # Filament bookkeeping for the print in progress (None between prints);
+        # saved to disk so a Spooler restart mid-print neither loses nor repeats it.
+        self._acct: PrintAccounting | None = None
+        self._acct_saved_at = 0.0
+        self._acct_saved_mm = 0.0
         self._notif_state: dict = {
             "last_status":      None,
             "nozzle_idle_fired": False,
@@ -318,31 +322,108 @@ class PrinterConnection:
         self.filament_density = get_spool_density(self.id)
 
     def _on_tray_change(self, new_spool_id: int | None) -> None:
-        """Record + immediately deduct filament used by the outgoing spool.
+        """The spool feeding the extruder changed. Everything extruded so far
+        belongs to the outgoing spool; the rest goes to the new one. Between
+        prints this does nothing (the next print reads the active tray when it
+        starts)."""
+        if self._acct is None:
+            return
+        self._observe_extrusion()
+        self._acct.switch_spool(new_spool_id)
+        self._save_accounting(force=True)
 
-        Deducting at swap time (rather than waiting for print end) means partial
-        prints are correctly accounted for if the server restarts or the printer
-        disconnects mid-print.  Pass new_spool_id=None as a sentinel at print end
-        to flush the last spool's usage.
-        """
-        current_mm = float(self._decoded_printinfo().get("TotalExtrusion", 0) or 0)
-        delta = current_mm - self._extrusion_snapshot
-        if self._current_print_spool is not None and delta > 0:
-            self._spool_extrusion[self._current_print_spool] = (
-                self._spool_extrusion.get(self._current_print_spool, 0) + delta
-            )
-            g = filament_mm_to_grams(delta, self.filament_density)
-            if g > 0:
-                try:
-                    loop = asyncio.get_running_loop()
-                    loop.run_in_executor(
-                        None, spoolman_deduct_spool,
-                        self._current_print_spool, g, self.id, loop,
-                    )
-                except RuntimeError:
-                    pass
-        self._extrusion_snapshot = current_mm
-        self._current_print_spool = new_spool_id
+    # ── Per-print filament accounting (T22) ────────────────────────────────────
+
+    def _tray_spool(self):
+        """The Spoolman spool linked to the active Canvas/AMS slot, or None."""
+        active = (self.status.get("canvas_info") or {}).get("active_tray_id", -1)
+        return (state.tray_map.get(self.id) or {}).get(str(active)) if active is not None and active >= 0 else None
+
+    def _has_trays(self) -> bool:
+        return bool((self.status.get("canvas_info") or {}).get("canvas_list"))
+
+    def _observe_extrusion(self) -> None:
+        if self._acct is None:
+            return
+        total = self._decoded_printinfo().get("TotalExtrusion", 0) or 0
+        if self._acct.observe(total):
+            print(f"[Printer {self.name}] Extrusion counter went back (to {float(total):.0f} mm); "
+                  f"adding the earlier {self._acct.carry_mm:.0f} mm to this print's total")
+        self._save_accounting()
+
+    def _save_accounting(self, force: bool = False) -> None:
+        a = self._acct
+        if a is None:
+            return
+        now = time.monotonic()
+        if not force and now - self._acct_saved_at < 20 and abs(a.total_mm() - self._acct_saved_mm) < 50:
+            return
+        self._acct_saved_at, self._acct_saved_mm = now, a.total_mm()
+        try:
+            save_active(self.id, a)
+        except OSError as e:
+            print(f"[Printer {self.name}] Could not save print accounting: {e}")
+
+    async def _capture_start_spool(self, acct: PrintAccounting) -> None:
+        """Remember which spool Spoolman has at this printer when the print starts,
+        so the deduction still has a target if Spoolman is down at the end."""
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, get_spool_density, self.id)
+        info = last_spool_info(self.id)
+        if info.get("status") == "found" and self._acct is acct:
+            acct.start_spool = info.get("spool_id")
+            self._save_accounting(force=True)
+
+    async def _flush_orphaned_accounting(self, saved: PrintAccounting) -> None:
+        """Spooler was down when a print ended. Deduct what it had seen so far,
+        marked as such; there is no history entry to attach it to."""
+        per = saved.finish()
+        loop = asyncio.get_running_loop()
+        density = await loop.run_in_executor(None, get_spool_density, self.id)
+        await self._record_deductions(saved, per, density, note="The print ended while Spooler was not running; "
+                                                              "this is the amount seen before it stopped.")
+        clear_active(self.id)
+        print(f"[Printer {self.name}] A print ended while Spooler was stopped; recorded its last known filament use")
+
+    async def _record_deductions(self, acct: PrintAccounting, per: dict, density: float,
+                                 note: str | None = None) -> list:
+        """Write what a print used into the ledger (pending), never sending
+        anything from here. Returns [{"id": spool, "g": grams}] for the history."""
+        if not is_enabled("spoolman"):
+            return []
+        loop = asyncio.get_running_loop()
+        info = last_spool_info(self.id)
+        status = info.get("status")
+        tray_printer = self._has_trays()
+        used = []
+        rows = []
+        for key, mm in per.items():
+            grams = filament_mm_to_grams(mm, density)
+            if grams <= 0:
+                continue
+            spool_id, st, reason = key, "pending", None
+            if key is None:
+                if tray_printer:
+                    st, reason = "discarded", "No spool is linked to the slot that was feeding"
+                else:
+                    spool_id = info.get("spool_id") if status == "found" else acct.start_spool
+                    if spool_id is None and status == "none":
+                        st, reason = "discarded", "No spool is assigned to this printer in Spoolman"
+            rows.append((spool_id, grams, mm, st, reason))
+            if spool_id is not None and st == "pending":
+                used.append({"id": spool_id, "g": grams})
+
+        def write():
+            for spool_id, grams, mm, st, reason in rows:
+                ledger.add(acct.print_id, self.id, spool_id, grams, mm, status=st, reason=reason,
+                           location=self.name, note=note)
+        await loop.run_in_executor(None, write)
+        if any(r[3] == "pending" for r in rows):
+            ledger.kick()
+        for spool_id, grams, mm, st, reason in rows:
+            print(f"[Ledger] {self.name}: {mm:.0f} mm / {grams} g -> "
+                  f"{('spool ' + str(spool_id)) if spool_id is not None else 'unknown spool'} ({st})")
+        return used
 
     async def request_file_list(self) -> bool:
         from printers.protocol import CMD_LIST_FILES
@@ -654,6 +735,28 @@ class PrinterConnection:
         self._update_state_reason(display_state)
 
         extras_started = False
+        first_status = self._last_print_status is None
+        now_active = cur_status in ACTIVE_STATUSES or cur_status in PAUSED_STATUSES
+        saved = load_active(self.id) if first_status else None
+
+        if first_status and not now_active and saved is not None:
+            # Spooler was off while a print ended: don't lose what it used.
+            await self._flush_orphaned_accounting(saved)
+        elif first_status and now_active:
+            # First thing seen after (re)start is a print in progress: carry on
+            # where we left off instead of treating it as a new print.
+            if saved is not None and (not saved.filename or saved.filename == pi.get("Filename", saved.filename)):
+                self._acct = saved
+                self._print_start_time = saved.started_at
+                print(f"[Printer {self.name}] Resumed filament accounting for the running print "
+                      f"({saved.total_mm():.0f} mm so far)")
+            else:
+                self._acct = PrintAccounting(current_spool=self._tray_spool(), filename=pi.get("Filename", ""),
+                                             started_at=None)
+                self._print_start_time = None
+                self._save_accounting(force=True)
+            event = None      # not a new print: no "started" notice, light or history reset
+
         if event == "start":
             self.state_reason = None
             self._current_print_pauses = []
@@ -661,15 +764,12 @@ class PrinterConnection:
             self._emit("print_started", f"{self.name} — Print started",
                        pi.get("Filename") or "A print has started.")
             asyncio.create_task(self._auto_light(True))
-            # Initialise per-spool tracking for this print
-            self._spool_extrusion = {}
-            self._extrusion_snapshot = 0.0
-            canvas = self.status.get("canvas_info", {})
-            active_tray = canvas.get("active_tray_id", -1)
-            self._current_print_spool = (
-                (state.tray_map.get(self.id) or {}).get(str(active_tray))
-                if active_tray >= 0 else None
-            )
+            self._acct = PrintAccounting(current_spool=self._tray_spool(), filename=pi.get("Filename", ""),
+                                         started_at=self._print_start_time)
+            self._save_accounting(force=True)
+            asyncio.create_task(self._capture_start_spool(self._acct))
+        elif self._acct is not None and now_active:
+            self._observe_extrusion()
 
         if event == "end":
             filament_mm = pi.get("TotalExtrusion", 0) or 0
@@ -682,14 +782,21 @@ class PrinterConnection:
             if self.state_reason is not None and self.state_reason["kind"] == "pause":
                 self._finish_current_pause()
             reason = self.state_reason  # kept as-is on the live printer; only copied into history
+            # The accounting knows the true total even if the printer's counter
+            # was reset during the print; the history should agree with it.
+            acct = self._acct or PrintAccounting(current_spool=self._tray_spool())
+            acct.observe(filament_mm)
+            filament_mm = acct.total_mm()
             if filament_mm > 0 or filename:
                 loop = asyncio.get_running_loop()
                 density    = await loop.run_in_executor(None, get_spool_density, self.id)
                 self.filament_density = density
                 filament_g = filament_mm_to_grams(filament_mm, density)
                 end_state = "complete" if completed else ("error" if cur_status == 14 else "cancelled")
+                # The accounting's id doubles as the history id, so a ledger entry
+                # ("<history id>:<spool>") points straight at its print.
                 entry = {
-                    "id":            uuid.uuid4().hex,
+                    "id":            acct.print_id,
                     "timestamp":    time.strftime("%Y-%m-%dT%H:%M:%S"),
                     "printer_id":   self.id,
                     "printer_name": self.name,
@@ -719,22 +826,15 @@ class PrinterConnection:
                 await state.broadcast_to_browsers({"type": "history_entry", "entry": entry})
                 extras_started = True
                 asyncio.create_task(self._finish_print_extras(entry["id"]))
-                if filament_mm > 0:
-                    # Flush + deduct the last active spool immediately
-                    self._on_tray_change(None)
-                    if self._spool_extrusion:
-                        spools = [{"id": sid, "g": filament_mm_to_grams(mm, density)}
-                                  for sid, mm in self._spool_extrusion.items()]
-                        loop.run_in_executor(None, update_history_entry, entry["id"], {"spools": spools})
-                        # Log per-spool breakdown (deduction already fired in _on_tray_change)
-                        for spool_id, mm in self._spool_extrusion.items():
-                            g = filament_mm_to_grams(mm, density)
-                            print(f"[History] → spool {spool_id}: {mm:.0f}mm / {g}g")
-                    else:
-                        # No per-tray mapping: fall back to printer-location lookup
-                        loop.run_in_executor(
-                            None, spoolman_deduct, self.id, filament_g, loop,
-                        )
+                if filament_mm > 0 or self._acct is not None:
+                    per = acct.finish()
+                    used = await self._record_deductions(acct, per, density)
+                    if used:
+                        loop.run_in_executor(None, update_history_entry, entry["id"], {"spools": used})
+                    clear_active(self.id)
+            self._acct = None
+            if not extras_started:
+                clear_active(self.id)
 
         if event == "end" and not extras_started:
             asyncio.create_task(self._finish_print_extras(None))   # no history entry, still switch the light off

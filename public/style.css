@@ -1734,3 +1734,18 @@ main {
 .api-create { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .api-create input { flex: 1; min-width: 180px; }
 .api-create select { width: auto; }
+
+/* ─── Filament deductions waiting for Spoolman (T22) ─────────────────────── */
+.nav-badge { position: absolute; top: 2px; right: 6px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
+  background: var(--red); color: #fff; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; }
+.sidenav-item { position: relative; }
+.ledger-card { border: 1px solid var(--yellow); background: rgba(234,179,8,.08); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 14px; }
+.ledger-head { font-size: 13px; margin-bottom: 8px; }
+.ledger-row { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-top: 1px solid var(--border); }
+.ledger-main { flex: 1; min-width: 0; font-size: 12px; }
+.ledger-title { font-weight: 600; font-size: 13px; }
+.ledger-meta { color: var(--text-muted); margin-top: 2px; word-break: break-word; }
+.ledger-state { margin-top: 3px; }
+.ledger-error { margin-top: 3px; color: var(--red); word-break: break-word; }
+.ledger-row.discarded .ledger-state { color: var(--text-muted); }
+.ledger-actions { display: flex; flex-direction: column; gap: 6px; flex: none; }

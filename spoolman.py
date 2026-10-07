@@ -4,7 +4,9 @@ Spoolman integration: filament database and spool deduction.
 
 import asyncio
 import base64
+import http.client
 import json
+import socket
 import time
 import urllib.error
 import urllib.parse
@@ -131,9 +133,10 @@ _last_spool_info: dict = {}   # printer_id -> what the last density lookup saw
 
 
 def last_spool_info(printer_id: str) -> dict:
-    """Material/vendor/spool id of the spool get_spool_density() last found
-    for this printer ({} if none or Spoolman was unreachable). Lets the history
-    record the material without a second request."""
+    """What get_spool_density() last saw for this printer: {"status": "found" |
+    "none" | "unreachable", and for "found" also spool_id, material, vendor}.
+    {} if it was never called. "none" = Spoolman answered but no spool has this
+    printer's name as location; "unreachable" = it didn't answer."""
     return dict(_last_spool_info.get(printer_id) or {})
 
 
@@ -144,15 +147,18 @@ def get_spool_density(printer_id: str) -> float:
     Designed to run in a thread pool executor.
     """
     loc = _printer_location(printer_id)
-    _last_spool_info.pop(printer_id, None)
+    _last_spool_info[printer_id] = {"status": "unreachable"}
     try:
         base = get_spoolman_url()
         url = f"{base}/api/v1/spool?location={urllib.parse.quote(loc)}"
         with urllib.request.urlopen(_spoolman_request(url), timeout=3) as resp:
             data = json.loads(resp.read())
-        if data:
+        if not data:
+            _last_spool_info[printer_id] = {"status": "none"}
+        else:
             filament = data[0].get("filament", {}) or {}
             _last_spool_info[printer_id] = {
+                "status":   "found",
                 "spool_id": data[0].get("id"),
                 "material": filament.get("material") or None,
                 "vendor":   (filament.get("vendor") or {}).get("name") or None,
@@ -163,6 +169,19 @@ def get_spool_density(printer_id: str) -> float:
     except Exception:
         pass
     return FILAMENT_DENSITY
+
+
+def find_spool_at_location(printer_id: str) -> tuple:
+    """("found", spool_id) | ("none", None) | ("unreachable", None): the spool
+    that has this printer's name as its Spoolman location right now."""
+    loc = _printer_location(printer_id)
+    try:
+        url = f"{get_spoolman_url()}/api/v1/spool?location={urllib.parse.quote(loc)}"
+        with urllib.request.urlopen(_spoolman_request(url), timeout=3) as resp:
+            data = json.loads(resp.read())
+    except Exception:
+        return "unreachable", None
+    return ("found", data[0].get("id")) if data else ("none", None)
 
 
 def spoolman_set_location(spool_id: int, printer_id: str) -> None:
@@ -244,42 +263,30 @@ def _notify_spool_level(
             ))
 
 
-def spoolman_deduct_spool(
-    spool_id: int,
-    amount_g: float,
-    printer_id: str,
-    loop: asyncio.AbstractEventLoop,
-) -> None:
-    """Deduct filament from a specific spool by ID. Runs in a thread-pool executor."""
-    try:
-        base = get_spoolman_url()
-        body = json.dumps({"use_weight": round(amount_g, 1)}).encode()
-        req = _spoolman_request(f"{base}/api/v1/spool/{spool_id}/use", method="PUT", body=body)
-        with urllib.request.urlopen(req, timeout=3) as resp:
-            result = json.loads(resp.read())
-        name = result.get("filament", {}).get("name") or f"Spool {spool_id}"
-        remaining = result.get("remaining_weight", 0)
-        print(f"[Spoolman] {amount_g}g deducted from '{name}' → {remaining}g left")
-        _notify_spool_level(result, printer_id, loop)
-    except Exception as e:
-        print(f"[Spoolman] Deduct skipped for spool {spool_id} ({e})")
+def spoolman_use(spool_id: int, grams: float) -> dict:
+    """Tell Spoolman that `grams` were used from a spool (PUT /spool/{id}/use).
+    Not idempotent on Spoolman's side, so callers must only call it once per
+    ledger entry (see ledger.py). Blocking; run it in an executor.
 
-
-def spoolman_deduct(printer_id: str, amount_g: float, loop: asyncio.AbstractEventLoop) -> None:
-    """Deduct filament from the spool assigned to this printer's location in Spoolman.
-
-    Fallback for single-colour prints where no per-tray tracking is available.
-    Runs in a thread-pool executor.
+    Returns {"outcome": "ok", "result": <spool json>} | {"outcome": "not_found",
+    "message": ...} (404: the spool is gone) | {"outcome": "error", "message": ...}.
     """
-    loc = _printer_location(printer_id)
     try:
-        base = get_spoolman_url()
-        url = f"{base}/api/v1/spool?location={urllib.parse.quote(loc)}"
-        with urllib.request.urlopen(_spoolman_request(url), timeout=3) as resp:
-            data = json.loads(resp.read())
-        if not data:
-            return
-        spool_id = data[0]["id"]
-        spoolman_deduct_spool(spool_id, amount_g, printer_id, loop)
+        body = json.dumps({"use_weight": round(float(grams), 1)}).encode()
+        req = _spoolman_request(f"{get_spoolman_url()}/api/v1/spool/{int(spool_id)}/use", method="PUT", body=body)
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return {"outcome": "ok", "result": json.loads(resp.read())}
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return {"outcome": "not_found", "message": f"Spoolman has no spool with id {spool_id} (was it deleted?)"}
+        return {"outcome": "error", "message": f"Spoolman answered HTTP {e.code}"}
+    except urllib.error.URLError as e:
+        # Never connected (refused, no route, DNS): nothing was sent, safe to retry.
+        return {"outcome": "error", "message": f"Could not reach Spoolman ({type(e.reason).__name__})"}
+    except (TimeoutError, socket.timeout, http.client.HTTPException, ConnectionError) as e:
+        # The request may have been sent and applied before the connection died.
+        return {"outcome": "uncertain",
+                "message": ("Spoolman did not answer after the request was sent, so it may or may not have been "
+                            f"applied ({type(e).__name__}). Check the spool in Spoolman, then Retry or Discard.")}
     except Exception as e:
-        print(f"[Spoolman] Deduct skipped ({e})")
+        return {"outcome": "error", "message": f"Could not send to Spoolman ({type(e).__name__})"}

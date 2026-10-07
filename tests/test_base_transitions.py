@@ -12,6 +12,7 @@ import pytest
 
 import persistence
 import printers.base as base_mod
+from printaccount import PrintAccounting
 from printers.base import PrinterConnection, classify_display_state, classify_print_transition
 
 
@@ -85,9 +86,8 @@ def printer(monkeypatch):
     p = PrinterConnection("pid1", "10.0.0.5", "Test Printer")
     p.connected = True
     monkeypatch.setattr(base_mod, "get_spool_density", lambda printer_id: 1.24)
-    monkeypatch.setattr(base_mod, "spoolman_deduct", lambda *a, **kw: None)
-    monkeypatch.setattr(base_mod, "spoolman_deduct_spool", lambda *a, **kw: None)
-    return p
+    p._last_print_status = 0     # an idle status has already been seen (a first status that is already
+    return p                     # "printing" means Spooler restarted mid-print: see test_filament_accounting.py)
 
 
 def _set_status(printer, status_code, **printinfo_overrides):
@@ -97,12 +97,13 @@ def _set_status(printer, status_code, **printinfo_overrides):
 
 @pytest.mark.asyncio
 async def test_print_start_initializes_extrusion_tracking(printer):
-    printer._extrusion_snapshot = 999.0
-    printer._spool_extrusion = {1: 50.0}
+    printer._acct = PrintAccounting(current_spool=7)       # leftover from some earlier print
+    printer._acct.per_spool = {1: 50.0}
+    old_id = printer._acct.print_id
     _set_status(printer, 2, TotalExtrusion=0)
     await printer._check_print_transition()
-    assert printer._extrusion_snapshot == 0.0
-    assert printer._spool_extrusion == {}
+    assert printer._acct.print_id != old_id
+    assert printer._acct.per_spool == {} and printer._acct.total_mm() == 0.0
     assert printer._print_start_time is not None
 
 
@@ -113,14 +114,16 @@ async def test_complete_to_printing_resets_snapshot_regression(printer):
     per-print extrusion tracking — this was the actual production bug."""
     _set_status(printer, 9, TotalExtrusion=500)
     await printer._check_print_transition()  # printer sits at "complete"
-    printer._extrusion_snapshot = 500.0        # simulate stale leftover snapshot
-    printer._spool_extrusion = {1: 500.0}
+    printer._acct = PrintAccounting()          # simulate stale leftover accounting
+    printer._acct.snapshot_mm = 500.0
+    printer._acct.per_spool = {1: 500.0}
+    old_id = printer._acct.print_id
 
     _set_status(printer, 2, TotalExtrusion=0)  # next print starts directly from 9
     await printer._check_print_transition()
 
-    assert printer._extrusion_snapshot == 0.0
-    assert printer._spool_extrusion == {}
+    assert printer._acct.print_id != old_id
+    assert printer._acct.snapshot_mm == 0.0 and printer._acct.per_spool == {}
 
 
 @pytest.mark.asyncio
