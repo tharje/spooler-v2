@@ -571,10 +571,9 @@ class CC2Connection(PrinterConnection):
                 "error": "File list request timed out.",
             })
 
-    # UNVERIFIED against real hardware: follows what Elegoo's own elegoo-link
-    # SDK (the library ElegooSlicer uses) does -- chunked PUT /upload on port
-    # 80, see uploads.put_file_chunked and spooler-cc2-research.md. Verify with
-    # a small file before relying on it, as with the CC1 path before it.
+    # Verified on a real CC2 (fw 02.01.00.00) by the owner, 2026-10-08. Follows what
+    # Elegoo's own elegoo-link SDK (the library ElegooSlicer uses) does -- chunked
+    # PUT /upload on port 80, see uploads.put_file_chunked and spooler-cc2-research.md.
     supports_upload = True
     supports_light = True
 

@@ -174,7 +174,7 @@ Settings → **Backup** lets you download a zip of your printers, history, spool
 
 ## File upload
 
-Open a printer's file browser and use **Upload** (or drop a `.gcode`/`.gco`/`.bgcode` file on the box) to send a file to the printer, optionally starting the print right away. Supported on Elegoo CC1 and CC2, Moonraker and PrusaLink printers (CC2 upload follows the same method Elegoo's own slicer uses — chunked `PUT /upload` on port 80 — and is new; Moonraker/PrusaLink are not yet verified on real printers). Files are streamed through `DATA_DIR/uploads/` (never held in memory) and deleted once sent; leftovers older than 24 h are removed at startup. The size limit is `SPOOLER_MAX_UPLOAD_MB` (default 500). Can be switched off under Settings → Features (`file_upload`).
+Open a printer's file browser and use **Upload** (or drop a `.gcode`/`.gco`/`.bgcode` file on the box) to send a file to the printer, optionally starting the print right away. Supported on Elegoo CC1 and CC2, Moonraker and PrusaLink printers (CC2 upload follows the same method Elegoo's own slicer uses — chunked `PUT /upload` on port 80 — and is verified on a real CC2; Moonraker/PrusaLink are not yet verified on real printers). Files are streamed through `DATA_DIR/uploads/` (never held in memory) and deleted once sent; leftovers older than 24 h are removed at startup. The size limit is `SPOOLER_MAX_UPLOAD_MB` (default 500). Can be switched off under Settings → Features (`file_upload`).
 
 ## Stats & history
 
