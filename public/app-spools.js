@@ -244,14 +244,16 @@ function _ledgerWhen(epoch) {
 function renderLedger() {
   const card = document.getElementById("ledger-card");
   if (!card) return;
-  if (!_ledgerItems.length) { card.hidden = true; card.replaceChildren(); return; }
-  const unsent = _ledgerItems.filter(e => ["pending", "sending", "failed"].includes(e.status));
+  // What Spoolman already has is done: only what is still waiting, failed or was discarded is listed.
+  const shown = _ledgerItems.filter(e => e.status !== "sent");
+  if (!shown.length) { card.hidden = true; card.replaceChildren(); return; }
+  const unsent = shown.filter(e => ["pending", "sending", "failed"].includes(e.status));
   card.hidden = false;
   const head = _el("div", "ledger-head");
   head.append(_el("strong", null, unsent.length
     ? `${unsent.length} filament deduction${unsent.length === 1 ? "" : "s"} not yet in Spoolman`
     : "Recent filament that was not deducted"));
-  const rows = _ledgerItems.map(e => {
+  const rows = shown.map(e => {
     const row = _el("div", `ledger-row ${e.status}`);
     const sp = e.spool_id != null ? (spools.find(x => x.id === e.spool_id) || null) : null;
     const spoolText = e.spool_id == null ? "unknown spool" : (sp ? spoolName(sp) : `spool #${e.spool_id}`);
