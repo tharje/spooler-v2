@@ -22,7 +22,7 @@ import time
 
 import persistence
 
-STATUSES = ("pending", "sending", "sent", "failed", "discarded")
+STATUSES = ("pending", "sending", "sent", "failed", "discarded", "dismissed")
 UNSENT = ("pending", "sending", "failed")
 BACKOFF_S = (30, 120, 600, 3600)          # then hourly
 ATTENTION_AFTER = 3                        # attempts before the menu badge shows up
@@ -169,6 +169,18 @@ def discard(eid: str, reason: str) -> bool:
             e["status"] = "discarded"
             e["last_error"] = reason
             e["next_try_at"] = None
+            done["ok"] = True
+    _update(eid, f)
+    return bool(done)
+
+
+def dismiss(eid: str) -> bool:
+    """Hide an already-discarded entry from the list (the user has seen it)."""
+    done = {}
+
+    def f(e):
+        if e.get("status") == "discarded":
+            e["status"] = "dismissed"
             done["ok"] = True
     _update(eid, f)
     return bool(done)

@@ -281,6 +281,14 @@ function renderLedger() {
       act.append(retry, drop);
       row.append(act);
     }
+    if (e.status === "discarded") {
+      const hide = _el("button", "btn btn-secondary btn-sm", "Dismiss");
+      hide.type = "button";
+      hide.addEventListener("click", () => _ledgerAction(e.id, "discard"));
+      const act = _el("div", "ledger-actions");
+      act.append(hide);
+      row.append(act);
+    }
     return row;
   });
   card.replaceChildren(head, ...rows);
@@ -291,7 +299,7 @@ async function _ledgerAction(id, action) {
     const r = await fetch(`/api/spoolman-ledger/${encodeURIComponent(id)}${action === "retry" ? "/retry" : ""}`,
                           { method: action === "retry" ? "POST" : "DELETE" });
     if (!r.ok) { const d = await r.json().catch(() => ({})); toast(d.error || "Could not do that", true); }
-    else toast(action === "retry" ? "Trying again" : "Discarded");
+    else toast(action === "retry" ? "Trying again" : "Done");
   } catch (e) { toast("Could not do that: " + e.message, true); }
   loadLedger();
 }

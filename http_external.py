@@ -58,7 +58,7 @@ class ExternalRoutesMixin:
         self._read_body()
         rest = urllib.parse.unquote(self.path[len("/api/spoolman-ledger/"):].split("?")[0])
         eid = rest[:-len("/retry")] if action == "retry" else rest
-        ok = ledger.retry_now(eid) if action == "retry" else ledger.discard(eid, "Discarded by the user")
+        ok = ledger.retry_now(eid) if action == "retry" else (ledger.discard(eid, "Discarded by the user") or ledger.dismiss(eid))
         if not ok:
             self._json({"error": "No such deduction waiting to be sent"}, 404)
             return

@@ -156,6 +156,14 @@ def test_unknown_spool_uses_the_printers_spool_at_send_time(sm):
     assert e["status"] == "failed" and "No spool is assigned" in e["last_error"] and e["next_try_at"] - NOW >= 3600
 
 
+def test_a_discarded_entry_can_be_dismissed_from_the_list(sm):
+    add()
+    assert not ledger.dismiss("h1:12")                    # still waiting: dismissing is not allowed, discard first
+    assert ledger.discard("h1:12", "x") and ledger.dismiss("h1:12")
+    assert ledger.get("h1:12")["status"] == "dismissed" and not ledger.dismiss("h1:12")
+    assert ledger.process_due(sm.use, never, now=NOW + 10 ** 7) == 0 and sm.applied == []
+
+
 def test_old_sent_and_discarded_entries_are_forgotten_after_90_days(sm):
     add(); add(hid="h2"); add(hid="h3")
     ledger.process_due(sm.use, never, now=NOW)                  # all three sent
