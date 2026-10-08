@@ -399,6 +399,10 @@ def test_notify_hands_off_to_worker_and_filters(hook, monkeypatch):
 def test_hot_nozzle_idle_warns_once_even_if_the_status_flickers():
     """Real CC2: ten of these arrived. A busy/preparing status between two idle ones must not re-arm it."""
     push.save_notif_settings({"nozzle_idle": {"enabled": True, "threshold": 40}})
+
+def test_print_complete_is_announced_even_if_the_printer_is_busy_just_before_it_goes_idle():
+    """Real CC2: history was saved but no 'complete' notification came; its last status before idle was a busy one."""
+    push.save_notif_settings({"finished": {"enabled": True}})
     p = PrinterConnection("pid1", "10.0.0.5", "Bench")
     p.emitted = []
     p._emit = lambda event, *a, **k: p.emitted.append(event)
@@ -412,3 +416,13 @@ def test_hot_nozzle_idle_warns_once_even_if_the_status_flickers():
     at(0, 30)                                   # cooled: armed again
     at(0, 120)
     assert p.emitted.count("nozzle_hot_idle") == 2
+
+    def at(status):
+        p.status = {"PrintInfo": {"Status": status, "Filename": "a.gcode"}}
+        p._check_notifications()
+    for status in (0, 15, 3, 3, 10, 0, 0):
+        at(status)
+    assert p.emitted == ["print_complete"]          # once, not again on the second idle
+    for status in (1, 0):                           # homing afterwards isn't a print
+        at(status)
+    assert p.emitted == ["print_complete"]
