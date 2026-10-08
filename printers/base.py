@@ -634,9 +634,11 @@ class PrinterConnection:
             if nozzle > thr and not ns["nozzle_idle_fired"]:
                 self._emit("nozzle_hot_idle", f"{self.name} — Nozzle hot", f"Nozzle is {round(nozzle)}°C while idle.")
                 ns["nozzle_idle_fired"] = True
-            elif nozzle <= thr:
+            elif nozzle <= thr - 5:          # a few degrees of margin so a reading hovering at the limit can't repeat it
                 ns["nozzle_idle_fired"] = False
-        elif not is_idle:
+        elif is_printing or nozzle <= s.get("nozzle_idle", {}).get("threshold", 50) - 5:
+            # Re-arm only when a print starts or the nozzle has cooled: a status that
+            # flickers away from idle for a moment (preparing, busy) must not repeat the warning.
             ns["nozzle_idle_fired"] = False
 
         if s.get("layer", {}).get("enabled") and is_printing:
