@@ -111,6 +111,7 @@ def notify(n: Notification) -> bool:
     channels = notifiers.active_channels()
     if not channels:
         return False
+    print(f"[Notify] {n.event} ({n.printer_name or n.printer_id}) -> {', '.join(channels)}")
     _executor.submit(_deliver, n, channels)
     return True
 
