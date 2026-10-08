@@ -618,8 +618,14 @@ class PrinterConnection:
 
         # CC2 typically goes 3→0 on completion (no 9/8 reported).
         # Fire "finished" on any transition away from an active print state.
-        _was_printing = last in (2, 3, 4, 5, 6, 7)
-        _print_ended  = (is_done or is_idle) and _was_printing
+        # A print that was running stays "in a print" through busy statuses at its
+        # end (a CC2 shows 'busy' for a moment while it retracts/cools), so the
+        # status just before the end isn't what decides.
+        if status in (2, 3, 4, 5, 6, 7):
+            ns["in_print"] = True
+        _print_ended = (is_done or is_idle) and ns.get("in_print", False)
+        if is_done or is_idle:
+            ns["in_print"] = False
         if s.get("finished", {}).get("enabled") and _print_ended:
             fname = pi.get("Filename", "")
             if status == 8:

@@ -394,3 +394,21 @@ def test_notify_hands_off_to_worker_and_filters(hook, monkeypatch):
     assert done.wait(3)
     assert any(json.loads(r["body"])["event"] == "print_paused" for r in _Hook.seen)
     assert not notify.notify(Notification("print_started", "p1", "T"))   # event off
+
+
+def test_print_complete_is_announced_even_if_the_printer_is_busy_just_before_it_goes_idle():
+    """Real CC2: history was saved but no 'complete' notification came; its last status before idle was a busy one."""
+    push.save_notif_settings({"finished": {"enabled": True}})
+    p = PrinterConnection("pid1", "10.0.0.5", "Bench")
+    p.emitted = []
+    p._emit = lambda event, *a, **k: p.emitted.append(event)
+
+    def at(status):
+        p.status = {"PrintInfo": {"Status": status, "Filename": "a.gcode"}}
+        p._check_notifications()
+    for status in (0, 15, 3, 3, 10, 0, 0):
+        at(status)
+    assert p.emitted == ["print_complete"]          # once, not again on the second idle
+    for status in (1, 0):                           # homing afterwards isn't a print
+        at(status)
+    assert p.emitted == ["print_complete"]
