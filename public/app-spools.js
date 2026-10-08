@@ -177,14 +177,18 @@ async function assignSpool(printerId, spoolId) {
 }
 
 function linkTray(printerId, trayId, spoolId) {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({
-      action:     "link_tray",
-      printer_id: printerId,
-      tray_id:    trayId,
-      spool_id:   spoolId,
-    }));
+  // Linking goes over the live connection to Spooler. Without it nothing is saved
+  // (and Spoolman's location isn't set), so say so instead of reporting success.
+  if (!(ws && ws.readyState === WebSocket.OPEN)) {
+    toast("Not connected to Spooler — nothing was linked. Wait for the connection and try again.", true);
+    return;
   }
+  ws.send(JSON.stringify({
+    action:     "link_tray",
+    printer_id: printerId,
+    tray_id:    trayId,
+    spool_id:   spoolId,
+  }));
   document.getElementById("modal-spool-picker").classList.remove("open");
   toast(spoolId != null ? `Slot ${trayId + 1} linked` : `Slot ${trayId + 1} unlinked`);
 }
