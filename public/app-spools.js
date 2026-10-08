@@ -177,14 +177,18 @@ async function assignSpool(printerId, spoolId) {
 }
 
 function linkTray(printerId, trayId, spoolId) {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({
-      action:     "link_tray",
-      printer_id: printerId,
-      tray_id:    trayId,
-      spool_id:   spoolId,
-    }));
+  // Linking goes over the live connection to Spooler. Without it nothing is saved
+  // (and Spoolman's location isn't set), so say so instead of reporting success.
+  if (!(ws && ws.readyState === WebSocket.OPEN)) {
+    toast("Not connected to Spooler — nothing was linked. Wait for the connection and try again.", true);
+    return;
   }
+  ws.send(JSON.stringify({
+    action:     "link_tray",
+    printer_id: printerId,
+    tray_id:    trayId,
+    spool_id:   spoolId,
+  }));
   document.getElementById("modal-spool-picker").classList.remove("open");
   toast(spoolId != null ? `Slot ${trayId + 1} linked` : `Slot ${trayId + 1} unlinked`);
 }
@@ -244,14 +248,16 @@ function _ledgerWhen(epoch) {
 function renderLedger() {
   const card = document.getElementById("ledger-card");
   if (!card) return;
-  if (!_ledgerItems.length) { card.hidden = true; card.replaceChildren(); return; }
-  const unsent = _ledgerItems.filter(e => ["pending", "sending", "failed"].includes(e.status));
+  // What Spoolman already has is done: only what is still waiting, failed or was discarded is listed.
+  const shown = _ledgerItems.filter(e => e.status !== "sent");
+  if (!shown.length) { card.hidden = true; card.replaceChildren(); return; }
+  const unsent = shown.filter(e => ["pending", "sending", "failed"].includes(e.status));
   card.hidden = false;
   const head = _el("div", "ledger-head");
   head.append(_el("strong", null, unsent.length
     ? `${unsent.length} filament deduction${unsent.length === 1 ? "" : "s"} not yet in Spoolman`
     : "Recent filament that was not deducted"));
-  const rows = _ledgerItems.map(e => {
+  const rows = shown.map(e => {
     const row = _el("div", `ledger-row ${e.status}`);
     const sp = e.spool_id != null ? (spools.find(x => x.id === e.spool_id) || null) : null;
     const spoolText = e.spool_id == null ? "unknown spool" : (sp ? spoolName(sp) : `spool #${e.spool_id}`);
