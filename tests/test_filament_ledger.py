@@ -384,6 +384,31 @@ async def test_restart_mid_print_neither_loses_nor_repeats_filament(make_printer
 
 
 @pytest.mark.asyncio
+async def test_the_light_goes_off_when_a_print_ends_even_if_spooler_restarted_during_it(make_printer):
+    import asyncio
+    p = make_printer()
+    status(p, 13, 150, tray=0); await p._check_print_transition()
+    p._save_accounting(force=True)
+    q = make_printer()                                            # --- Spooler restarts ---
+    status(q, 13, 150, tray=0); await q._check_print_transition()
+    status(q, 9, 300, tray=0); await q._check_print_transition()
+    await asyncio.sleep(0)
+    assert q.light == [False]
+
+
+@pytest.mark.asyncio
+async def test_the_light_is_turned_off_if_the_print_ended_while_spooler_was_off(make_printer):
+    import asyncio
+    p = make_printer()
+    a = PrintAccounting(current_spool=1, filename="a.gcode")
+    a.observe(500.0)
+    printaccount.save_active("pid1", a)
+    status(p, 9, 1800, tray=0); await p._check_print_transition()   # restarted after it completed
+    await asyncio.sleep(0)
+    assert p.light == [False]
+
+
+@pytest.mark.asyncio
 async def test_restart_mid_print_with_no_saved_state_adopts_the_print_quietly(make_printer):
     q = make_printer()
     status(q, 13, 400, tray=0); await q._check_print_transition()

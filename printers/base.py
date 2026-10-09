@@ -802,6 +802,7 @@ class PrinterConnection:
             if cur_status == 9 and pi.get("Filename") == saved.filename:
                 saved.observe(pi.get("TotalExtrusion", 0) or 0)
             await self._flush_orphaned_accounting(saved)
+            asyncio.create_task(self._auto_light(False))      # the print is over; the light it turned on may still be on
         elif first_status and now_active:
             # First thing seen after (re)start is a print in progress: carry on
             # where we left off instead of treating it as a new print.
