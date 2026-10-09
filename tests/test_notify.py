@@ -460,3 +460,11 @@ def test_layer_notice_is_not_sent_late_after_a_restart_in_the_middle_of_a_print(
     for status, layer in [(3, 9), (3, 10), (3, 11)]:                   # Spooler just started; the print is far past layer 3
         at(status, layer)
     assert p.emitted == []
+
+
+def test_layer_notice_can_carry_a_picture():
+    """To check that the print hasn't come loose from the bed."""
+    push.save_notif_settings({"layer": {"enabled": True, "layer": 3, "image": True}})
+    assert notify.wants_image("layer_reached")
+    push.save_notif_settings({"layer": {"enabled": True, "layer": 3, "image": False}})
+    assert not notify.wants_image("layer_reached")

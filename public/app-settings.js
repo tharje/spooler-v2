@@ -328,6 +328,7 @@ async function _populateNotifForm() {
   set("notif-finished-on",               s.finished?.enabled        ?? false);
   set("notif-layer-on",                  s.layer?.enabled           ?? false);
   set("notif-layer-number",              s.layer?.layer             ?? 1);
+  set("notif-layer-image",               s.layer?.image             ?? false);
   set("notif-nozzle-idle-on",            s.nozzle_idle?.enabled     ?? false);
   set("notif-nozzle-idle-threshold",     s.nozzle_idle?.threshold   ?? 50);
   set("notif-nozzle-printing-on",        s.nozzle_printing?.enabled ?? false);
@@ -477,7 +478,7 @@ document.getElementById("btn-notif-save")?.addEventListener("click", async () =>
   const gv = id => parseFloat(document.getElementById(id)?.value) || 0;
   const s = {
     finished:        { enabled: gb("notif-finished-on"), image: gb("notif-finished-image") },
-    layer:           { enabled: gb("notif-layer-on"),           layer:     gv("notif-layer-number") },
+    layer:           { enabled: gb("notif-layer-on"),           layer:     gv("notif-layer-number"), image: gb("notif-layer-image") },
     nozzle_idle:     { enabled: gb("notif-nozzle-idle-on"),     threshold: gv("notif-nozzle-idle-threshold") },
     nozzle_printing: { enabled: gb("notif-nozzle-printing-on"), threshold: gv("notif-nozzle-printing-threshold") },
     spool_low:       { enabled: gb("notif-spool-low-on"),       threshold: gv("notif-spool-low-threshold") },
