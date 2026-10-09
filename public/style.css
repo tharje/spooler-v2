@@ -1759,3 +1759,4 @@ main {
 .fw-badge { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 999px; font-size: 10px; font-weight: 700;
   color: var(--yellow); border: 1px solid var(--yellow); text-decoration: none; vertical-align: 1px; }
 .fw-badge:hover { background: rgba(234,179,8,.15); }
+.notif-param label:not(.notif-chip) + .notif-chip { margin-top: 12px; }
