@@ -742,7 +742,8 @@ class PrinterConnection:
         was_pause = self.state_reason is not None and self.state_reason["kind"] == "pause"
 
         if kind is None:
-            if display_state == "printing" and was_pause:
+            # "preparing" after a pause is the printer reheating or levelling to carry on.
+            if display_state in ("printing", "preparing") and was_pause:
                 self._finish_current_pause()
                 self.state_reason = None
             return

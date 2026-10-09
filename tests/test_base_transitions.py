@@ -246,6 +246,23 @@ async def test_resume_clears_state_reason_and_records_pause_duration(printer):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("resumed_status", [15, 16, 19, 20])
+async def test_pause_notice_goes_away_when_the_printer_starts_working_again(printer, resumed_status):
+    """After a pause the printer may reheat or level before it prints again; the pause notice must not wait for the first printing status."""
+    _set_status(printer, 2, TotalExtrusion=0)
+    await printer._check_print_transition()
+    _set_status(printer, 6, TotalExtrusion=0)
+    await printer._check_print_transition()
+    assert printer.state_reason["kind"] == "pause"
+
+    _set_status(printer, resumed_status, TotalExtrusion=0)
+    await printer._check_print_transition()
+
+    assert printer.state_reason is None
+    assert printer._current_print_pauses[0]["until"] is not None
+
+
+@pytest.mark.asyncio
 async def test_state_reason_persists_through_idle_until_next_print_start(printer):
     _set_status(printer, 2, TotalExtrusion=0)
     await printer._check_print_transition()
