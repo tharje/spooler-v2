@@ -1,5 +1,21 @@
 [
   {
+    "version": "2.3.0-beta.2",
+    "date": "2026-10-09",
+    "changes": [
+      "CC2: the light and other commands work again after the printer has dropped Spooler's connection (it registers again instead of being ignored); CC2 file upload is now confirmed on a real printer",
+      "CC2: a finished print is always recorded: history entry with picture, lights off and the \"Print complete\" notification, even when the printer reports a zero print time at the end or is busy for a moment before going idle; browser push subscriptions the push service reports as gone are removed",
+      "Restarting Spooler (or the container) in the middle of a print no longer loses filament use: the figures are saved on shutdown, and a print that ended while Spooler was stopped is deducted with the printer's final figure",
+      "CC1: the leveling phase is now labelled Leveling instead of Heating",
+      "An offline printer shows -- for temperatures and no stale phase (for example a leftover \"Leveling\")",
+      "Notifications: the hot-nozzle-while-idle warning is sent once per cool-down instead of repeatedly; every queued notification is logged",
+      "Spools: the list of filament not deducted no longer shows entries Spoolman already has, and discarded entries can be dismissed with a button",
+      "Linking a canvas slot to a spool now says so when Spooler is not connected, instead of showing success",
+      "Camera proxy: the log now says why a camera picture isn't served",
+      "README: screenshots added"
+    ]
+  },
+  {
     "version": "2.3.0-beta.1",
     "date": "2026-10-07",
     "changes": [
