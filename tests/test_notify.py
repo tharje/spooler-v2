@@ -468,3 +468,18 @@ def test_layer_notice_can_carry_a_picture():
     assert notify.wants_image("layer_reached")
     push.save_notif_settings({"layer": {"enabled": True, "layer": 3, "image": False}})
     assert not notify.wants_image("layer_reached")
+
+
+def test_print_complete_and_layer_notices_work_for_the_cc1_printing_status():
+    """Real CC1: a finished print sent no notification because its printing status (13) wasn't counted as a print."""
+    push.save_notif_settings({"finished": {"enabled": True}, "layer": {"enabled": True, "layer": 3}})
+    p = PrinterConnection("pid1", "10.0.0.5", "Bench")
+    p.emitted = []
+    p._emit = lambda event, *a, **k: p.emitted.append(event)
+
+    def at(status, layer=0):
+        p.status = {"PrintInfo": {"Status": status, "Filename": "a.gcode", "CurrentLayer": layer}}
+        p._check_notifications()
+    for status, layer in [(0, 0), (18, 0), (13, 1), (13, 3), (13, 4), (9, 4), (9, 4)]:
+        at(status, layer)
+    assert p.emitted == ["layer_reached", "print_complete"]

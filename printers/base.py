@@ -613,7 +613,7 @@ class PrinterConnection:
         nozzle      = self.status.get("TempOfNozzle") or self.status.get("NozzleTemp") or 0
         layer       = pi.get("CurrentLayer", 0)
         is_idle     = status == 0
-        is_printing = status in (3, 6)
+        is_printing = status in PRINTING_STATUSES or status == 6
         is_done     = status in (9, 8)
         last        = ns["last_status"]
 
@@ -622,7 +622,7 @@ class PrinterConnection:
         # A print that was running stays "in a print" through busy statuses at its
         # end (a CC2 shows 'busy' for a moment while it retracts/cools), so the
         # status just before the end isn't what decides.
-        if status in (2, 3, 4, 5, 6, 7):
+        if status in PRINTING_STATUSES or status in PAUSED_STATUSES or status == 7:
             ns["in_print"] = True
         _print_ended = (is_done or is_idle) and ns.get("in_print", False)
         if is_done or is_idle:
