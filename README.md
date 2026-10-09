@@ -6,6 +6,12 @@ Local web GUI for **Elegoo Centauri Carbon** FDM 3D printers (CC1 and CC2). Moni
 ![Prusa](https://img.shields.io/badge/Prusa%20(PrusaLink)-experimental-orange)
 ![Klipper](https://img.shields.io/badge/Klipper%20(Moonraker)-experimental-orange)
 
+![Dashboard with a CC1 and a CC2: live camera, temperatures, Canvas slots and light control](docs/images/dashboard.png)
+
+| Filament spools (Spoolman) | Stats and history |
+|---|---|
+| ![Spools list with printer assignment and remaining filament](docs/images/spools.png) | ![Stats: prints, success rate, print time and filament per day](docs/images/stats.png) |
+
 > **Branches**
 > - `main` — latest stable release. This is what the Docker image (`ghcr.io/tharje/spooler-v2:latest`) is built from.
 > - `dev` — active development. New features and fixes land here first and are tested before being merged to `main`.
