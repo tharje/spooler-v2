@@ -195,6 +195,7 @@ class PrinterConnection:
             "last_status":      None,
             "nozzle_idle_fired": False,
             "layer_fired":      False,
+            "layer_seen":       None,
             "nozzle_hot_fired": False,
         }
         self.state_reason: dict | None = None
@@ -647,15 +648,19 @@ class PrinterConnection:
             # flickers away from idle for a moment (preparing, busy) must not repeat the warning.
             ns["nozzle_idle_fired"] = False
 
-        if s.get("layer", {}).get("enabled") and is_printing:
+        # Once per print: a busy or paused status in between, or a layer reading that
+        # dips, must not announce the same layer again. The flag resets when the print ends.
+        if not ns.get("in_print"):
+            ns["layer_fired"] = False
+            ns["layer_seen"] = None
+        elif s.get("layer", {}).get("enabled") and is_printing:
             target = s["layer"].get("layer", 1)
             if layer >= target and not ns["layer_fired"]:
-                self._emit("layer_reached", f"{self.name} — Layer {target} reached", f"Currently on layer {layer}.")
+                # Spooler started in the middle of a print that is already past the layer: too late to announce it.
+                if ns["layer_seen"] is not None or layer <= target:
+                    self._emit("layer_reached", f"{self.name} — Layer {target} reached", f"Currently on layer {layer}.")
                 ns["layer_fired"] = True
-            if layer < target:
-                ns["layer_fired"] = False
-        if not is_printing:
-            ns["layer_fired"] = False
+            ns["layer_seen"] = layer
 
         if s.get("nozzle_printing", {}).get("enabled") and is_printing:
             thr = s["nozzle_printing"].get("threshold", 260)

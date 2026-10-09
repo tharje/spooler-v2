@@ -430,3 +430,33 @@ def test_print_complete_is_announced_even_if_the_printer_is_busy_just_before_it_
     for status in (1, 0):                           # homing afterwards isn't a print
         at(status)
     assert p.emitted == ["print_complete"]
+
+
+def _layer_printer():
+    push.save_notif_settings({"layer": {"enabled": True, "layer": 3}})
+    p = PrinterConnection("pid1", "10.0.0.5", "Bench")
+    p.emitted = []
+    p._emit = lambda event, *a, **k: p.emitted.append(event)
+
+    def at(status, layer):
+        p.status = {"PrintInfo": {"Status": status, "CurrentLayer": layer}}
+        p._check_notifications()
+    return p, at
+
+
+def test_layer_notice_comes_once_per_print_not_on_every_later_layer():
+    """Real printers: 'Layer 3 reached' kept arriving at other layers after a busy/paused status in between."""
+    p, at = _layer_printer()
+    for status, layer in [(0, 0), (3, 1), (3, 2), (3, 3), (3, 4), (10, 4), (3, 5), (5, 5), (3, 6), (3, 0), (3, 7)]:
+        at(status, layer)
+    assert p.emitted == ["layer_reached"]
+    for status, layer in [(0, 0), (0, 0), (3, 1), (3, 3), (3, 4)]:     # the next print gets its own
+        at(status, layer)
+    assert p.emitted == ["layer_reached", "layer_reached"]
+
+
+def test_layer_notice_is_not_sent_late_after_a_restart_in_the_middle_of_a_print():
+    p, at = _layer_printer()
+    for status, layer in [(3, 9), (3, 10), (3, 11)]:                   # Spooler just started; the print is far past layer 3
+        at(status, layer)
+    assert p.emitted == []
