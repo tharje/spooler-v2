@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.3.0-beta.3",
+    "date": "2026-10-09",
+    "changes": [
+      "Centauri Carbon 1: finished prints and layer notices are announced again (its printing status wasn't counted as a print, so no notification was sent)",
+      "Layer notice: sent once per print instead of again at later layers after a pause or a busy status, and not late after a restart; it can now include a camera picture (to check the print is still stuck to the bed)",
+      "A pause notice on the printer card goes away as soon as the printer starts working again, also when it reheats or levels first",
+      "Automatic light: the light is turned off when a print ended while Spooler was not running",
+      "Notification settings: space between the layer number and the photo option"
+    ]
+  },
+  {
     "version": "2.3.0-beta.2",
     "date": "2026-10-09",
     "changes": [
