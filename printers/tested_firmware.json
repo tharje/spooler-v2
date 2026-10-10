@@ -5,7 +5,7 @@
     "notes": {"V0.4.0-o": "OpenCentauri patched firmware"}
   },
   "cc2": {
-    "tested": ["02.01.00.00"],
+    "tested": ["02.01.00.00", "02.01.01.07"],
     "notes": {}
   },
   "moonraker": {
