@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.3.0-beta.4",
+    "date": "2026-10-11",
+    "changes": [
+      "New: Service logbook (Service in the side menu). Note what you have done to each printer and get a reminder, with a notification, after a set number of print hours",
+      "New: Spaghetti detection (optional, off by default). Watches running prints through the camera with an Obico detector that you run yourself and sends a notification with a picture if a print looks like it is failing. Setup: docs/spaghetti-detection.md",
+      "Centauri Carbon 2: firmware 02.01.01.07 is marked as tested"
+    ]
+  },
+  {
     "version": "2.3.0-beta.3",
     "date": "2026-10-09",
     "changes": [
