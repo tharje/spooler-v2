@@ -1809,3 +1809,24 @@ main {
 .spaghetti-row.bad { color: var(--red); border-color: var(--red); } .spaghetti-row.bad .spaghetti-dot { background: var(--red); }
 .spaghetti-row.off { color: var(--text-muted); }
 .spaghetti-time { margin-left: auto; font-weight: 400; color: var(--text-muted); }
+
+.service-machine { display: block; width: 100%; text-align: left; color: inherit; font: inherit; cursor: pointer; }
+.service-machine:hover { border-color: var(--accent); }
+.service-chev { color: var(--text-muted); font-size: 22px; line-height: 1; margin-left: 2px; }
+.service-due-pill { background: rgba(239,68,68,.15); color: var(--red); border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 700; }
+.service-card-head { flex-wrap: wrap; }
+.service-card-head .service-printer { flex: 1; }
+.service-mini { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 40px; gap: 10px; align-items: center; margin-top: 9px; font-size: 12px; }
+.service-mini-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim-strong); }
+.service-mini .service-bar { margin-top: 0; }
+.service-mini-pct { text-align: right; font-weight: 700; }
+.service-mini-pct.green, .service-left.green { color: var(--green); }
+.service-mini-pct.yellow, .service-left.yellow { color: var(--yellow); }
+.service-mini-pct.red, .service-left.red { color: var(--red); }
+.service-title-row { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.service-left { font-size: 12px; font-weight: 700; flex: none; }
+.service-machine-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.service-back { background: var(--surface2); border: 1px solid var(--border); color: var(--text); width: 34px; height: 34px; border-radius: 10px; font-size: 22px; line-height: 1; cursor: pointer; }
+.service-back:hover { border-color: var(--accent); color: var(--accent); }
+.service-bar { height: 10px; }
+.service-bar-fill { transition: width .4s ease; }
