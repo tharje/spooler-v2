@@ -24,3 +24,5 @@ uploads/
 raw/
 .last_version
 .last_daily_backup
+# Local-only working notes (not for the public repo)
+obico-protokoll-notat.md
