@@ -1762,20 +1762,40 @@ main {
 .notif-param label:not(.notif-chip) + .notif-chip { margin-top: 12px; }
 
 /* Service logbook */
-.service-hours { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
-.service-hours strong { color: var(--text); }
-.service-h { margin: 18px 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); }
-.service-row { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--border); }
-.service-row.due .service-title { color: var(--red); }
+#service-body { padding: 14px 16px; }
+.service-alert { background: rgba(239,68,68,.12); border: 1px solid var(--red); color: var(--red); border-radius: var(--radius-sm); padding: 9px 12px; font-size: 13px; font-weight: 600; margin-bottom: 12px; }
+.service-toolbar { display: flex; gap: 8px; margin-bottom: 12px; }
+.service-card { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-bottom: 14px; }
+.service-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.service-printer { font-size: 15px; font-weight: 700; }
+.service-hours-pill { font-size: 12px; color: var(--text-muted); border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; }
+.service-h { margin: 14px 0 2px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
+.service-task, .service-entry { display: flex; gap: 12px; align-items: center; padding: 10px 0; }
+.service-task + .service-task, .service-task + .service-h, .service-entry + .service-entry { border-top: 1px solid var(--border); }
+.service-icon { flex: none; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: rgba(255,107,43,.14); color: var(--accent); }
+.service-icon svg { width: 18px; height: 18px; }
+.service-icon.k-nozzle, .service-icon.k-calibration { background: rgba(59,130,246,.14); color: var(--blue); }
+.service-icon.k-cleaning, .service-icon.k-belt { background: rgba(34,197,94,.14); color: var(--green); }
+.service-icon.k-other { background: var(--surface); color: var(--text-muted); }
 .service-main { flex: 1; min-width: 0; }
 .service-title { font-weight: 600; font-size: 14px; }
-.service-sub { font-weight: 400; color: var(--text-muted); font-size: 12px; }
-.service-meta { color: var(--text-muted); font-size: 12px; margin-top: 2px; word-break: break-word; }
-.service-actions { display: flex; gap: 6px; flex: none; flex-wrap: wrap; justify-content: flex-end; }
+.service-note { font-weight: 400; color: var(--text-dim-strong); }
+.service-meta { color: var(--text-muted); font-size: 12px; margin-top: 3px; word-break: break-word; }
+.service-due { color: var(--red); }
+.service-bar { height: 6px; background: var(--surface); border-radius: 999px; overflow: hidden; margin-top: 6px; }
+.service-bar-fill { height: 100%; border-radius: 999px; background: var(--green); }
+.service-bar-fill.yellow { background: var(--yellow); }
+.service-bar-fill.red { background: var(--red); }
+.service-actions { display: flex; gap: 6px; flex: none; align-items: center; }
+.service-x { background: none; border: 0; color: var(--text-muted); font-size: 20px; line-height: 1; cursor: pointer; padding: 4px 6px; border-radius: 6px; }
+.service-x:hover { color: var(--red); background: var(--surface); }
 .service-empty { color: var(--text-muted); font-size: 13px; padding: 8px 0; }
-.service-form { margin: 8px 0; }
-.service-form summary { cursor: pointer; font-size: 13px; color: var(--accent); }
+.service-form { margin: 0 0 14px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 0 14px; }
+.service-form[open] { padding: 14px; }
+.service-form-title { font-weight: 700; font-size: 14px; }
+.service-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.service-chip { background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 999px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+.service-chip:hover { border-color: var(--accent); color: var(--accent); }
 .service-form select, .service-form input { display: block; width: 100%; margin: 8px 0 0; padding: 9px 12px; font-size: 14px;
-  background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); }
-.service-form button { margin-top: 10px; }
-#service-body { padding: 14px 16px; }
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); }
+.service-form button.btn { margin-top: 10px; }

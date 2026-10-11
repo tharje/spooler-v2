@@ -37,52 +37,109 @@ function _printerName(id) {
   return (_service.printers.find(p => p.id === id) || {}).name || id;
 }
 
+const _KIND_ICON = {
+  lubrication:   '<path d="M12 2.7s6 6.2 6 10.6a6 6 0 0 1-12 0C6 8.900 12 2.700 12 2.700z"/>',
+  nozzle:        '<path d="M8 3h8v5l-2 3v3l-2 3-2-3v-3L8 8z"/>',
+  belt:          '<rect x="3" y="8" width="18" height="8" rx="4"/><circle cx="8" cy="12" r="1.500"/><circle cx="16" cy="12" r="1.500"/>',
+  cleaning:      '<path d="M12 3l1.800 5.200L19 10l-5.200 1.800L12 17l-1.800-5.200L5 10l5.200-1.800z"/>',
+  calibration:   '<path d="M4 20L20 4M7 17l-2-2M10 14l-2-2M13 11l-2-2M16 8l-2-2"/>',
+  part_replaced: '<path d="M14.700 6.300a1 1 0 0 0 0 1.400l1.600 1.600a1 1 0 0 0 1.400 0l3.800-3.800a6 6 0 0 1-7.900 7.900l-6.900 6.900a2.100 2.100 0 0 1-3-3l6.900-6.900a6 6 0 0 1 7.900-7.900z"/>',
+  other:         '<circle cx="12" cy="12" r="1"/><circle cx="5" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+};
+const _SERVICE_PRESETS = [
+  { name: "Lubricate Z rods",  kind: "lubrication", hours: 200 },
+  { name: "Clean the nozzle",  kind: "nozzle",      hours: 100 },
+  { name: "Check the belts",   kind: "belt",        hours: 300 },
+  { name: "Clean the plate",   kind: "cleaning",    hours: 50 },
+];
+
+function _kindIcon(k) {
+  return `<span class="service-icon k-${escAttr(k || "other")}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${_KIND_ICON[k] || _KIND_ICON.other}</svg></span>`;
+}
+
+function _taskHtml(t) {
+  const pct = Math.min(100, Math.round(100 * t.hours_since / t.interval_hours));
+  const tone = t.due ? "red" : pct >= 75 ? "yellow" : "green";
+  return `
+    <div class="service-task ${t.due ? "due" : ""}">
+      ${_kindIcon(t.kind)}
+      <div class="service-main">
+        <div class="service-title">${escHtml(t.name)}</div>
+        <div class="service-bar"><div class="service-bar-fill ${tone}" style="width:${pct}%"></div></div>
+        <div class="service-meta">${t.due
+          ? `<strong class="service-due">Due</strong> · ${t.hours_since} of ${t.interval_hours} h`
+          : `${t.remaining} h left · every ${t.interval_hours} h`}${t.last_done ? ` · last ${escHtml(t.last_done)}` : ""}</div>
+      </div>
+      <div class="service-actions">
+        <button class="btn ${t.due ? "btn-primary" : "btn-secondary"} btn-sm" data-done="${escAttr(t.id)}">Done</button>
+        <button class="service-x" data-del-task="${escAttr(t.id)}" title="Remove this reminder" aria-label="Remove this reminder">×</button>
+      </div>
+    </div>`;
+}
+
+function _logHtml(e) {
+  return `
+    <div class="service-entry">
+      ${_kindIcon(e.kind)}
+      <div class="service-main">
+        <div class="service-title">${escHtml(_kindLabel(e.kind))}${e.note ? ` <span class="service-note">— ${escHtml(e.note)}</span>` : ""}</div>
+        <div class="service-meta">${escHtml(e.date)} · at ${e.hours} print hours</div>
+      </div>
+      <button class="service-x" data-del-log="${escAttr(e.id)}" title="Delete this entry" aria-label="Delete this entry">×</button>
+    </div>`;
+}
+
 function renderService() {
   const host = document.getElementById("service-body");
   const d = _service;
   if (!d) { host.textContent = "Loading…"; return; }
   if (!d.printers.length) { host.innerHTML = '<p class="service-empty">Add a printer first.</p>'; return; }
+  const open = new Set([...host.querySelectorAll("details[open]")].map(x => x.dataset.form));
+  const keep = (id) => document.getElementById(id)?.value;
+  const draft = { name: keep("svc-t-name"), hours: keep("svc-t-hours"), note: keep("svc-l-note") };
   const popts = d.printers.map(p => `<option value="${escAttr(p.id)}">${escHtml(p.name)}</option>`).join("");
   const kopts = d.kinds.map(k => `<option value="${escAttr(k)}">${escHtml(_kindLabel(k))}</option>`).join("");
-  const tasks = d.tasks.map(t => `
-    <div class="service-row ${t.due ? "due" : ""}">
-      <div class="service-main">
-        <div class="service-title">${escHtml(t.name)} <span class="service-sub">· ${escHtml(_printerName(t.printer_id))}</span></div>
-        <div class="service-meta">${t.due
-          ? `<strong>Due</strong> — ${t.hours_since} h since last time (every ${t.interval_hours} h)`
-          : `${t.remaining} h left (every ${t.interval_hours} h)`}${t.last_done ? ` · last done ${escHtml(t.last_done)}` : ""}</div>
-      </div>
-      <div class="service-actions">
-        <button class="btn btn-primary btn-sm" data-done="${escAttr(t.id)}">Done</button>
-        <button class="btn btn-secondary btn-sm" data-del-task="${escAttr(t.id)}" title="Remove this reminder">Remove</button>
-      </div>
-    </div>`).join("") || '<p class="service-empty">No reminders yet.</p>';
-  const log = d.log.map(e => `
-    <div class="service-row">
-      <div class="service-main">
-        <div class="service-title">${escHtml(_kindLabel(e.kind))} <span class="service-sub">· ${escHtml(_printerName(e.printer_id))}</span></div>
-        <div class="service-meta">${escHtml(e.date)} · at ${e.hours} print hours${e.note ? ` — ${escHtml(e.note)}` : ""}</div>
-      </div>
-      <div class="service-actions"><button class="btn btn-secondary btn-sm" data-del-log="${escAttr(e.id)}">Delete</button></div>
-    </div>`).join("") || '<p class="service-empty">Nothing logged yet.</p>';
+  const dueTotal = d.tasks.filter(t => t.due).length;
+
+  const cards = d.printers.map(p => {
+    const tasks = d.tasks.filter(t => t.printer_id === p.id).sort((a, b) => a.remaining - b.remaining);
+    const log = d.log.filter(e => e.printer_id === p.id);
+    return `
+      <section class="service-card">
+        <header class="service-card-head">
+          <span class="service-printer">${escHtml(p.name)}</span>
+          <span class="service-hours-pill">${p.hours} print hours</span>
+        </header>
+        ${tasks.length ? tasks.map(_taskHtml).join("") : '<p class="service-empty">No reminders for this printer.</p>'}
+        ${log.length ? `<div class="service-h">Logbook</div>${log.map(_logHtml).join("")}` : ""}
+      </section>`;
+  }).join("");
+
   host.innerHTML = `
-    <div class="service-hours">${d.printers.map(p => `<span><strong>${p.hours} h</strong> ${escHtml(p.name)}</span>`).join("")}</div>
-    <h4 class="service-h">Reminders</h4>${tasks}
-    <details class="service-form"><summary>Add reminder</summary>
-      <select id="svc-t-printer">${popts}</select>
-      <input id="svc-t-name" type="text" maxlength="80" placeholder="What (e.g. Lubricate Z rods)" />
-      <select id="svc-t-kind">${kopts}</select>
-      <input id="svc-t-hours" type="number" min="1" max="100000" placeholder="Every … print hours" />
-      <button id="svc-t-add" class="btn btn-primary btn-sm">Add reminder</button>
-    </details>
-    <h4 class="service-h">Logbook</h4>
-    <details class="service-form"><summary>Log service</summary>
+    ${dueTotal ? `<div class="service-alert">${dueTotal} service ${dueTotal === 1 ? "reminder is" : "reminders are"} due</div>` : ""}
+    <div class="service-toolbar">
+      <button class="btn btn-primary btn-sm" data-toggle="log">Log service</button>
+      <button class="btn btn-secondary btn-sm" data-toggle="task">New reminder</button>
+    </div>
+    <details class="service-form" data-form="log" ${open.has("log") ? "open" : ""}><summary hidden></summary>
+      <div class="service-form-title">Log service</div>
       <select id="svc-l-printer">${popts}</select>
       <select id="svc-l-kind">${kopts}</select>
       <input id="svc-l-date" type="date" value="${new Date().toISOString().slice(0, 10)}" />
-      <input id="svc-l-note" type="text" maxlength="500" placeholder="Note (optional)" />
+      <input id="svc-l-note" type="text" maxlength="500" placeholder="Note (optional)" value="${escAttr(draft.note || "")}" />
       <button id="svc-l-add" class="btn btn-primary btn-sm">Save entry</button>
-    </details>${log}`;
+    </details>
+    <details class="service-form" data-form="task" ${open.has("task") ? "open" : ""}><summary hidden></summary>
+      <div class="service-form-title">New reminder</div>
+      <div class="service-chips">${_SERVICE_PRESETS.map((x, i) =>
+        `<button type="button" class="service-chip" data-preset="${i}">${escHtml(x.name)} · ${x.hours} h</button>`).join("")}</div>
+      <select id="svc-t-printer">${popts}</select>
+      <input id="svc-t-name" type="text" maxlength="80" placeholder="What (e.g. Lubricate Z rods)" value="${escAttr(draft.name || "")}" />
+      <select id="svc-t-kind">${kopts}</select>
+      <input id="svc-t-hours" type="number" min="1" max="100000" placeholder="Every … print hours" value="${escAttr(draft.hours || "")}" />
+      <button id="svc-t-add" class="btn btn-primary btn-sm">Add reminder</button>
+    </details>
+    ${cards}`;
 }
 
 async function _serviceAct(fn) {
@@ -94,7 +151,16 @@ document.getElementById("service-body").addEventListener("click", (ev) => {
   const t = ev.target.closest("button");
   if (!t) return;
   const v = (id) => document.getElementById(id).value;
-  if (t.id === "svc-t-add") {
+  if (t.dataset.toggle) {
+    document.querySelectorAll("#service-body details.service-form").forEach(f => {
+      f.open = f.dataset.form === t.dataset.toggle ? !f.open : false;
+    });
+  } else if (t.dataset.preset) {
+    const x = _SERVICE_PRESETS[+t.dataset.preset];
+    document.getElementById("svc-t-name").value = x.name;
+    document.getElementById("svc-t-kind").value = x.kind;
+    document.getElementById("svc-t-hours").value = x.hours;
+  } else if (t.id === "svc-t-add") {
     _serviceAct(() => _serviceCall("POST", "/api/service/tasks", {
       printer_id: v("svc-t-printer"), name: v("svc-t-name"), kind: v("svc-t-kind"), interval_hours: v("svc-t-hours") }));
   } else if (t.id === "svc-l-add") {
