@@ -542,7 +542,7 @@ class PrinterConnection:
                 return
             for t in service.take_due(self.id):
                 self._emit("service_due", f"{self.name} — Service due: {t['name']}",
-                           f"{t['hours_since']:g} print hours since last time (every {t['interval_hours']} h).")
+                           f"{t['since']:g} {t['unit']} since last time (every {t['interval']} {t['unit']}).")
         except Exception as e:
             print(f"[Printer {self.name}] Service reminder skipped: {type(e).__name__}")
 
@@ -902,6 +902,7 @@ class PrinterConnection:
                 if info.get("vendor"):
                     entry["vendor"] = info["vendor"]
                 await loop.run_in_executor(None, append_history, entry)
+                service.add_print_time(self.id, print_time)
                 self._announce_service_due()
                 label = {"complete": "Completed", "error": "Error"}.get(end_state, "Cancelled")
                 print(f"[History] {label}: {filename} – {filament_mm:.0f}mm / {filament_g}g"

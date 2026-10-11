@@ -61,7 +61,7 @@ function renderPrinter(printer) {
       <div class="status-dot ${sc}" role="img" aria-label="${escAttr(stateLabel)}" title="${escAttr(stateLabel)}"></div>
       <div class="card-header-info">
         <div class="card-title">${escHtml(printer.name)}</div>
-        <div class="card-subtitle">${escHtml(printer.ip)}${printer.firmware_version ? ` · fw ${escHtml(printer.firmware_version)}` : ""}${firmwareBadgeHtml(printer)}</div>
+        <div class="card-subtitle">${escHtml(printer.ip)}${printer.firmware_version ? ` · fw ${escHtml(printer.firmware_version)}` : ""}${firmwareBadgeHtml(printer)}${featureEnabled("service_log") ? serviceBadgeHtml(printer) : ""}</div>
       </div>
       <span class="status-badge ${sc}">${escHtml(badgeText)}</span>
       <button class="card-files-btn" onclick="openFileBrowser('${escAttr(printer.id)}')" title="Browse files">

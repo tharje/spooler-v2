@@ -343,6 +343,11 @@ function firmwareBadgeHtml(printer) {
   return ` <a class="fw-badge" href="${_FIRMWARE_ISSUES_URL}" target="_blank" rel="noopener" ` +
          `title="${escAttr(tip)}" aria-label="${escAttr(tip)}">⚠ untested firmware</a>`;
 }
+function serviceBadgeHtml(printer) {
+  if (typeof _serviceDuePrinters === "undefined" || !_serviceDuePrinters.has(printer.id)) return "";
+  return ` <a class="fw-badge service-badge-card" href="#" onclick="openService();return false;" ` +
+         `title="A service reminder is due. Open the service logbook.">🔧 service due</a>`;
+}
 // firmware-badge:end
 
 // clock-sync:begin

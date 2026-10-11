@@ -330,8 +330,8 @@ class AdminMixin:
             return
         try:
             if what == "tasks":
-                item = service.add_task(body.get("printer_id"), body.get("name"), body.get("interval_hours"),
-                                    body.get("kind") or "other")
+                item = service.add_task(body.get("printer_id"), body.get("name"), body.get("interval"),
+                                    body.get("kind") or "other", body.get("unit") or "hours")
             else:
                 item = service.add_log(body.get("printer_id"), body.get("kind"), body.get("note"),
                                        body.get("date"), body.get("task_id"))

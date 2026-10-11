@@ -114,6 +114,15 @@ async def _ledger_sender() -> None:
                              spoolman.find_spool_at_location, on_sent, on_change)
 
 
+async def _service_daily() -> None:
+    """Reminders that count days come due without a print ending; check a few times a day."""
+    await asyncio.sleep(120)
+    while True:
+        for p in list(state.printers.values()):
+            p._announce_service_due()
+        await asyncio.sleep(6 * 3600)
+
+
 async def main() -> None:
     diagnostics.install_log_capture()
     if ws_serve is None:
@@ -164,6 +173,7 @@ async def main() -> None:
     asyncio.create_task(daily_backup_loop())
     asyncio.create_task(_ledger_sender())
     asyncio.create_task(spaghetti.watch_loop())
+    asyncio.create_task(_service_daily())
 
     # Let the plain HTTP server (port HTTP_PORT) also adopt WebSocket upgrade
     # requests it sees — combo mode, so single-port tunnels/proxies work.

@@ -1799,3 +1799,4 @@ main {
 .service-form select, .service-form input { display: block; width: 100%; margin: 8px 0 0; padding: 9px 12px; font-size: 14px;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); }
 .service-form button.btn { margin-top: 10px; }
+.service-every { display: flex; gap: 8px; } .service-every input { flex: 1; min-width: 0; } .service-every select { flex: none; width: auto; }

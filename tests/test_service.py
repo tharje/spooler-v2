@@ -72,3 +72,29 @@ def test_delete_task_and_log():
 
 def test_logbook_is_part_of_backups():
     assert "service_log.json" in backup.BACKUP_FILES
+
+
+def test_hours_keep_counting_when_the_history_is_trimmed():
+    hist(10)
+    service.add_print_time("p1", 3600)                 # first print seen: counter starts from the history (10 h)
+    assert service.print_hours("p1") == 10
+    hist()                                             # history trimmed away
+    service.add_print_time("p1", 7200)
+    assert service.print_hours("p1") == 12
+
+
+def test_reminder_counted_in_days(monkeypatch):
+    t = service.add_task("p1", "Check belts", 30, unit="days")
+    assert service.overview({"p1": "CC1"})["tasks"][0]["unit"] == "days"
+    assert service.take_due("p1") == []
+    real = service.time.time
+    monkeypatch.setattr(service.time, "time", lambda: real() + 31 * 86400)
+    due = service.take_due("p1")
+    assert len(due) == 1 and due[0]["since"] == 31 and due[0]["unit"] == "days"
+    service.add_log("p1", "belt", task_id=t["id"])
+    assert service.overview({"p1": "CC1"})["tasks"][0]["due"] is False
+
+
+def test_bad_unit_is_refused():
+    with pytest.raises(service.ServiceError):
+        service.add_task("p1", "x", 5, unit="weeks")

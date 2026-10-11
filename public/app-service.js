@@ -3,6 +3,7 @@
 const servicePanel = document.getElementById("panel-service");
 const btnService   = document.getElementById("btn-service");
 let _service = null;
+let _serviceDuePrinters = new Set();      // printers with a reminder that is due (card notice)
 
 function _kindLabel(k) { return (k || "other").replace("_", " ").replace(/^./, c => c.toUpperCase()); }
 
@@ -31,6 +32,8 @@ function _setServiceBadge() {
   const b = document.getElementById("service-badge");
   b.hidden = !due;
   b.textContent = due || "";
+  _serviceDuePrinters = new Set((_service?.tasks || []).filter(t => t.due).map(t => t.printer_id));
+  Object.values(printers).forEach(renderPrinter);
 }
 
 function _printerName(id) {
@@ -51,6 +54,7 @@ const _SERVICE_PRESETS = [
   { name: "Clean the nozzle",  kind: "nozzle",      hours: 100 },
   { name: "Check the belts",   kind: "belt",        hours: 300 },
   { name: "Clean the plate",   kind: "cleaning",    hours: 50 },
+  { name: "Clean or replace the filter", kind: "cleaning", hours: 300 },
 ];
 
 function _kindIcon(k) {
@@ -58,7 +62,8 @@ function _kindIcon(k) {
 }
 
 function _taskHtml(t) {
-  const pct = Math.min(100, Math.round(100 * t.hours_since / t.interval_hours));
+  const unit = t.unit === "days" ? "days" : "h";
+  const pct = Math.min(100, Math.round(100 * t.since / t.interval));
   const tone = t.due ? "red" : pct >= 75 ? "yellow" : "green";
   return `
     <div class="service-task ${t.due ? "due" : ""}">
@@ -67,8 +72,8 @@ function _taskHtml(t) {
         <div class="service-title">${escHtml(t.name)}</div>
         <div class="service-bar"><div class="service-bar-fill ${tone}" style="width:${pct}%"></div></div>
         <div class="service-meta">${t.due
-          ? `<strong class="service-due">Due</strong> · ${t.hours_since} of ${t.interval_hours} h`
-          : `${t.remaining} h left · every ${t.interval_hours} h`}${t.last_done ? ` · last ${escHtml(t.last_done)}` : ""}</div>
+          ? `<strong class="service-due">Due</strong> · ${t.since} of ${t.interval} ${unit}`
+          : `${t.remaining} ${unit} left · every ${t.interval} ${unit}`}${t.last_done ? ` · last ${escHtml(t.last_done)}` : ""}</div>
       </div>
       <div class="service-actions">
         <button class="btn ${t.due ? "btn-primary" : "btn-secondary"} btn-sm" data-done="${escAttr(t.id)}">Done</button>
@@ -106,10 +111,10 @@ function renderService() {
     const log = d.log.filter(e => e.printer_id === p.id);
     return `
       <section class="service-card">
-        <header class="service-card-head">
+        <div class="service-card-head">
           <span class="service-printer">${escHtml(p.name)}</span>
           <span class="service-hours-pill">${p.hours} print hours</span>
-        </header>
+        </div>
         ${tasks.length ? tasks.map(_taskHtml).join("") : '<p class="service-empty">No reminders for this printer.</p>'}
         ${log.length ? `<div class="service-h">Logbook</div>${log.map(_logHtml).join("")}` : ""}
       </section>`;
@@ -136,7 +141,10 @@ function renderService() {
       <select id="svc-t-printer">${popts}</select>
       <input id="svc-t-name" type="text" maxlength="80" placeholder="What (e.g. Lubricate Z rods)" value="${escAttr(draft.name || "")}" />
       <select id="svc-t-kind">${kopts}</select>
-      <input id="svc-t-hours" type="number" min="1" max="100000" placeholder="Every … print hours" value="${escAttr(draft.hours || "")}" />
+      <div class="service-every">
+        <input id="svc-t-hours" type="number" min="1" max="100000" placeholder="Every …" value="${escAttr(draft.hours || "")}" />
+        <select id="svc-t-unit"><option value="hours">print hours</option><option value="days">days</option></select>
+      </div>
       <button id="svc-t-add" class="btn btn-primary btn-sm">Add reminder</button>
     </details>
     ${cards}`;
@@ -162,7 +170,7 @@ document.getElementById("service-body").addEventListener("click", (ev) => {
     document.getElementById("svc-t-hours").value = x.hours;
   } else if (t.id === "svc-t-add") {
     _serviceAct(() => _serviceCall("POST", "/api/service/tasks", {
-      printer_id: v("svc-t-printer"), name: v("svc-t-name"), kind: v("svc-t-kind"), interval_hours: v("svc-t-hours") }));
+      printer_id: v("svc-t-printer"), name: v("svc-t-name"), kind: v("svc-t-kind"), interval: v("svc-t-hours"), unit: v("svc-t-unit") }));
   } else if (t.id === "svc-l-add") {
     _serviceAct(() => _serviceCall("POST", "/api/service/log", {
       printer_id: v("svc-l-printer"), kind: v("svc-l-kind"), date: v("svc-l-date"), note: v("svc-l-note") }));
