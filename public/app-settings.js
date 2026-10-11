@@ -282,6 +282,7 @@ const _EXTRA_NOTIF_EVENTS = [
   { key: "error",           label: "Print error",      desc: "When the printer reports an error, with the cause and code when known", image: true },
   { key: "filament_runout", label: "Filament runout",  desc: "When the printer stops because filament ran out", image: true },
   { key: "firmware",        label: "Firmware changed", desc: "When a printer reports a different firmware version than before (and whether it is tested with Spooler)" },
+  { key: "spaghetti",       label: "Possible print failure", desc: "When the spaghetti detector thinks a print is failing (set up under Integrations)", image: true },
   { key: "service",         label: "Service due",      desc: "When a service reminder in the logbook has come due (set under Service)" },
   { key: "offline",         label: "Printer offline",  desc: "When a printer has been unreachable for a while, and when it comes back",
     param: { name: "minutes", label: "Minutes offline before notifying", def: 5, min: 1, max: 1440 } },

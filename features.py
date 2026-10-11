@@ -76,6 +76,11 @@ FEATURES: dict = {
         key="service_log", name="Service logbook", default=True,
         description="Keep a log of service done on each printer and get reminders after a set number of print hours.",
     ),
+    "spaghetti_detection": Feature(
+        key="spaghetti_detection", name="Spaghetti detection", default=False,
+        description="Watch running prints through the camera with an Obico detector you run yourself, and send a notification with a picture if a print looks like it is failing. Set up under Integrations.",
+        requires=("camera",),
+    ),
     "external_api": Feature(
         key="external_api", name="External API", default=False,
         description="Let other programs read the print history, pictures and statistics, and change reference numbers, using an API key (create keys under Settings → API access).",

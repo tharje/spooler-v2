@@ -153,6 +153,8 @@ async function loadIntegrations() {
 const _INTEGRATION_GROUPS = [
   { title: "Spoolman", prefix: "spoolman.", testKey: "spoolman" },
   { title: "Slicer",   prefix: "slicer.",   testKey: null },
+  { title: "Spaghetti detection (Obico)", prefix: "spaghetti.", testKey: "spaghetti",
+    help: "Run Obico's ML API as its own container, give its address here, and the address Spooler has as seen from that container (for example http://spooler:8080 in the same Docker network). Then turn on Spaghetti detection under Features and 'Possible print failure' under Notifications." },
 ];
 
 // Static markup in index.html; re-attached into the Spoolman group after each render.
@@ -218,7 +220,7 @@ function _renderIntegrationsList() {
     return `
       <details class="integration-group" ${group.prefix === "spoolman." ? "open" : ""}>
         <summary>${escHtml(group.title)}</summary>
-        <div class="integration-group-body">${fieldsHtml}${testHtml}</div>
+        <div class="integration-group-body">${group.help ? `<p class="report-desc">${escHtml(group.help)}</p>` : ""}${fieldsHtml}${testHtml}</div>
       </details>`;
   }).join("");
 
@@ -337,9 +339,9 @@ function _applyFeatures(list) {
 }
 
 const _FEATURE_GROUPS = [
-  { title: "Monitoring",    keys: ["camera", "print_snapshot"] },
+  { title: "Monitoring",    keys: ["camera", "print_snapshot", "spaghetti_detection"] },
   { title: "Notifications", keys: ["notifications"] },
-  { title: "Data",          keys: ["backup", "statistics"] },
+  { title: "Data",          keys: ["backup", "statistics", "service_log"] },
   { title: "Integrations",  keys: ["spoolman"] },
 ];
 

@@ -34,12 +34,13 @@ EVENT_SETTING = {
     "layer_reached":   "layer",
     "spool_low":       "spool_low",
     "service_due":     "service",
+    "spaghetti":       "spaghetti",
 }
 # Events that may carry a camera picture (when their setting asks for one).
 IMAGE_EVENTS = {"print_started", "print_complete", "print_cancelled", "print_paused",
-                "print_error", "filament_runout", "layer_reached"}
+                "print_error", "filament_runout", "layer_reached", "spaghetti"}
 # Never suppressed by the spam guard: each one is a distinct, important moment.
-ALWAYS_SEND = {"print_complete", "print_cancelled", "print_error", "test"}
+ALWAYS_SEND = {"print_complete", "print_cancelled", "print_error", "spaghetti", "test"}
 MIN_INTERVAL_S = 10 * 60
 
 _executor = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="notify")

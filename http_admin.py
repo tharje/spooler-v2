@@ -12,6 +12,7 @@ import json
 import notifiers
 import notify
 import service
+import spaghetti
 import os
 import state
 import tempfile
@@ -28,6 +29,7 @@ from features import FeatureError
 from features import describe_all as describe_all_features, is_enabled, requires_feature, set_enabled
 from pathlib import Path
 from push import WEBPUSH_AVAILABLE, add_subscription, has_subscriptions, remove_subscription, save_notif_settings, send_push_all
+from snapshot import grab_jpeg
 from spoolman import get_spoolman_db, get_spoolman_url, test_spoolman_connection
 
 _uploads_lock = threading.Lock()
@@ -422,6 +424,19 @@ class AdminMixin:
         self._json(result)
 
     @requires_feature("spoolman")
+    @requires_feature("spaghetti_detection")
+    def _handle_test_spaghetti(self):
+        self._read_body()
+        jpeg = None
+        for p in list(state.printers.values()):          # a real camera picture is the better test
+            if p.camera_url and p.connected:
+                jpeg = grab_jpeg(p.camera_url)
+                if jpeg:
+                    break
+        result = spaghetti.test_connection(jpeg)
+        config.record_test_result("spaghetti", result["ok"], result["message"])
+        self._json(result)
+
     def _handle_test_spoolman(self):
         self._read_body()
         result = test_spoolman_connection()

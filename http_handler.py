@@ -33,6 +33,7 @@ from http_proxy import ProxyMixin
 from http_admin import AdminMixin
 import config
 import api_tokens
+import spaghetti
 import notifiers
 
 try:
@@ -350,6 +351,21 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
             })
             return
 
+        if self.path.startswith("/api/spaghetti-image/"):
+            # One-time address for the detector container, which has no session. The random
+            # address is the credential: it works once, for a few seconds, for one picture.
+            jpeg = spaghetti.take_image(self.path.split("?")[0].rsplit("/", 1)[1])
+            if jpeg is None:
+                self._json({"error": "Not found"}, 404)
+            else:
+                self.send_response(200)
+                self.send_header("Content-Type", "image/jpeg")
+                self.send_header("Content-Length", str(len(jpeg)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(jpeg)
+            return
+
         if self.path == "/api/push-public-key":
             # Public key is safe to expose without auth — it's literally a public key.
             # Service workers need it to renew expired subscriptions without a session cookie.
@@ -378,7 +394,7 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
         elif self.path == "/api/integrations":
             self._json({
                 "fields": config.describe_all(),
-                "tests": {k: config.last_test_result(k) for k in ("spoolman", *notifiers.CHANNELS)},
+                "tests": {k: config.last_test_result(k) for k in ("spoolman", "spaghetti", *notifiers.CHANNELS)},
                 "server_settings": _server_settings_readonly(),
             })
         elif self.path == "/api/api-tokens":
@@ -545,6 +561,8 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
             self._handle_import_filaments()
         elif self.path == "/api/integrations/spoolman/test":
             self._handle_test_spoolman()
+        elif self.path == "/api/integrations/spaghetti/test":
+            self._handle_test_spaghetti()
         elif self.path.startswith("/api/integrations/") and self.path.endswith("/test") \
                 and self.path.split("/")[3] in notifiers.CHANNELS:
             self._handle_test_notifier(self.path.split("/")[3])
