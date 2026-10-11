@@ -1778,3 +1778,4 @@ main {
 .service-form select, .service-form input { display: block; width: 100%; margin: 8px 0 0; padding: 9px 12px; font-size: 14px;
   background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); }
 .service-form button { margin-top: 10px; }
+#service-body { padding: 14px 16px; }
