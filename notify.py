@@ -33,6 +33,7 @@ EVENT_SETTING = {
     "nozzle_overheat": "nozzle_printing",
     "layer_reached":   "layer",
     "spool_low":       "spool_low",
+    "service_due":     "service",
 }
 # Events that may carry a camera picture (when their setting asks for one).
 IMAGE_EVENTS = {"print_started", "print_complete", "print_cancelled", "print_paused",

@@ -12,6 +12,7 @@ import config
 import features
 import persistence
 import push
+import service
 
 
 @pytest.fixture(autouse=True)
@@ -40,6 +41,7 @@ def isolated_data_dir(tmp_path, monkeypatch):
     # force-disable set via monkeypatch) in one test would leak into the next.
     monkeypatch.setattr(features, "_FORCE_DISABLED", set())
     monkeypatch.setattr(features, "_on_change_callbacks", {})
+    monkeypatch.setattr(service, "SERVICE_FILE", tmp_path / "service_log.json")
     monkeypatch.setattr(config, "INTEGRATIONS_FILE", tmp_path / "integrations.json")
     monkeypatch.setattr(config, "LOCK_CONFIG", False)
     monkeypatch.setattr(config, "_on_change", [])

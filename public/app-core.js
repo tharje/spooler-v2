@@ -151,6 +151,7 @@ function connect() {
     send({ action: "list_printers" });
     loadHistory();
     loadLedger();
+    if (featureEnabled("service_log")) loadService();
     loadSecurityStatus();
     fetchSpools();
   };
@@ -238,6 +239,7 @@ function handleMessage(msg) {
       history.unshift(msg.entry);
       renderHistory();
       toast(`Print logged: ${msg.entry.filament_g}g used`);
+      if (featureEnabled("service_log")) loadService();
       break;
     case "spool_empty":
       spools = spools.map(s => s.id === msg.spool.id ? msg.spool : s);

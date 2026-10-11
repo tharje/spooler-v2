@@ -11,6 +11,7 @@ import diagnostics
 import json
 import notifiers
 import notify
+import service
 import os
 import state
 import tempfile
@@ -311,6 +312,38 @@ class AdminMixin:
         # restart: unless-stopped brings the container back automatically;
         # outside Docker the process needs restarting by hand.
         threading.Timer(1.0, lambda: os._exit(0)).start()
+
+    @requires_feature("service_log")
+    def _handle_service_get(self):
+        self._json(service.overview({p.id: p.name for p in state.printers.values()}))
+
+    @requires_feature("service_log")
+    def _handle_service_post(self, what: str):
+        try:
+            body = json.loads(self._read_body() or b"{}")
+            if not isinstance(body, dict):
+                raise ValueError
+        except Exception:
+            self._json({"error": "Bad request"}, 400)
+            return
+        try:
+            if what == "tasks":
+                item = service.add_task(body.get("printer_id"), body.get("name"), body.get("interval_hours"),
+                                    body.get("kind") or "other")
+            else:
+                item = service.add_log(body.get("printer_id"), body.get("kind"), body.get("note"),
+                                       body.get("date"), body.get("task_id"))
+        except service.ServiceError as e:
+            self._json({"error": str(e)}, 400)
+            return
+        self._json({"ok": True, "item": item})
+
+    @requires_feature("service_log")
+    def _handle_service_delete(self):
+        parts = self.path.split("?")[0].split("/")          # ['', 'api', 'service', 'tasks'|'log', id]
+        what, item_id = (parts[3], parts[4]) if len(parts) == 5 else ("", "")
+        ok = service.delete_task(item_id) if what == "tasks" else service.delete_log(item_id) if what == "log" else False
+        self._json({"ok": True} if ok else {"error": "Not found"}, 200 if ok else 404)
 
     def _handle_patch_features(self):
         try:

@@ -72,6 +72,10 @@ FEATURES: dict = {
         description="Take a camera picture when a print ends and keep it with the print in the history.",
         requires=("camera",),
     ),
+    "service_log": Feature(
+        key="service_log", name="Service logbook", default=True,
+        description="Keep a log of service done on each printer and get reminders after a set number of print hours.",
+    ),
     "external_api": Feature(
         key="external_api", name="External API", default=False,
         description="Let other programs read the print history, pictures and statistics, and change reference numbers, using an API key (create keys under Settings → API access).",

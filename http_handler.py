@@ -385,6 +385,8 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
             self._json({"tokens": api_tokens.list_tokens(), "max": api_tokens.MAX_TOKENS})
         elif self.path == "/api/spoolman-ledger":
             self._handle_ledger_list()
+        elif self.path == "/api/service":
+            self._handle_service_get()
         elif self.path == "/api/security-status":
             import auth
             self._json({"auth_enabled": bool(auth.AUTH_ENABLED)})
@@ -493,6 +495,9 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
         if self.path.startswith("/api/spoolman-ledger/"):
             self._handle_ledger_action("discard")
             return
+        if self.path.startswith("/api/service/"):
+            self._handle_service_delete()
+            return
         if self.path.startswith("/api/api-tokens/"):
             ok = api_tokens.revoke(urllib.parse.unquote(self.path[len("/api/api-tokens/"):]))
             self._json({"ok": True} if ok else {"error": "No such key"}, 200 if ok else 404)
@@ -530,6 +535,8 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
             self._handle_notif_settings()
         elif self.path == "/api/push-test":
             self._handle_push_test()
+        elif self.path in ("/api/service/tasks", "/api/service/log"):
+            self._handle_service_post(self.path.rsplit("/", 1)[1])
         elif self.path == "/api/api-tokens":
             self._handle_create_api_token()
         elif self.path.startswith("/api/spoolman-ledger/") and self.path.endswith("/retry"):

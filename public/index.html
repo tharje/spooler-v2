@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css?v=64" />
+  <link rel="stylesheet" href="style.css?v=65" />
 </head>
 <body>
   <header>
@@ -56,6 +56,13 @@
       </svg>
       <span>Spools</span>
       <span id="spools-badge" class="nav-badge" hidden aria-label="Filament deductions need attention"></span>
+    </button>
+    <button id="btn-service" class="sidenav-item" title="Service logbook and reminders">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+      </svg>
+      <span>Service</span>
+      <span id="service-badge" class="nav-badge" hidden aria-label="Service is due"></span>
     </button>
     <a id="btn-slicer" class="sidenav-item" title="Open slicer" target="_blank" rel="noopener" hidden>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -213,6 +220,17 @@
       <div id="spools-list"></div>
       <p id="spools-empty" style="display:none;text-align:center;color:var(--text-muted);padding:40px">No spools yet. Click <strong>Add Spool</strong> to get started.</p>
     </div>
+  </div>
+
+  <!-- Service panel -->
+  <div id="panel-service" class="side-panel">
+    <div class="side-panel-header">
+      <div class="title-row">
+        <h3>Service</h3>
+        <button id="btn-service-close" class="btn btn-secondary btn-sm">Close</button>
+      </div>
+    </div>
+    <div class="side-panel-body" id="service-body"></div>
   </div>
 
   <div id="panel-backdrop" class="panel-backdrop"></div>
@@ -815,14 +833,15 @@
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="/config.js"></script>
-  <script src="app-core.js?v=82"></script>
-  <script src="app-render.js?v=82"></script>
-  <script src="app-settings.js?v=82"></script>
-  <script src="app-files.js?v=82"></script>
-  <script src="app-integrations.js?v=82"></script>
-  <script src="app-stats.js?v=82"></script>
-  <script src="app-spools.js?v=82"></script>
-  <script src="app-boot.js?v=82"></script>
+  <script src="app-core.js?v=83"></script>
+  <script src="app-render.js?v=83"></script>
+  <script src="app-settings.js?v=83"></script>
+  <script src="app-files.js?v=83"></script>
+  <script src="app-integrations.js?v=83"></script>
+  <script src="app-stats.js?v=83"></script>
+  <script src="app-spools.js?v=83"></script>
+  <script src="app-service.js?v=83"></script>
+  <script src="app-boot.js?v=83"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});

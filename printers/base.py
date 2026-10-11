@@ -22,6 +22,7 @@ from push import load_notif_settings
 from snapshot import grab_jpeg
 import firmware
 import ledger
+import service
 from printaccount import PrintAccounting, clear_active, load_active, save_active
 from spoolman import get_spool_density, last_spool_info
 
@@ -534,6 +535,17 @@ class PrinterConnection:
         except Exception as e:
             print(f"[Printer {self.name}] Print picture skipped: {type(e).__name__}")
 
+    def _announce_service_due(self) -> None:
+        """After a print has been added to the history: tell about service reminders that came due."""
+        try:
+            if not is_enabled("service_log"):
+                return
+            for t in service.take_due(self.id):
+                self._emit("service_due", f"{self.name} — Service due: {t['name']}",
+                           f"{t['hours_since']:g} print hours since last time (every {t['interval_hours']} h).")
+        except Exception as e:
+            print(f"[Printer {self.name}] Service reminder skipped: {type(e).__name__}")
+
     async def _emit_async(self, event, title, body, priority, extra) -> None:
         image = None
         if notifylib.wants_image(event):
@@ -890,6 +902,7 @@ class PrinterConnection:
                 if info.get("vendor"):
                     entry["vendor"] = info["vendor"]
                 await loop.run_in_executor(None, append_history, entry)
+                self._announce_service_due()
                 label = {"complete": "Completed", "error": "Error"}.get(end_state, "Cancelled")
                 print(f"[History] {label}: {filename} – {filament_mm:.0f}mm / {filament_g}g"
                       f" (density {density} g/cm³)")

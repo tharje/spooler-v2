@@ -314,6 +314,8 @@ function _applyFeatures(list) {
   if (reportBtn) reportBtn.style.display = featureEnabled("report_problem") ? "" : "none";
   const statsBtn = document.getElementById("btn-stats");
   if (statsBtn) statsBtn.style.display = featureEnabled("statistics") ? "" : "none";
+  const serviceBtn = document.getElementById("btn-service");
+  if (serviceBtn) serviceBtn.style.display = featureEnabled("service_log") ? "" : "none";
   const spoolsBtn = document.getElementById("btn-spools");
   if (spoolsBtn) spoolsBtn.style.display = featureEnabled("spoolman") ? "" : "none";
 
