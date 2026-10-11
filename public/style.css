@@ -1800,3 +1800,12 @@ main {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); }
 .service-form button.btn { margin-top: 10px; }
 .service-every { display: flex; gap: 8px; } .service-every input { flex: 1; min-width: 0; } .service-every select { flex: none; width: auto; }
+.spaghetti-row { display: flex; align-items: center; gap: 8px; margin: 0 14px 10px; padding: 8px 12px; font-size: 12px; font-weight: 600;
+  border-radius: var(--radius-sm); background: var(--surface2); border: 1px solid var(--border); }
+.spaghetti-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); flex: none; }
+.spaghetti-row.ok .spaghetti-dot { background: var(--green); }
+.spaghetti-row.ok { color: var(--green); }
+.spaghetti-row.warn { color: var(--yellow); } .spaghetti-row.warn .spaghetti-dot { background: var(--yellow); }
+.spaghetti-row.bad { color: var(--red); border-color: var(--red); } .spaghetti-row.bad .spaghetti-dot { background: var(--red); }
+.spaghetti-row.off { color: var(--text-muted); }
+.spaghetti-time { margin-left: auto; font-weight: 400; color: var(--text-muted); }

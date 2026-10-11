@@ -89,3 +89,31 @@ def test_detector_errors_are_readable(monkeypatch):
         raise spaghetti.urllib.error.HTTPError(req.full_url, 401, "no", {}, None)
     monkeypatch.setattr(spaghetti.urllib.request, "urlopen", refuse)
     assert "token" in spaghetti.test_connection()["message"]
+
+
+def test_card_status_follows_the_checks(monkeypatch):
+    import asyncio
+    import features
+
+    class P:
+        id, name = "p1", "CC1"
+        status_code = 13
+        emitted = []
+        def _decoded_printinfo(self): return {"Status": self.status_code}
+        async def _camera_picture(self, max_age_s=0): return b"jpeg"
+        async def _broadcast_state(self): pass
+        def _emit(self, *a, **k): self.emitted.append(a[0])
+
+    features.set_enabled("spaghetti_detection", True)
+    p, answers = P(), []
+    monkeypatch.setattr(spaghetti, "ask_detector", lambda jpeg, s: answers.pop(0))
+    spaghetti._status.clear(); spaghetti._watches.clear()
+    run = lambda: asyncio.run(spaghetti.check_printer(p, {"threshold": 50, "frames": 2}))
+
+    answers.append([]);                        run(); assert spaghetti.status_for("p1")["state"] == "ok"
+    answers.append([["failure", 0.9, []]]);    run(); assert spaghetti.status_for("p1")["state"] == "suspect"
+    answers.append([["failure", 0.9, []]]);    run(); assert spaghetti.status_for("p1")["state"] == "alert"
+    assert p.emitted == ["spaghetti"]
+    p.status_code = 0;                         run(); assert spaghetti.status_for("p1") is None
+    features.set_enabled("spaghetti_detection", False)
+    assert spaghetti.status_for("p1") is None

@@ -117,6 +117,8 @@ function renderPrinter(printer) {
     </div>
     ` : ""}
 
+    ${printing ? spaghettiRowHtml(printer) : ""}
+
     <!-- Spool (hidden for canvas printers — tray linking handles assignment) -->
     ${!printer.status?.canvas_info?.canvas_list?.length ? (() => {
       const s = spools.find(sp => printerByLocation(spoolAssignedTo(sp))?.id === printer.id);

@@ -348,6 +348,19 @@ function serviceBadgeHtml(printer) {
   return ` <a class="fw-badge service-badge-card" href="#" onclick="openService();return false;" ` +
          `title="A service reminder is due. Open the service logbook.">🔧 service due</a>`;
 }
+function spaghettiRowHtml(printer) {
+  const sp = printer.spaghetti;
+  if (!sp) return "";
+  const when = new Date(sp.at * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const [tone, text] = {
+    ok:          ["ok",   "Obico: everything looks OK"],
+    suspect:     ["warn", `Obico: something looks off (${sp.bad} of ${sp.frames} checks)`],
+    alert:       ["bad",  "Obico: possible print failure"],
+    unavailable: ["off",  "Obico: detector not reachable"],
+  }[sp.state] || ["off", "Obico"];
+  return `<div class="spaghetti-row ${tone}" title="Last check ${escAttr(when)}">
+    <span class="spaghetti-dot"></span><span>${escHtml(text)}</span><span class="spaghetti-time">${escHtml(when)}</span></div>`;
+}
 // firmware-badge:end
 
 // clock-sync:begin

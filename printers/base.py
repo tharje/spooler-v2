@@ -23,6 +23,7 @@ from snapshot import grab_jpeg
 import firmware
 import ledger
 import service
+import spaghetti
 from printaccount import PrintAccounting, clear_active, load_active, save_active
 from spoolman import get_spool_density, last_spool_info
 
@@ -295,6 +296,7 @@ class PrinterConnection:
             "supports_light":  self.supports_light,
             "auto_light":      self.auto_light and self.supports_light,
             "upload_unsupported_reason": None if self.supports_upload else self.upload_unsupported_reason,
+            "spaghetti":       spaghetti.status_for(self.id),
             "filament_mm":     round(filament_mm, 1),
             "filament_g":      filament_mm_to_grams(filament_mm, self.filament_density),
         }

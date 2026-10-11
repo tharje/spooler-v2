@@ -148,6 +148,12 @@ class Watch:
 
 
 _watches: dict = {}
+_status: dict = {}          # printer id -> what the card shows while printing
+
+
+def status_for(printer_id: str) -> dict | None:
+    """What the printer card shows: {state: ok|suspect|alert|unavailable, bad, frames, at}, or None when not watching."""
+    return _status.get(printer_id) if is_enabled("spaghetti_detection") else None
 
 
 async def check_printer(p, s: dict) -> None:
@@ -155,6 +161,8 @@ async def check_printer(p, s: dict) -> None:
     status = p._decoded_printinfo().get("Status")
     if status not in PRINTING:
         watch.reset()
+        if _status.pop(p.id, None) is not None:
+            await p._broadcast_state()
         return
     jpeg = await p._camera_picture(max_age_s=0)
     if not jpeg:
@@ -163,8 +171,14 @@ async def check_printer(p, s: dict) -> None:
         found = await asyncio.get_running_loop().run_in_executor(None, ask_detector, jpeg, s)
     except DetectError as e:
         print(f"[Spaghetti] {p.name}: {e}")
+        _status[p.id] = {"state": "unavailable", "bad": 0, "frames": s["frames"], "at": time.time()}
+        await p._broadcast_state()
         return
-    if watch.feed(best_confidence(found), s):
+    alert = watch.feed(best_confidence(found), s)
+    _status[p.id] = {"state": "alert" if watch.announced else "suspect" if watch.bad else "ok",
+                     "bad": watch.bad, "frames": s["frames"], "at": time.time()}
+    await p._broadcast_state()
+    if alert:
         p._emit("spaghetti", f"{p.name} — Possible print failure",
                 "The detector thinks this print may be failing (spaghetti). Check the printer.",
                 priority="urgent")
