@@ -1830,3 +1830,4 @@ main {
 .service-back:hover { border-color: var(--accent); color: var(--accent); }
 .service-bar { height: 10px; }
 .service-bar-fill { transition: width .4s ease; }
+.service-form:not([open]) { display: none; }
