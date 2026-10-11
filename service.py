@@ -54,6 +54,28 @@ def print_hours(printer_id: str, history: list | None = None, data: dict | None 
     return round(secs / 3600, 1)
 
 
+def set_print_hours(printer_id: str, hours) -> float:
+    """Set the printer's total print hours (for example to include what it printed before
+    Spooler). Reminders keep their countdown: only prints from now on count towards them."""
+    if not printer_id:
+        raise ServiceError("Choose a printer.")
+    try:
+        hours = round(float(hours), 1)
+    except (TypeError, ValueError):
+        raise ServiceError("The hours must be a number.")
+    if not 0 <= hours <= 1_000_000:
+        raise ServiceError("The hours are out of range.")
+    with _lock:
+        d = _load()
+        delta = hours - print_hours(printer_id, data=d)
+        d["seconds"][printer_id] = int(hours * 3600)
+        for t in d["tasks"]:
+            if t.get("printer_id") == printer_id:
+                t["done_at_hours"] = round((t.get("done_at_hours") or 0) + delta, 3)
+        _save(d)
+    return hours
+
+
 def add_print_time(printer_id: str, seconds) -> None:
     """Call after a print has been added to the history."""
     try:

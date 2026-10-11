@@ -98,3 +98,23 @@ def test_reminder_counted_in_days(monkeypatch):
 def test_bad_unit_is_refused():
     with pytest.raises(service.ServiceError):
         service.add_task("p1", "x", 5, unit="weeks")
+
+
+def test_total_print_hours_can_be_set_and_reminders_keep_their_countdown():
+    hist(10)
+    t = service.add_task("p1", "Lubricate", 100)
+    service.add_print_time("p1", 3600)                       # counter starts at 10 h
+    hist(10)
+    service.add_print_time("p1", 5 * 3600)                   # 15 h: 5 since the reminder
+    service.set_print_hours("p1", 250)                       # the printer had a long life before Spooler
+    assert service.print_hours("p1") == 250
+    view = service.overview({"p1": "CC1"})["tasks"][0]
+    assert view["hours_since"] == 5 and not view["due"]
+    service.add_print_time("p1", 3600)
+    assert service.print_hours("p1") == 251
+
+
+def test_bad_total_is_refused():
+    for bad in ("abc", -1, 10**9):
+        with pytest.raises(service.ServiceError):
+            service.set_print_hours("p1", bad)

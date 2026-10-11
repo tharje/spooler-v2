@@ -329,7 +329,9 @@ class AdminMixin:
             self._json({"error": "Bad request"}, 400)
             return
         try:
-            if what == "tasks":
+            if what == "hours":
+                item = {"hours": service.set_print_hours(body.get("printer_id"), body.get("hours"))}
+            elif what == "tasks":
                 item = service.add_task(body.get("printer_id"), body.get("name"), body.get("interval"),
                                     body.get("kind") or "other", body.get("unit") or "hours")
             else:

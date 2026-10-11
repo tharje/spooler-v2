@@ -138,7 +138,13 @@ function _machineHtml(d, p) {
   return `
     <div class="service-machine-head">
       <button type="button" class="service-back" data-back="1" aria-label="Back to all printers">‹</button>
-      <div><div class="service-printer">${escHtml(p.name)}</div><div class="service-meta">${p.hours} print hours so far</div></div>
+      <div><div class="service-printer">${escHtml(p.name)}</div><div class="service-meta service-total">Total: <strong>${p.hours} print hours</strong>
+        <button type="button" class="service-link" data-edit-hours="1">Change</button></div>
+        <div class="service-hours-edit" hidden>
+          <input id="svc-hours" type="number" min="0" step="0.1" value="${escAttr(p.hours)}" aria-label="Total print hours" />
+          <button class="btn btn-primary btn-sm" id="svc-hours-save">Save</button>
+          <button class="btn btn-secondary btn-sm" data-edit-hours="0">Cancel</button>
+        </div></div>
     </div>
     <div class="service-h">Parts</div>
     <div class="service-card">${tasks.length ? tasks.map(_taskHtml).join("") : '<p class="service-empty">No parts tracked yet. Add one below.</p>'}</div>
@@ -191,6 +197,12 @@ document.getElementById("service-body").addEventListener("click", (ev) => {
   if (t.dataset.openPrinter) {
     _serviceView = t.dataset.openPrinter;
     renderService();
+  } else if (t.dataset.editHours) {
+    const box = document.querySelector(".service-hours-edit"), tot = document.querySelector(".service-total");
+    box.hidden = t.dataset.editHours !== "1"; tot.hidden = !box.hidden;
+    if (!box.hidden) document.getElementById("svc-hours").select();
+  } else if (t.id === "svc-hours-save") {
+    _serviceAct(() => _serviceCall("POST", "/api/service/hours", { printer_id: _serviceView, hours: v("svc-hours") }));
   } else if (t.dataset.back) {
     _serviceView = null;
     renderService();

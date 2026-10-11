@@ -1831,3 +1831,8 @@ main {
 .service-bar { height: 10px; }
 .service-bar-fill { transition: width .4s ease; }
 .service-form:not([open]) { display: none; }
+.service-link { background: none; border: 0; color: var(--accent); cursor: pointer; font-size: 12px; padding: 0 0 0 6px; }
+.service-total strong { color: var(--text); }
+.service-hours-edit { display: flex; gap: 6px; align-items: center; margin-top: 4px; flex-wrap: wrap; }
+.service-hours-edit[hidden] { display: none; }
+.service-hours-edit input { width: 110px; padding: 6px 10px; font-size: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); }

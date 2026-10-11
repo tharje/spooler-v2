@@ -551,7 +551,7 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
             self._handle_notif_settings()
         elif self.path == "/api/push-test":
             self._handle_push_test()
-        elif self.path in ("/api/service/tasks", "/api/service/log"):
+        elif self.path in ("/api/service/tasks", "/api/service/log", "/api/service/hours"):
             self._handle_service_post(self.path.rsplit("/", 1)[1])
         elif self.path == "/api/api-tokens":
             self._handle_create_api_token()
