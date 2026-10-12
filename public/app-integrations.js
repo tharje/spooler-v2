@@ -218,7 +218,7 @@ function _renderIntegrationsList() {
       </div>` : "";
 
     return `
-      <details class="integration-group" ${group.prefix === "spoolman." ? "open" : ""}>
+      <details class="integration-group">
         <summary>${escHtml(group.title)}</summary>
         <div class="integration-group-body">${group.help ? `<p class="report-desc">${escHtml(group.help)}</p>` : ""}${fieldsHtml}${testHtml}</div>
       </details>`;
