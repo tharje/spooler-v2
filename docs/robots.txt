@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://tharje.github.io/spooler-v2/sitemap.xml
