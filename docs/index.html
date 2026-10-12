@@ -1,0 +1,166 @@
+<!doctype html>
+<!-- Keep in sync with README.md: when the README changes (features, install, supported printers), review this page and update it too. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spooler – self-hosted dashboard for Elegoo Centauri Carbon (CC1 &amp; CC2)</title>
+<meta name="description" content="Monitor several Elegoo Centauri Carbon printers from one browser tab or your phone: live camera, notifications with pictures, Spoolman filament tracking, print history and service reminders. Free, open source, runs on your own server.">
+<link rel="canonical" href="https://tharje.github.io/spooler-v2/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Spooler – self-hosted dashboard for Elegoo Centauri Carbon">
+<meta property="og:description" content="Several printers in one tab, live camera, notifications with pictures, Spoolman filament tracking. Free and open source.">
+<meta property="og:url" content="https://tharje.github.io/spooler-v2/">
+<meta property="og:image" content="https://tharje.github.io/spooler-v2/images/dashboard.png">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+  /* Colours taken from Spooler's own interface (public/style.css) */
+  :root {
+    --bg: #f4f5f9; --surface: #ffffff; --text: #1a1c2a; --muted: #5b6070;
+    --line: #d0d3de; --accent: #cc4f18; --accent-text: #ffffff; --accent-fill: #ff6b2b; --accent-fill-text: #0d0e12;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0d0e12; --surface: #16181f; --text: #e8eaf0; --muted: #9ca3af;
+            --line: #2a2d38; --accent: #ff6b2b; --accent-text: #0d0e12; --accent-fill: #ff6b2b; --accent-fill-text: #0d0e12; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 16px; }
+  header.top { padding: 16px 0; border-bottom: 1px solid var(--line); }
+  header.top .wrap { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  header.top strong { font-size: 18px; }
+  nav a { color: var(--muted); text-decoration: none; margin-left: 16px; }
+  nav a:hover { color: var(--text); }
+  .hero { padding: 56px 0 32px; text-align: center; }
+  h1 { font-size: clamp(28px, 5vw, 44px); line-height: 1.15; margin: 0 0 16px; }
+  .hero p.lead { font-size: 19px; color: var(--muted); max-width: 640px; margin: 0 auto 28px; }
+  .btn { display: inline-block; padding: 12px 22px; border-radius: 8px; text-decoration: none;
+         font-weight: 600; margin: 4px; border: 1px solid var(--accent); }
+  .btn.primary { background: var(--accent-fill); border-color: var(--accent-fill); color: var(--accent-fill-text); }
+  .btn.ghost { color: var(--accent); }
+  .shot { margin: 32px auto 0; }
+  .shot img { width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); display: block; }
+  section { padding: 40px 0; }
+  h2 { font-size: 26px; margin: 0 0 20px; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
+  .card h3 { margin: 0 0 6px; font-size: 17px; }
+  .card p { margin: 0; color: var(--muted); font-size: 15px; }
+  .two { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .two img { width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); }
+  pre { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px;
+        overflow-x: auto; font-size: 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  details { border-bottom: 1px solid var(--line); padding: 12px 0; }
+  summary { cursor: pointer; font-weight: 600; }
+  details p { color: var(--muted); margin: 8px 0 0; }
+  footer { border-top: 1px solid var(--line); padding: 28px 0 48px; color: var(--muted); font-size: 14px; }
+  footer a { color: var(--muted); }
+  a { color: var(--accent); }
+  .tablewrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <strong>Spooler</strong>
+    <nav>
+      <a href="#features">Features</a>
+      <a href="#install">Install</a>
+      <a href="#printers">Printers</a>
+      <a href="#faq">FAQ</a>
+      <a href="https://github.com/tharje/spooler-v2">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="wrap">
+
+  <div class="hero">
+    <h1>A self-hosted dashboard for your Elegoo Centauri Carbon printers</h1>
+    <p class="lead">See all your Centauri Carbon (CC1 and CC2) printers in one browser tab or on your phone. Live camera, notifications with a picture, filament tracking with Spoolman and a history of every print. Free, open source, and nothing leaves your network.</p>
+    <a class="btn primary" href="#install">Install in two commands</a>
+    <a class="btn ghost" href="https://github.com/tharje/spooler-v2">View on GitHub</a>
+    <div class="shot">
+      <img src="images/dashboard.png" alt="Spooler dashboard with a Centauri Carbon 1 and a Centauri Carbon 2: live camera, temperatures, Canvas slots and light control" width="960">
+    </div>
+  </div>
+
+  <section id="why">
+    <h2>Why Spooler</h2>
+    <div class="grid">
+      <div class="card"><h3>All printers in one place</h3><p>Status, progress, temperatures and the camera for every printer on one screen, also on your phone as an installable app (PWA).</p></div>
+      <div class="card"><h3>Knows what is on each spool</h3><p>Links the Canvas slots to your Spoolman spools and deducts the filament that was actually used, per print, from the right spool.</p></div>
+      <div class="card"><h3>Tells you when something is wrong</h3><p>Push, ntfy, Telegram, Discord or a webhook for finished, paused or failed prints, optionally with a camera picture.</p></div>
+      <div class="card"><h3>Yours, not a cloud</h3><p>Runs on your own server. Open source (AGPL-3.0). Password protected, with HTTPS and API keys for your own tools.</p></div>
+    </div>
+  </section>
+
+  <section id="features">
+    <h2>What it does</h2>
+    <div class="grid">
+      <div class="card"><h3>Live status and camera</h3><p>Idle, preparing, printing, paused, done, failed, with the cause and error code when a print stops. MJPEG camera behind login.</p></div>
+      <div class="card"><h3>Progress and control</h3><p>Layer count, percentage, time left. Pause, resume, stop, print speed and the light. Upload and start files from the browser.</p></div>
+      <div class="card"><h3>Filament tracking</h3><p>Live grams per print, Canvas slots linked to Spoolman, a retry queue if Spoolman is unreachable, and low spool warnings.</p></div>
+      <div class="card"><h3>History and statistics</h3><p>Every print with the picture taken when it ended, per period and printer, reference numbers and CSV export.</p></div>
+      <div class="card"><h3>Service logbook</h3><p>Note what you did to each printer and get a reminder after a set number of print hours or days.</p></div>
+      <div class="card"><h3>Spaghetti detection (optional)</h3><p>Watches running prints through the camera with an Obico detector that you run yourself, and notifies you with a picture.</p></div>
+    </div>
+    <div class="two" style="margin-top:24px">
+      <img src="images/spools.png" alt="Spool list with printer assignment and remaining filament" loading="lazy">
+      <img src="images/stats.png" alt="Statistics: prints, success rate, print time and filament per day" loading="lazy">
+    </div>
+  </section>
+
+  <section id="install">
+    <h2>Install</h2>
+    <p>You need <a href="https://docs.docker.com/get-docker/">Docker</a> on a computer or server on the same network as your printers.</p>
+<pre>curl -fsSL https://raw.githubusercontent.com/tharje/spooler-v2/main/docker-compose.yml -o docker-compose.yml
+docker compose up -d</pre>
+    <p>Open <code>http://&lt;server-ip&gt;:8080</code> and create your account. Spooler finds the printers on the network by itself. To update later: <code>docker compose pull &amp;&amp; docker compose up -d</code>. A Python install without Docker is described in the <a href="https://github.com/tharje/spooler-v2#option-b--python-no-docker">README</a>.</p>
+  </section>
+
+  <section id="printers">
+    <h2>Supported printers</h2>
+    <div class="tablewrap">
+    <table>
+      <tr><th>Printer</th><th>Status</th><th>Notes</th></tr>
+      <tr><td>Elegoo Centauri Carbon (CC1)</td><td>Supported</td><td>Status, camera, controls, upload, Canvas, light</td></tr>
+      <tr><td>Elegoo Centauri Carbon 2 (CC2)</td><td>Supported</td><td>Status, camera, controls, upload, Canvas, light</td></tr>
+      <tr><td>Prusa (PrusaLink)</td><td>Experimental</td><td>Basic monitoring</td></tr>
+      <tr><td>Klipper (Moonraker)</td><td>Experimental</td><td>Basic monitoring</td></tr>
+    </table>
+    </div>
+    <p style="color:var(--muted);font-size:14px">Spooler tells you when a firmware version has not been tested yet. See the README for the list of tested versions.</p>
+  </section>
+
+  <section id="faq">
+    <h2>Questions</h2>
+    <details><summary>Does it need internet or an account?</summary><p>No. Everything runs on your own network. Internet is only used for optional things you switch on yourself, such as push or Telegram notifications.</p></details>
+    <details><summary>Does it replace Spoolman?</summary><p>No, it works with it. Spoolman keeps your spool inventory, and Spooler tells it how much each print used. The Docker setup starts both.</p></details>
+    <details><summary>Can I use it on my phone?</summary><p>Yes. Open it in the phone's browser and choose Add to Home Screen. Use HTTPS (port 8443, or Tailscale serve) for the full app experience.</p></details>
+    <details><summary>Is it safe to leave on?</summary><p>It is password protected, supports HTTPS and uses scoped API keys. Do not expose it directly to the internet; use a VPN such as Tailscale for access from outside your home.</p></details>
+    <details><summary>Is it affiliated with ELEGOO?</summary><p>No. Spooler is an independent project. ELEGOO and Centauri Carbon are trademarks of their respective owners.</p></details>
+    <details><summary>Something does not work. What do I do?</summary><p>Use <strong>Report bug</strong> in the footer of Spooler; it prepares a GitHub issue with your printer model and firmware and leaves out addresses and secrets.</p></details>
+  </section>
+
+</div>
+</main>
+
+<footer>
+  <div class="wrap">
+    Spooler is free software under the <a href="https://github.com/tharje/spooler-v2/blob/main/LICENSE">AGPL-3.0</a>.
+    <a href="https://github.com/tharje/spooler-v2">Source</a> ·
+    <a href="https://github.com/tharje/spooler-v2/releases">Releases</a> ·
+    <a href="https://github.com/tharje/spooler-v2/issues">Issues</a><br>
+    Not affiliated with or endorsed by ELEGOO, Prusa Research or the Klipper/Moonraker projects.
+  </div>
+</footer>
+
+</body>
+</html>

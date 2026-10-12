@@ -1,3 +1,4 @@
+<!-- When you change this README (features, install, supported printers, disclaimer), also review docs/index.html, the project's web page, and update it to match. -->
 # Spooler v2
 
 Local web GUI for **Elegoo Centauri Carbon** FDM 3D printers (CC1 and CC2). Monitor and control multiple printers from a single browser tab — or install as a PWA on your phone. Experimental support for **Prusa (PrusaLink)** and **Klipper (Moonraker)** printers is also included.
