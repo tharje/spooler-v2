@@ -871,7 +871,11 @@ class PrinterConnection:
             acct = self._acct or PrintAccounting(current_spool=self._tray_spool())
             acct.observe(filament_mm)
             filament_mm = acct.total_mm()
-            if filament_mm > 0 or filename:
+            # Heating and feeding by hand (loading filament, clearing a clog) looks like a
+            # short "print" with some filament, but no file and no print time: not a print.
+            if filament_mm > 0 and not filename and not print_time:
+                print(f"[Printer {self.name}] Ignored {filament_mm:.0f} mm of filament fed with no print running")
+            elif filament_mm > 0 or filename:
                 loop = asyncio.get_running_loop()
                 density    = await loop.run_in_executor(None, get_spool_density, self.id)
                 self.filament_density = density

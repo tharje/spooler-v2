@@ -166,6 +166,28 @@ async def test_no_history_entry_when_no_filament_and_no_filename(printer):
 
 
 @pytest.mark.asyncio
+async def test_filament_fed_by_hand_is_not_a_print(printer):
+    """Feeding filament while clearing a clog (a busy status, some extrusion, no file, no print time)
+    must not leave history entries, pictures or spool deductions behind."""
+    for _ in range(3):
+        _set_status(printer, 2, TotalExtrusion=0)
+        await printer._check_print_transition()
+        _set_status(printer, 0, TotalExtrusion=120)      # printer goes back to idle, no file, PrintTime 0
+        await printer._check_print_transition()
+    assert persistence.load_history() == []
+    assert printer._acct is None
+
+
+@pytest.mark.asyncio
+async def test_short_cancelled_print_without_filename_is_still_recorded(printer):
+    _set_status(printer, 2, TotalExtrusion=0)
+    await printer._check_print_transition()
+    _set_status(printer, 8, TotalExtrusion=300, PrintTime=2)
+    await printer._check_print_transition()
+    assert len(persistence.load_history()) == 1
+
+
+@pytest.mark.asyncio
 async def test_idle_to_idle_does_not_append_history(printer):
     _set_status(printer, 0, TotalExtrusion=0)
     await printer._check_print_transition()
