@@ -293,6 +293,10 @@ If you run a firmware version that works, add it to `tested_firmware.json` in th
 - **Spool manager** – [Spoolman](https://github.com/Donkie/Spoolman) (official Docker image)
 - **Filament database** – [SpoolmanDB](https://github.com/Donkie/SpoolmanDB)
 
+## Contributing
+
+Bug reports, test results from your own printer and pull requests are welcome. Tell us what works on your printer and firmware (there is an issue template for it), or pick something small to start with. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to run the tests and open a pull request (against `dev`).
+
 ## Contributors
 
 - [snazy2000](https://github.com/snazy2000) — modular backend refactor (auth, discovery, spoolman, printers modules), AMS/Canvas multi-material hub support
