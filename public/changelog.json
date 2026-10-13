@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.3.0-beta.5",
+    "date": "2026-10-13",
+    "changes": [
+      "Fixed: filament fed or heated by hand with no print running (loading filament, clearing a clog) no longer shows up in the history as a cancelled print",
+      "Settings: the Spoolman section under Integrations now starts closed like the others"
+    ]
+  },
+  {
     "version": "2.3.0-beta.4",
     "date": "2026-10-11",
     "changes": [
