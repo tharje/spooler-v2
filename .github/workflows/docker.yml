@@ -26,8 +26,20 @@ jobs:
       - name: Run tests
         run: pytest
 
-  push:
+  # Builds the real image and starts it (scripts/docker-smoke-test.sh), because
+  # pytest runs on plain Python and cannot see problems that only exist inside
+  # the image. Nothing is published unless this passes too.
+  smoke:
     needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image and check that it starts and answers
+        run: scripts/docker-smoke-test.sh
+
+  push:
+    needs: [test, smoke]
     runs-on: ubuntu-latest
     permissions:
       contents: read

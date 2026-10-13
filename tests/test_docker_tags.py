@@ -82,3 +82,11 @@ def test_current_changelog_version_is_a_valid_tag():
         assert f"{IMG}:beta" in out and f"{IMG}:latest" not in out
     else:
         assert f"{IMG}:latest" in out
+
+
+def test_publishing_waits_for_the_image_smoke_test():
+    """The image is only pushed after the real image has been built and started."""
+    wf = (ROOT / ".github" / "workflows" / "docker.yml").read_text()
+    assert "scripts/docker-smoke-test.sh" in wf
+    assert "needs: [test, smoke]" in wf
+    assert (ROOT / "scripts" / "docker-smoke-test.sh").exists()
