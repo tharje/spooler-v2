@@ -46,4 +46,4 @@ Spooler talks to printers with protocols that are not officially documented, so 
 - Test Spooler on a printer or firmware that is not in the tested list and report the result.
 - Documentation: unclear steps, missing screenshots, typos.
 - Printer error messages that are missing or worded unclearly (`printers/error_codes.py`).
-- Issues labelled `good first issue` or `help wanted`.
+- Issues labelled `help wanted`.
