@@ -5,6 +5,7 @@ Mixin for http_handler.SPHandler; split out of http_handler.py unchanged.
 """
 
 import http.client
+import camera_hub
 import state
 import urllib.error
 import urllib.parse
@@ -24,45 +25,31 @@ class ProxyMixin:
             print(f"[Camera] {p.name if p else printer_id}: no camera address known (yet)")
             self._json({"error": "Camera not available"}, 404)
             return
-        conn = None
+        # One shared connection to the printer's camera, however many viewers
+        # (see camera_hub.py); each viewer gets its own multipart framing.
+        sub = camera_hub.hubs.subscribe(p.camera_url)
         try:
-            parsed = urllib.parse.urlparse(p.camera_url)
-            path = parsed.path or "/"
-            if parsed.query:
-                path = f"{path}?{parsed.query}"
-            conn = http.client.HTTPConnection(parsed.hostname, parsed.port or 80, timeout=10)
-            conn.request("GET", path)
-            upstream = conn.getresponse()
-            if upstream.status != 200:
-                print(f"[Camera] {p.name}: the printer's camera answered HTTP {upstream.status}")
-                self._json({"error": f"camera returned {upstream.status}"}, 503)
+            first = sub.next(timeout=10)
+            if first is None:
+                print(f"[Camera] {p.name}: the printer's camera gave no picture")
+                self._json({"error": "camera returned no picture"}, 503)
                 return
-            try:
-                conn.sock.settimeout(None)  # no per-read timeout — stream runs indefinitely
-            except Exception:
-                pass
-            ct = upstream.getheader("Content-Type", "multipart/x-mixed-replace; boundary=frame")
             self.send_response(200)
-            self.send_header("Content-Type", ct)
+            self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
             self.send_header("Cache-Control", "no-cache")
             self.end_headers()
-            while True:
-                chunk = upstream.read(8192)
-                if not chunk:
-                    break
-                self.wfile.write(chunk)
+            frame = first
+            while frame is not None:
+                self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "
+                                 + str(len(frame)).encode() + b"\r\n\r\n" + frame + b"\r\n")
                 self.wfile.flush()
+                frame = sub.next(timeout=60)   # silent for a minute: end, the browser reconnects
         except (ConnectionResetError, BrokenPipeError):
             pass    # the browser closed the picture
         except Exception as e:
-            # Said once per failure so "no camera feed" can be told apart from a printer that won't serve it.
-            print(f"[Camera] {p.name}: could not read the printer's camera ({type(e).__name__}: {e})")
+            print(f"[Camera] {p.name}: could not serve the camera ({type(e).__name__}: {e})")
         finally:
-            if conn:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
+            sub.close()
 
     @requires_feature("camera")
     def _proxy_thumbnail(self):
