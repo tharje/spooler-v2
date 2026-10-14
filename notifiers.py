@@ -26,7 +26,11 @@ class NotifierError(Exception):
 
 def _request(url: str, data: bytes | None = None, headers: dict | None = None,
              method: str | None = None) -> bytes:
-    req = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
+    headers = dict(headers or {})
+    # urllib's default "Python-urllib/3.x" is blocked by Cloudflare (Discord answers 403).
+    if not any(k.lower() == "user-agent" for k in headers):
+        headers["User-Agent"] = "Spooler"
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
             return r.read()

@@ -3,7 +3,8 @@
     "version": "2.3.0-beta.6",
     "date": "2026-10-14",
     "changes": [
-      "Fixed: the camera could stop working until the printer was power cycled (Centauri Carbon 2). Spooler now keeps one connection to each printer's camera, shared by every browser tab, instead of one per tab and refresh"
+      "Fixed: the camera could stop working until the printer was power cycled (Centauri Carbon 2). Spooler now keeps one connection to each printer's camera, shared by every browser tab, instead of one per tab and refresh",
+      "Fixed: Discord notifications failed with HTTP 403 because Discord's Cloudflare blocks Python's default user agent. Spooler now identifies itself as Spooler (thanks joshm-cmd)"
     ]
   },
   {

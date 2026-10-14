@@ -483,3 +483,24 @@ def test_print_complete_and_layer_notices_work_for_the_cc1_printing_status():
     for status, layer in [(0, 0), (18, 0), (13, 1), (13, 3), (13, 4), (9, 4), (9, 4)]:
         at(status, layer)
     assert p.emitted == ["layer_reached", "print_complete"]
+
+
+def test_outgoing_requests_do_not_use_the_default_python_user_agent(monkeypatch):
+    """Discord sits behind Cloudflare, which answers 403 to "Python-urllib"."""
+    import notifiers
+    seen = []
+
+    class _Resp:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return b""
+
+    def fake_urlopen(req, timeout=None):
+        seen.append(req)
+        return _Resp()
+
+    monkeypatch.setattr(notifiers.urllib.request, "urlopen", fake_urlopen)
+    notifiers._request("https://example.com/hook", data=b"{}")
+    notifiers._request("https://example.com/hook", headers={"user-agent": "Mine"})
+    assert seen[0].get_header("User-agent") == "Spooler"
+    assert seen[1].get_header("User-agent") == "Mine"
