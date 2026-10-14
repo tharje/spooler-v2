@@ -1,5 +1,12 @@
 [
   {
+    "version": "2.3.0-beta.6",
+    "date": "2026-10-14",
+    "changes": [
+      "Fixed: the camera could stop working until the printer was power cycled (Centauri Carbon 2). Spooler now keeps one connection to each printer's camera, shared by every browser tab, instead of one per tab and refresh"
+    ]
+  },
+  {
     "version": "2.3.0-beta.5",
     "date": "2026-10-13",
     "changes": [
