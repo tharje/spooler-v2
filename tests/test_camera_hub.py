@@ -56,3 +56,25 @@ def test_three_viewers_use_one_printer_connection_and_it_closes_after():
         assert _Cam.open_now == 0
     finally:
         srv.shutdown()
+
+
+def test_pictures_reuse_one_connection_and_it_closes_after_the_linger(monkeypatch):
+    monkeypatch.setattr(camera_hub, "LINGER", 1.0)
+    srv, url = _serve()
+    try:
+        assert camera_hub.hubs.picture(url, 5) == FRAME
+        time.sleep(0.3)
+        assert camera_hub.hubs.picture(url, 5) == FRAME
+        assert _Cam.connections == 1             # the second picture reused the stream
+        deadline = time.monotonic() + 6
+        while _Cam.open_now and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert _Cam.open_now == 0                # closed once nobody asked for a while
+    finally:
+        srv.shutdown()
+
+
+def test_a_refused_camera_gives_no_picture_and_no_retry_loop():
+    t0 = time.monotonic()
+    assert camera_hub.hubs.picture("http://127.0.0.1:1/mjpeg", 3) is None
+    assert time.monotonic() - t0 < 3

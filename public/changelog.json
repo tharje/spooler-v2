@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.3.0-beta.7",
+    "date": "2026-10-15",
+    "changes": [
+      "Camera (Centauri Carbon 2): Spooler now keeps even fewer connections to the printer's camera. Pictures for Obico, notifications and the end-of-print image are taken from the one shared stream instead of opening and cutting off a new one each time, and the stream is closed when nobody needs it",
+      "Camera: if the printer refuses camera connections, Spooler tries once a minute instead of every few seconds, and the camera box now suggests power cycling the printer"
+    ]
+  },
+  {
     "version": "2.3.0-beta.6",
     "date": "2026-10-14",
     "changes": [

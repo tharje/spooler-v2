@@ -276,7 +276,14 @@ function renderPrinter(printer) {
       // fires correctly when the stream genuinely drops, so that's all we
       // rely on here.
       img.addEventListener('load',  () => { placeholder.style.display = 'none'; });
-      img.addEventListener('error', () => { img.style.display = 'none'; placeholder.style.display = 'flex'; });
+      img.addEventListener('error', () => {
+        img.style.display = 'none'; placeholder.style.display = 'flex';
+        const label = placeholder.querySelector('span');
+        // The CC2's camera service can stop until the printer is power cycled.
+        if (label && label.textContent === 'No camera feed') {
+          label.textContent = "No camera feed. If it stays dark, the printer's camera service may have stopped: power cycle the printer.";
+        }
+      });
       cameraDiv.insertBefore(img, cameraDiv.firstChild);
     }
   }
