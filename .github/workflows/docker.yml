@@ -3,7 +3,7 @@ name: Publish Docker image
 on:
   push:
     branches: [main]
-    # Releases and pre-releases: v2.3.0 -> :2.3.0 + :latest, v2.3.0-beta.1 -> :2.3.0-beta.1 + :beta.
+    # Releases and pre-releases: v2.3.0 -> :2.3.0 + :latest + :beta, v2.3.0-beta.1 -> :2.3.0-beta.1 + :beta.
     # :latest never points to a pre-release (see scripts/docker-tags.sh).
     tags: ["v*"]
 

@@ -23,8 +23,8 @@ def test_push_to_main_keeps_publishing_latest_and_the_sha():
     assert tags("refs/heads/main", "main", "2.3.0-beta") == (0, f"{IMG}:latest,{IMG}:abc123", "")
 
 
-def test_release_tag_gets_its_version_and_latest():
-    assert tags("refs/tags/v2.3.0", "v2.3.0", "2.3.0")[:2] == (0, f"{IMG}:2.3.0,{IMG}:latest")
+def test_release_tag_gets_its_version_latest_and_beta():
+    assert tags("refs/tags/v2.3.0", "v2.3.0", "2.3.0")[:2] == (0, f"{IMG}:2.3.0,{IMG}:latest,{IMG}:beta")
 
 
 @pytest.mark.parametrize("name,changelog,version", [

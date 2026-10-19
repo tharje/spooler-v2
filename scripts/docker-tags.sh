@@ -6,7 +6,8 @@
 # Prints the tags comma-separated, or exits 1 with a reason on stderr.
 #
 #   push to main            -> :latest and :<sha>                  (what has always been published)
-#   tag v2.3.0              -> :2.3.0 and :latest                  (a normal release)
+#   tag v2.3.0              -> :2.3.0, :latest and :beta           (a normal release; :beta follows it so
+#                                                           beta users move to the release)
 #   tag v2.3.0-beta.1       -> :2.3.0-beta.1 and :beta             (a pre-release; never :latest)
 #
 # Any version with a hyphen (-beta.1, -rc.1, ...) is a pre-release. The tag must
@@ -35,7 +36,7 @@ case "$ref" in
     if [[ "$ver" == *-* ]]; then
       echo "${image}:${ver},${image}:beta"
     else
-      echo "${image}:${ver},${image}:latest"
+      echo "${image}:${ver},${image}:latest,${image}:beta"
     fi
     ;;
   *)
