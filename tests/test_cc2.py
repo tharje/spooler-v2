@@ -384,3 +384,34 @@ def test_phase_is_blank_when_the_printer_is_offline(printer):
     assert printer.to_dict()["phase"] == "Leveling"
     printer.connected = False
     assert printer.to_dict()["phase"] == "" and printer.to_dict()["state"] == "offline"
+
+
+def _progress_state(printer, ms_progress, state="printing", sub_status=0):
+    printer._cc2_state["print_status"] = {
+        "state": state, "print_duration": 126, "remaining_time_sec": 300,
+    }
+    ms = {"sub_status": sub_status}
+    if ms_progress is not None:
+        ms["progress"] = ms_progress
+    printer._cc2_state["machine_status"] = ms
+    printer._apply_cc2_status()
+    return printer.status["PrintInfo"]["CurrentTicks"]
+
+
+def test_progress_uses_printer_reported_percentage(printer):
+    # Live capture 2026-10-19: printer said 42 %, time-based estimate gave 30 %.
+    assert _progress_state(printer, 42) == 42
+
+
+def test_progress_falls_back_to_time_estimate_without_reported_value(printer):
+    assert _progress_state(printer, None) == 30
+
+
+@pytest.mark.parametrize("bad", [-1, 101, "42", True])
+def test_progress_ignores_invalid_reported_value(printer, bad):
+    assert _progress_state(printer, bad) == 30
+
+
+def test_progress_ignores_reported_value_when_not_printing(printer):
+    # Outside printing/paused the reported value is not used (stale after a finished print).
+    assert _progress_state(printer, 42, state="") != 42

@@ -751,6 +751,16 @@ class CC2Connection(PrinterConnection):
 
         total    = print_duration + remaining
         progress = min(100, round(print_duration / total * 100)) if total > 0 else 0
+        # machine_status.progress is the printer's own percentage (verified live
+        # 2026-10-19: steps up 1% at a time and differs from the time-based
+        # estimate by 8-12 points because remaining_time_sec only moves in
+        # 60 s steps). Prefer it while a print is active; keep the estimate as
+        # fallback for firmware that doesn't send it.
+        reported = ms.get("progress")
+        if (state_str in ("printing", "paused") and status_code != 0
+                and isinstance(reported, (int, float)) and not isinstance(reported, bool)
+                and 0 <= reported <= 100):
+            progress = round(reported)
 
         new_print = state_str == "printing" and self._prev_state_str not in ("printing", "paused")
         if new_print:
