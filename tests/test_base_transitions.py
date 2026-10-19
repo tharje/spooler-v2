@@ -12,6 +12,7 @@ import pytest
 
 import persistence
 import printers.base as base_mod
+from printaccount import PrintAccounting
 from printers.base import PrinterConnection, classify_display_state, classify_print_transition
 
 
@@ -58,8 +59,12 @@ def test_classify_print_transition(prev, cur, expected):
     (True, 9, False, "complete"),
     (True, 14, False, "error"),         # the confirmed bug: must NOT be "cancelled"
     (True, 0, True, "preparing"),       # CC1's CurrentStatus[0]==9 + Status==0 quirk
-    (True, 11, False, "unknown"),       # never-documented code: must NOT be "idle"
-    (True, 17, False, "unknown"),
+    (True, 11, False, "preparing"),     # CC1: printer checking (Elegoo SDK)
+    (True, 17, False, "preparing"),     # CC1: resonance test
+    (True, 22, False, "preparing"),
+    (True, 23, False, "preparing"),     # CC1: filament feeding from the screen
+    (True, 27, False, "unknown"),       # undocumented code: must NOT be "idle"
+    (True, 99, False, "unknown"),
 ])
 def test_classify_display_state(connected, code, homing, expected):
     assert classify_display_state(connected, code, homing) == expected
@@ -81,9 +86,8 @@ def printer(monkeypatch):
     p = PrinterConnection("pid1", "10.0.0.5", "Test Printer")
     p.connected = True
     monkeypatch.setattr(base_mod, "get_spool_density", lambda printer_id: 1.24)
-    monkeypatch.setattr(base_mod, "spoolman_deduct", lambda *a, **kw: None)
-    monkeypatch.setattr(base_mod, "spoolman_deduct_spool", lambda *a, **kw: None)
-    return p
+    p._last_print_status = 0     # an idle status has already been seen (a first status that is already
+    return p                     # "printing" means Spooler restarted mid-print: see test_filament_accounting.py)
 
 
 def _set_status(printer, status_code, **printinfo_overrides):
@@ -93,12 +97,13 @@ def _set_status(printer, status_code, **printinfo_overrides):
 
 @pytest.mark.asyncio
 async def test_print_start_initializes_extrusion_tracking(printer):
-    printer._extrusion_snapshot = 999.0
-    printer._spool_extrusion = {1: 50.0}
+    printer._acct = PrintAccounting(current_spool=7)       # leftover from some earlier print
+    printer._acct.per_spool = {1: 50.0}
+    old_id = printer._acct.print_id
     _set_status(printer, 2, TotalExtrusion=0)
     await printer._check_print_transition()
-    assert printer._extrusion_snapshot == 0.0
-    assert printer._spool_extrusion == {}
+    assert printer._acct.print_id != old_id
+    assert printer._acct.per_spool == {} and printer._acct.total_mm() == 0.0
     assert printer._print_start_time is not None
 
 
@@ -109,14 +114,16 @@ async def test_complete_to_printing_resets_snapshot_regression(printer):
     per-print extrusion tracking — this was the actual production bug."""
     _set_status(printer, 9, TotalExtrusion=500)
     await printer._check_print_transition()  # printer sits at "complete"
-    printer._extrusion_snapshot = 500.0        # simulate stale leftover snapshot
-    printer._spool_extrusion = {1: 500.0}
+    printer._acct = PrintAccounting()          # simulate stale leftover accounting
+    printer._acct.snapshot_mm = 500.0
+    printer._acct.per_spool = {1: 500.0}
+    old_id = printer._acct.print_id
 
     _set_status(printer, 2, TotalExtrusion=0)  # next print starts directly from 9
     await printer._check_print_transition()
 
-    assert printer._extrusion_snapshot == 0.0
-    assert printer._spool_extrusion == {}
+    assert printer._acct.print_id != old_id
+    assert printer._acct.snapshot_mm == 0.0 and printer._acct.per_spool == {}
 
 
 @pytest.mark.asyncio
@@ -156,6 +163,28 @@ async def test_no_history_entry_when_no_filament_and_no_filename(printer):
     await printer._check_print_transition()
 
     assert persistence.load_history() == []
+
+
+@pytest.mark.asyncio
+async def test_filament_fed_by_hand_is_not_a_print(printer):
+    """Feeding filament while clearing a clog (a busy status, some extrusion, no file, no print time)
+    must not leave history entries, pictures or spool deductions behind."""
+    for _ in range(3):
+        _set_status(printer, 2, TotalExtrusion=0)
+        await printer._check_print_transition()
+        _set_status(printer, 0, TotalExtrusion=120)      # printer goes back to idle, no file, PrintTime 0
+        await printer._check_print_transition()
+    assert persistence.load_history() == []
+    assert printer._acct is None
+
+
+@pytest.mark.asyncio
+async def test_short_cancelled_print_without_filename_is_still_recorded(printer):
+    _set_status(printer, 2, TotalExtrusion=0)
+    await printer._check_print_transition()
+    _set_status(printer, 8, TotalExtrusion=300, PrintTime=2)
+    await printer._check_print_transition()
+    assert len(persistence.load_history()) == 1
 
 
 @pytest.mark.asyncio
@@ -239,6 +268,23 @@ async def test_resume_clears_state_reason_and_records_pause_duration(printer):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("resumed_status", [15, 16, 19, 20])
+async def test_pause_notice_goes_away_when_the_printer_starts_working_again(printer, resumed_status):
+    """After a pause the printer may reheat or level before it prints again; the pause notice must not wait for the first printing status."""
+    _set_status(printer, 2, TotalExtrusion=0)
+    await printer._check_print_transition()
+    _set_status(printer, 6, TotalExtrusion=0)
+    await printer._check_print_transition()
+    assert printer.state_reason["kind"] == "pause"
+
+    _set_status(printer, resumed_status, TotalExtrusion=0)
+    await printer._check_print_transition()
+
+    assert printer.state_reason is None
+    assert printer._current_print_pauses[0]["until"] is not None
+
+
+@pytest.mark.asyncio
 async def test_state_reason_persists_through_idle_until_next_print_start(printer):
     _set_status(printer, 2, TotalExtrusion=0)
     await printer._check_print_transition()
@@ -297,33 +343,25 @@ async def test_cancelled_end_state_has_no_error_fields(printer):
 
 # ── last_seen (T4) ────────────────────────────────────────────────────────────
 
-@pytest.mark.asyncio
-async def test_broadcast_state_marks_last_seen_while_connected(printer):
+def test_mark_seen_records_the_time(printer):
     assert printer.last_seen is None
-    _set_status(printer, 0)
-    await printer._broadcast_state()
+    printer._mark_seen()
     assert printer.last_seen is not None
     assert printer.last_seen <= time.time()
 
 
 @pytest.mark.asyncio
-async def test_broadcast_state_does_not_mark_last_seen_when_disconnected(printer):
-    printer.connected = False
+async def test_broadcast_state_never_touches_last_seen(printer):
+    # last_seen moved out of _broadcast_state (I2): broadcasting also happens
+    # for browser-side reasons and says nothing about the printer.
     _set_status(printer, 0)
     await printer._broadcast_state()
     assert printer.last_seen is None
-
-
-@pytest.mark.asyncio
-async def test_disconnect_does_not_refresh_a_previous_last_seen(printer):
-    _set_status(printer, 2)
+    printer.last_seen = 1000.0
     await printer._broadcast_state()
-    first_seen = printer.last_seen
-    assert first_seen is not None
-
     printer.connected = False
-    await printer._broadcast_state()  # simulates the disconnect notification broadcast
-    assert printer.last_seen == first_seen  # not bumped by the disconnect itself
+    await printer._broadcast_state()       # a disconnect notice
+    assert printer.last_seen == 1000.0
 
 
 def test_to_dict_exposes_last_seen(printer):

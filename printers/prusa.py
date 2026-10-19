@@ -9,10 +9,12 @@ import asyncio
 import json
 import math
 import urllib.error
+import urllib.parse
 import urllib.request
 
 import state
 from printers.base import PrinterConnection
+from uploads import UploadError, forward_timeout, put_file
 from printers.protocol import CMD_PAUSE, CMD_RESUME, CMD_STOP
 
 POLL_INTERVAL = 2.0
@@ -69,10 +71,12 @@ class PrusaConnection(PrinterConnection):
                     self._req("GET", "/api/v1/status"),
                     self._safe_job(),
                 )
+                self._mark_seen()
                 fail_streak = 0
                 if not self.connected:
                     self.connected = True
                     print(f"[Printer {self.name}] Connected!")
+                    await self._fetch_version()
                     await self._broadcast_state()
                 self._apply_status(status_data, job_data)
                 await self._check_print_transition()
@@ -87,6 +91,18 @@ class PrusaConnection(PrinterConnection):
                 await asyncio.sleep(POLL_INTERVAL * 3)
                 continue
             await asyncio.sleep(POLL_INTERVAL)
+
+    async def _fetch_version(self) -> None:
+        """Firmware from PrusaLink's /api/v1/info ("firmware"). Not yet confirmed
+        against a real printer; any failure just leaves the version unknown."""
+        try:
+            info = await self._req("GET", "/api/v1/info")
+            version = (info or {}).get("firmware")
+            if version:
+                self.attrs = {**(self.attrs or {}), "FirmwareVersion": str(version)}
+                self._note_firmware()
+        except Exception as e:
+            print(f"[Printer {self.name}] Could not read the firmware version: {type(e).__name__}")
 
     async def _safe_job(self) -> dict:
         try:
@@ -239,6 +255,29 @@ class PrusaConnection(PrinterConnection):
             if is_dir and isinstance(f.get("children"), list):
                 result.extend(self._parse_files(f["children"]))
         return result
+
+    supports_upload = True
+
+    async def upload_file(self, local_path, remote_name: str, start_after: bool = False) -> bool:
+        # PrusaLink v1: PUT /api/v1/files/{storage}/{path}. Not yet verified
+        # against a real printer.
+        size = local_path.stat().st_size
+        loop = asyncio.get_running_loop()
+        headers = {"Overwrite": "?1", "Print-After-Upload": "?1" if start_after else "?0"}
+        if self.access_code:
+            headers["X-Api-Key"] = self.access_code
+
+        def _send():
+            return put_file(self.ip, 80, f"/api/v1/files/usb/{urllib.parse.quote(remote_name)}",
+                            local_path, headers=headers, timeout=forward_timeout(size))
+        try:
+            status, body = await loop.run_in_executor(None, _send)
+        except OSError as e:
+            raise UploadError(f"Could not reach the printer: {e}") from e
+        if status not in (200, 201):
+            raise UploadError(f"PrusaLink rejected the upload (HTTP {status}): "
+                              f"{body.decode('utf-8', errors='replace')[:300]}")
+        return True
 
     async def start_print_file(self, filename: str, print_opts: dict | None = None) -> bool:
         name = filename.lstrip("/").removeprefix("usb/").removeprefix("local/")

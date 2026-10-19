@@ -15,6 +15,7 @@ import urllib.request
 
 import state
 from printers.base import PrinterConnection
+from uploads import UploadError, forward_timeout, post_multipart_file
 from printers.protocol import CMD_PAUSE, CMD_RESUME, CMD_STOP
 
 POLL_INTERVAL = 2.0
@@ -96,10 +97,12 @@ class MoonrakerConnection(PrinterConnection):
         while True:
             try:
                 raw = await self._req("GET", _QUERY_PATH)
+                self._mark_seen()
                 fail_streak = 0
                 if not self.connected:
                     self.connected = True
                     print(f"[Printer {self.name}] Connected!")
+                    await self._fetch_version()
                     await self._broadcast_state()
                 self._apply_status(raw.get("result", {}).get("status", {}))
                 await self._check_print_transition()
@@ -114,6 +117,19 @@ class MoonrakerConnection(PrinterConnection):
                 await asyncio.sleep(POLL_INTERVAL * 3)
                 continue
             await asyncio.sleep(POLL_INTERVAL)
+
+    async def _fetch_version(self) -> None:
+        """Klipper's own version from /printer/info (software_version). Not yet
+        confirmed against a real Moonraker host; any failure just leaves the
+        version unknown."""
+        try:
+            info = await self._req("GET", "/printer/info")
+            version = ((info or {}).get("result") or {}).get("software_version")
+            if version:
+                self.attrs = {**(self.attrs or {}), "FirmwareVersion": str(version)}
+                self._note_firmware()
+        except Exception as e:
+            print(f"[Printer {self.name}] Could not read the Klipper version: {type(e).__name__}")
 
     # ── Status mapping ────────────────────────────────────────────────────────
 
@@ -257,6 +273,29 @@ class MoonrakerConnection(PrinterConnection):
                 "filament_g": None,
             })
         return result
+
+    supports_upload = True
+
+    async def upload_file(self, local_path, remote_name: str, start_after: bool = False) -> bool:
+        size = local_path.stat().st_size
+        loop = asyncio.get_running_loop()
+        fields = {"root": "gcodes"}
+        if start_after:
+            fields["print"] = "true"
+        headers = {"X-Api-Key": self.access_code} if self.access_code else {}
+
+        def _send():
+            return post_multipart_file(self.ip, 7125, "/server/files/upload", fields, "file",
+                                       remote_name, local_path, headers=headers,
+                                       timeout=forward_timeout(size))
+        try:
+            status, body = await loop.run_in_executor(None, _send)
+        except OSError as e:
+            raise UploadError(f"Could not reach the printer: {e}") from e
+        if status not in (200, 201):
+            raise UploadError(f"Moonraker rejected the upload (HTTP {status}): "
+                              f"{body.decode('utf-8', errors='replace')[:300]}")
+        return True
 
     async def start_print_file(self, filename: str, print_opts: dict | None = None) -> bool:
         name = filename.lstrip("/")

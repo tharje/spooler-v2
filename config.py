@@ -78,6 +78,28 @@ FIELDS: dict = {
     "slicer.url": Field(
         key="slicer.url", label="Slicer URL", type="url", default="", schemes=("http", "https"),
     ),
+    "ntfy.url": Field(
+        key="ntfy.url", label="ntfy server", type="url", default="https://ntfy.sh",
+        schemes=("http", "https"),
+    ),
+    "ntfy.topic": Field(key="ntfy.topic", label="ntfy topic", type="text", default=""),
+    "ntfy.token": Field(key="ntfy.token", label="ntfy access token (optional)", type="secret", default=""),
+    "telegram.token": Field(key="telegram.token", label="Telegram bot token", type="secret", default=""),
+    "telegram.chat_id": Field(key="telegram.chat_id", label="Telegram chat ID", type="text", default=""),
+    "discord.webhook": Field(key="discord.webhook", label="Discord webhook address", type="secret", default=""),
+    "webhook.url": Field(key="webhook.url", label="Webhook address", type="secret", default=""),
+    "spaghetti.url": Field(
+        key="spaghetti.url", label="Detector address (Obico ML API)", type="url", default="",
+        schemes=("http", "https"),
+    ),
+    "spaghetti.token": Field(key="spaghetti.token", label="Detector access token (optional)", type="secret", default=""),
+    "spaghetti.spooler_url": Field(
+        key="spaghetti.spooler_url", label="Spooler's address as the detector sees it", type="url", default="",
+        schemes=("http", "https"),
+    ),
+    "spaghetti.threshold": Field(key="spaghetti.threshold", label="Sensitivity: confidence % that counts (10-95)", type="int", default=50),
+    "spaghetti.frames": Field(key="spaghetti.frames", label="Pictures in a row before alerting (1-10)", type="int", default=3),
+    "spaghetti.interval_s": Field(key="spaghetti.interval_s", label="Seconds between pictures (15-600)", type="int", default=60),
     "backup.interval_days": Field(
         key="backup.interval_days", label="Automatic backup interval (days)", type="int",
         env="SPOOLER_BACKUP_INTERVAL_DAYS", default=1,

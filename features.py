@@ -35,8 +35,11 @@ class Feature:
     description: str
     default: bool
     requires: tuple = ()          # other feature keys that must be on first
-    requires_config: tuple = ()   # config keys that must be set (T8 -- none yet)
+    requires_config: tuple = ()   # config keys that must be set (see config.py)
     risky: bool = False           # UI should confirm before turning this on
+    # Can act on the printers (heat, move, ...) or hand out access to them: only
+    # allowed while login is on, since without it anyone on the network could.
+    requires_auth: bool = False
 
 
 FEATURES: dict = {
@@ -52,14 +55,65 @@ FEATURES: dict = {
         key="spoolman", name="Spoolman integration", default=True,
         description="Filament spool inventory, tray linking, and automatic deduction after each print.",
     ),
+    "file_upload": Feature(
+        key="file_upload", name="File upload", default=True,
+        description="Upload G-code from the browser to a printer (CC1, Moonraker, PrusaLink).",
+    ),
+    "report_problem": Feature(
+        key="report_problem", name="Report problem", default=True,
+        description="Footer button that builds a redacted diagnostics report and opens a prefilled GitHub issue.",
+    ),
+    "statistics": Feature(
+        key="statistics", name="Statistics", default=True,
+        description="Stats & history page: statistics, every past print with its picture and details, reference numbers, and CSV export.",
+    ),
+    "print_snapshot": Feature(
+        key="print_snapshot", name="Print pictures", default=True,
+        description="Take a camera picture when a print ends and keep it with the print in the history.",
+        requires=("camera",),
+    ),
+    "service_log": Feature(
+        key="service_log", name="Service logbook", default=True,
+        description="Keep a log of service done on each printer and get reminders after a set number of print hours.",
+    ),
+    "spaghetti_detection": Feature(
+        key="spaghetti_detection", name="Spaghetti detection", default=False,
+        description="Watch running prints through the camera with an Obico detector you run yourself, and send a notification with a picture if a print looks like it is failing. Set up under Integrations.",
+        requires=("camera",),
+    ),
+    "external_api": Feature(
+        key="external_api", name="External API", default=False,
+        description="Let other programs read the print history, pictures and statistics, and change reference numbers, using an API key (create keys under Settings → API access).",
+        risky=True,
+    ),
     "notifications": Feature(
         key="notifications", name="Notifications", default=True,
         description="Master switch for all print notifications.",
     ),
     "notify_webpush": Feature(
         key="notify_webpush", name="Web push notifications", default=True,
-        description="Browser push notifications (the only channel today).",
+        description="Browser push notifications.",
         requires=("notifications",),
+    ),
+    "notify_ntfy": Feature(
+        key="notify_ntfy", name="ntfy notifications", default=True,
+        description="Send notifications to an ntfy topic (ntfy.sh or your own server).",
+        requires=("notifications",), requires_config=("ntfy.topic",),
+    ),
+    "notify_telegram": Feature(
+        key="notify_telegram", name="Telegram notifications", default=True,
+        description="Send notifications to a Telegram chat through your own bot.",
+        requires=("notifications",), requires_config=("telegram.token", "telegram.chat_id"),
+    ),
+    "notify_discord": Feature(
+        key="notify_discord", name="Discord notifications", default=True,
+        description="Send notifications to a Discord channel through a webhook.",
+        requires=("notifications",), requires_config=("discord.webhook",),
+    ),
+    "notify_webhook": Feature(
+        key="notify_webhook", name="Webhook notifications", default=True,
+        description="POST every notification as JSON to an address you choose.",
+        requires=("notifications",), requires_config=("webhook.url",),
     ),
 }
 
@@ -88,6 +142,20 @@ def is_force_disabled(key: str) -> bool:
     return key in _FORCE_DISABLED
 
 
+AUTH_LOCK_REASON = ("Requires login. This can't be used while login is switched off "
+                    "(AUTH_ENABLED=false), because anyone on the network could use it.")
+
+
+def _auth_on() -> bool:
+    import auth     # read at call time: AUTH_ENABLED is the live setting, not a snapshot
+    return bool(auth.AUTH_ENABLED)
+
+
+def auth_locked(key: str) -> bool:
+    """True when `key` needs login but login is off."""
+    return key in FEATURES and FEATURES[key].requires_auth and not _auth_on()
+
+
 def _requires_satisfied(key: str, overrides: dict) -> bool:
     feat = FEATURES[key]
     return all(_effective_enabled(r, overrides) for r in feat.requires)
@@ -96,7 +164,7 @@ def _requires_satisfied(key: str, overrides: dict) -> bool:
 def _effective_enabled(key: str, overrides: dict) -> bool:
     if key not in FEATURES:
         return False
-    if is_force_disabled(key):
+    if is_force_disabled(key) or auth_locked(key):
         return False
     stored = overrides.get(key)
     enabled = stored if stored is not None else FEATURES[key].default
@@ -125,6 +193,8 @@ def set_enabled(key: str, value: bool) -> list:
         raise FeatureError(f"Unknown feature: {key!r}")
     if is_force_disabled(key):
         raise FeatureError(f"{key!r} is locked off by SPOOLER_FORCE_DISABLE.")
+    if value and auth_locked(key):
+        raise FeatureError(f"{FEATURES[key].name}: {AUTH_LOCK_REASON}")
 
     with _lock:
         overrides = _load_overrides()
@@ -188,6 +258,7 @@ def requires_feature(key: str):
 
 def describe_all() -> list:
     """Everything the /api/features endpoint and the settings UI need."""
+    import config  # local: config.py must stay importable without this module
     overrides = _load_overrides()
     out = []
     for key, feat in FEATURES.items():
@@ -196,8 +267,10 @@ def describe_all() -> list:
             "name": feat.name,
             "description": feat.description,
             "enabled": _effective_enabled(key, overrides),
-            "locked": is_force_disabled(key),
-            "missing": bool(feat.requires_config),  # none have config requirements yet (T8)
+            "locked": is_force_disabled(key) or auth_locked(key),
+            "lock_reason": (AUTH_LOCK_REASON if auth_locked(key)
+                            else "Locked off by server configuration" if is_force_disabled(key) else None),
+            "missing": any(not config.get(k) for k in feat.requires_config),
             "risky": feat.risky,
             "requires": list(feat.requires),
         })

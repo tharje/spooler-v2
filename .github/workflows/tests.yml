@@ -20,3 +20,13 @@ jobs:
 
       - name: Run tests
         run: pytest
+
+  # The same image check that gates publishing, so a missing file in the image
+  # or a wrong websockets version shows up on the pull request.
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image and check that it starts and answers
+        run: scripts/docker-smoke-test.sh

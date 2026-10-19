@@ -40,6 +40,9 @@ BACKUP_FILES = [
     "push_subscriptions.json",
     "vapid_keys.json",
     "auth.json",
+    "api_tokens.json",
+    "spoolman_ledger.json",
+    "service_log.json",
 ]
 
 # Fields inside specific files to redact when a backup is created without
@@ -119,8 +122,9 @@ class RestoreError(Exception):
 
 
 def _parse_version(v: str) -> tuple:
+    """"2.3.0-beta" parses as (2, 3, 0); a pre-release suffix is ignored."""
     try:
-        return tuple(int(p) for p in v.split("."))
+        return tuple(int(p) for p in v.split("-")[0].split("."))
     except Exception:
         return (0,)
 
@@ -202,7 +206,11 @@ def restore_from_zip(zip_path: Path) -> dict:
             for entry in manifest["files"]:
                 name = entry["name"]
                 raw = zf.read(name)
-                _atomic_write(DATA_DIR / name, raw.decode("utf-8"))
+                # Every file here is this instance's own credentials/identity
+                # (auth hash, printer access codes, VAPID private key, ...) --
+                # restore must not leave any of them world-readable, same as
+                # when they're first written outside of a restore.
+                _atomic_write(DATA_DIR / name, raw.decode("utf-8"), mode=0o600)
 
     return manifest
 

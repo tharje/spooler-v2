@@ -3,12 +3,10 @@ HTTP request handler: static files + /api/ routes.
 """
 
 import asyncio
-import http.client
 import json
 import ssl
 import socket
 import subprocess
-import tempfile
 import threading
 import time
 import urllib.parse
@@ -24,18 +22,19 @@ from auth import (
     _auth_ok, _check_rate_limit, _create_session, _get_pw_hash, _get_username,
     _has_password, _invalidate_session, _parse_sid, _reset_rate_limit, _save_auth,
 )
-from backup import (
-    BACKUP_DIR, RestoreError, create_backup_zip, list_auto_backups, restore_from_zip,
-)
-from features import describe_all as describe_all_features, is_enabled, requires_feature, set_enabled
-from features import FeatureError
-from persistence import DATA_DIR, current_version, load_history, save_printers
-from push import (
-    WEBPUSH_AVAILABLE, add_subscription, get_public_key, has_subscriptions,
-    load_notif_settings, remove_subscription, save_notif_settings, send_push_all,
-)
-from spoolman import get_spoolman_db, get_spoolman_url, spoolman_auth_header, test_spoolman_connection
+from backup import list_auto_backups
+from features import describe_all as describe_all_features, is_enabled
+from persistence import DATA_DIR, current_version, load_history
+from push import WEBPUSH_AVAILABLE, get_public_key, load_notif_settings
+from spoolman import get_spoolman_db, get_spoolman_url
+import http_common
+from http_external import ExternalRoutesMixin
+from http_proxy import ProxyMixin
+from http_admin import AdminMixin
 import config
+import api_tokens
+import spaghetti
+import notifiers
 
 try:
     import bcrypt as _bcrypt
@@ -46,6 +45,9 @@ CERT_FILE = DATA_DIR / "cert.pem"
 KEY_FILE  = DATA_DIR / "key.pem"
 
 MAX_BODY = 100 * 1024 * 1024  # 100 MB
+EXTERNAL_MAX_BODY = 16 * 1024  # the external API only ever takes a few bytes of JSON
+_uploads_lock = threading.Lock()
+_uploads_active: set = set()  # printer ids with an upload in flight
 
 _current_version = current_version  # kept as a module-local alias; call sites unchanged
 
@@ -100,7 +102,7 @@ def ensure_ssl_cert() -> bool:
         return False
 
 
-class SPHandler(SimpleHTTPRequestHandler):
+class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHandler):
     """Serve static files from ./public and handle /api/ calls."""
 
     def __init__(self, *args, **kwargs):
@@ -247,250 +249,20 @@ class SPHandler(SimpleHTTPRequestHandler):
 
     # ── Camera proxy ──────────────────────────────────────────────────────────
 
-    @requires_feature("camera")
-    def _proxy_camera(self):
-        printer_id = urllib.parse.unquote(self.path[len("/api/camera/"):].split("?")[0])
-        p = state.printers.get(printer_id)
-        if not p or not p.camera_url:
-            self._json({"error": "Camera not available"}, 404)
-            return
-        conn = None
-        try:
-            parsed = urllib.parse.urlparse(p.camera_url)
-            path = parsed.path or "/"
-            if parsed.query:
-                path = f"{path}?{parsed.query}"
-            conn = http.client.HTTPConnection(parsed.hostname, parsed.port or 80, timeout=10)
-            conn.request("GET", path)
-            upstream = conn.getresponse()
-            if upstream.status != 200:
-                self._json({"error": f"camera returned {upstream.status}"}, 503)
-                return
-            try:
-                conn.sock.settimeout(None)  # no per-read timeout — stream runs indefinitely
-            except Exception:
-                pass
-            ct = upstream.getheader("Content-Type", "multipart/x-mixed-replace; boundary=frame")
-            self.send_response(200)
-            self.send_header("Content-Type", ct)
-            self.send_header("Cache-Control", "no-cache")
-            self.end_headers()
-            while True:
-                chunk = upstream.read(8192)
-                if not chunk:
-                    break
-                self.wfile.write(chunk)
-                self.wfile.flush()
-        except (ConnectionResetError, BrokenPipeError):
-            pass
-        except Exception:
-            pass
-        finally:
-            if conn:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
+    # ── External API (other programs, API-key auth) ──────────────────────────
 
     # ── Thumbnail proxy ───────────────────────────────────────────────────────
     # CC1: http://{ip}:80/thumbnail/{bare_filename}  (no auth needed)
     # CC2: no accessible thumbnail endpoint — skipped client-side
 
-    @requires_feature("camera")
-    def _proxy_thumbnail(self):
-        rest = self.path[len("/api/thumbnail/"):]
-        parts = rest.split("/", 1)
-        if len(parts) != 2:
-            self._json({"error": "Bad request"}, 400)
-            return
-        printer_id = urllib.parse.unquote(parts[0])
-        bare_name  = urllib.parse.unquote(parts[1])
-        p = state.printers.get(printer_id)
-        if not p:
-            self._json({"error": "Printer not found"}, 404)
-            return
-
-        token = p.access_code or "123456"
-
-        # CC2 has no accessible thumbnail endpoint — caller should not request one
-        if p.printer_type == "cc2":
-            self._json({"error": "Thumbnail unavailable"}, 404)
-            return
-
-        # CC1: dedicated /thumbnail/{bare_filename} endpoint (no auth required)
-        conn = None
-        try:
-            path = f"/thumbnail/{urllib.parse.quote(bare_name)}"
-            conn = http.client.HTTPConnection(p.ip, 80, timeout=5)
-            conn.request("GET", path, headers={})
-            resp = conn.getresponse()
-            if state.DEBUG:
-                print(f"[thumb] {bare_name!r} → {resp.status}")
-            if resp.status == 200:
-                data = resp.read(2 * 1024 * 1024)
-                ct   = resp.getheader("Content-Type", "image/png")
-                self.send_response(200)
-                self.send_header("Content-Type", ct)
-                self.send_header("Content-Length", str(len(data)))
-                self.send_header("Cache-Control", "max-age=300")
-                self.end_headers()
-                self.wfile.write(data)
-                return
-        except Exception as e:
-            if state.DEBUG:
-                print(f"[thumb] exception for {bare_name!r}: {e}")
-        finally:
-            if conn:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-
-        self._json({"error": "Thumbnail unavailable"}, 404)
-
     # ── Spoolman proxy ────────────────────────────────────────────────────────
-
-    @requires_feature("spoolman")
-    def _proxy_spoolman(self, method: str, path: str, body: bytes | None):
-        if not path.startswith("/api/v1/"):
-            self._json({"error": "Invalid Spoolman path"}, 400)
-            return
-        try:
-            headers = spoolman_auth_header()
-            if body:
-                headers["Content-Type"] = "application/json"
-            req = urllib.request.Request(
-                f"{get_spoolman_url()}{path}",
-                data=body,
-                headers=headers,
-                method=method,
-            )
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                data   = resp.read()
-                status = resp.status
-            if not data:
-                self.send_response(status)
-                self.send_header("Access-Control-Allow-Origin", "*")
-                self.end_headers()
-            else:
-                self.send_response(status)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(data)))
-                self.send_header("Access-Control-Allow-Origin", "*")
-                self.end_headers()
-                self.wfile.write(data)
-        except urllib.error.HTTPError as e:
-            self._json({"error": str(e)}, e.code)
-        except Exception as e:
-            self._json({"error": f"Spoolman unreachable: {e}"}, 502)
-
-    @requires_feature("spoolman")
-    def _proxy_spoolman_ui(self, method: str, sm_path: str, body: bytes | None = None):
-        """Proxy Spoolman's own web UI through our server.
-
-        Rewrites absolute asset paths in HTML responses so they stay within our
-        /spoolman/ prefix (required because Spoolman uses paths like /assets/...).
-        """
-        try:
-            headers = spoolman_auth_header()
-            if body:
-                headers["Content-Type"] = "application/json"
-            req = urllib.request.Request(
-                f"{get_spoolman_url()}{sm_path}",
-                data=body,
-                headers=headers,
-                method=method,
-            )
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                data = resp.read()
-                status = resp.status
-                ct = resp.headers.get("Content-Type", "application/octet-stream")
-
-            # Rewrite absolute paths in HTML so assets load through our proxy
-            if "text/html" in ct:
-                html = data.decode("utf-8", errors="replace")
-                html = html.replace('src="/', 'src="/spoolman/')
-                html = html.replace("src='/", "src='/spoolman/")
-                html = html.replace('href="/', 'href="/spoolman/')
-                html = html.replace("href='/", "href='/spoolman/")
-                # Injected before Spoolman's own scripts to fix proxied-subpath issues:
-                # 1. Strip /spoolman from URL on load so React Router sees / and matches.
-                # 2. Click-intercept on href="/" forces reload via /spoolman/ (Home fix).
-                # 3. Patch fetch/XHR so API/asset requests route via /spoolman/.
-                # 4. MutationObserver fixes dynamically-rendered <img> src attrs.
-                # 5. Unregister SW + clear its caches (wrong scope, bypasses our patches).
-                # Note: Spoolman's WebSocket live-push connections are not proxied —
-                # they will fail silently; all page data still loads via HTTP polling.
-                _patch = (
-                    "<script>(function(){"
-                    # Strip /spoolman prefix from URL before React Router initialises
-                    "if(window.location.pathname.startsWith('/spoolman')){"
-                    "history.replaceState(null,'',"
-                    "window.location.pathname.slice('/spoolman'.length)||'/');"
-                    "}"
-                    # Intercept Home link clicks — reload via /spoolman/ so our script
-                    # re-runs and React Router sees / correctly.
-                    "document.addEventListener('click',function(e){"
-                    "var el=e.target&&e.target.closest('a');"
-                    "if(el&&(el.getAttribute('href')==='/'||el.pathname==='/')&&"
-                    "el.origin===location.origin){"
-                    "e.preventDefault();e.stopPropagation();"
-                    "window.location.replace('/spoolman/');}},true);"
-                    # Rewrite helper for fetch/XHR/img
-                    "function _rw(u){return(typeof u==='string'&&u.startsWith('/')&&"
-                    "!u.startsWith('/spoolman')&&!u.startsWith('/api/')&&!u.startsWith('/ws'))"
-                    "?'/spoolman'+u:u;}"
-                    # Patch fetch
-                    "var _f=window.fetch;"
-                    "window.fetch=function(u,o){return _f.call(this,_rw(u),o);};"
-                    # Patch XHR
-                    "var _o=XMLHttpRequest.prototype.open;"
-                    "XMLHttpRequest.prototype.open=function(m,u){"
-                    "arguments[1]=_rw(u);return _o.apply(this,arguments);};"
-                    # MutationObserver for dynamically-rendered <img>/<link> elements
-                    "var _mo=new MutationObserver(function(ms){"
-                    "ms.forEach(function(m){m.addedNodes.forEach(function(n){"
-                    "if(n.nodeType!==1)return;"
-                    "var els=[n].concat(Array.from(n.querySelectorAll('img,link')));"
-                    "els.forEach(function(el){"
-                    "var s=el.getAttribute('src');if(s&&el.tagName==='IMG')el.src=_rw(s);"
-                    "var h=el.getAttribute('href');if(h&&el.tagName==='LINK')el.href=_rw(h);"
-                    "});});});});"
-                    "_mo.observe(document,{childList:true,subtree:true});"
-                    # Unregister SW and clear its caches so stale SW doesn't intercept
-                    "if('serviceWorker'in navigator){"
-                    "navigator.serviceWorker.getRegistrations&&"
-                    "navigator.serviceWorker.getRegistrations().then(function(rs){"
-                    "rs.forEach(function(r){r.unregister();});});"
-                    "'caches'in window&&caches.keys().then(function(ns){"
-                    "ns.forEach(function(n){caches.delete(n);});});"
-                    "navigator.serviceWorker.register=function(){"
-                    "return Promise.resolve({scope:'/'});};"
-                    "}"
-                    "})();</script>"
-                )
-                html = html.replace("</head>", _patch + "</head>", 1)
-                data = html.encode("utf-8")
-                ct = "text/html; charset=utf-8"
-
-            self.send_response(status)
-            self.send_header("Content-Type", ct)
-            self.send_header("Content-Length", str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
-        except urllib.error.HTTPError as e:
-            body_err = e.read()
-            self.send_response(e.code)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body_err)))
-            self.end_headers()
-            self.wfile.write(body_err)
-        except Exception as e:
-            self._json({"error": f"Spoolman unreachable: {e}"}, 502)
 
     # ── HTTP verbs ────────────────────────────────────────────────────────────
 
     def do_GET(self):
+        if self.path.startswith("/api/external/"):
+            self._handle_external("GET")
+            return
         # Auth-exempt routes
         if self.path == "/cert.pem":
             data = CERT_FILE.read_bytes() if CERT_FILE.exists() else b""
@@ -579,6 +351,21 @@ class SPHandler(SimpleHTTPRequestHandler):
             })
             return
 
+        if self.path.startswith("/api/spaghetti-image/"):
+            # One-time address for the detector container, which has no session. The random
+            # address is the credential: it works once, for a few seconds, for one picture.
+            jpeg = spaghetti.take_image(self.path.split("?")[0].rsplit("/", 1)[1])
+            if jpeg is None:
+                self._json({"error": "Not found"}, 404)
+            else:
+                self.send_response(200)
+                self.send_header("Content-Type", "image/jpeg")
+                self.send_header("Content-Length", str(len(jpeg)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(jpeg)
+            return
+
         if self.path == "/api/push-public-key":
             # Public key is safe to expose without auth — it's literally a public key.
             # Service workers need it to renew expired subscriptions without a session cookie.
@@ -602,12 +389,29 @@ class SPHandler(SimpleHTTPRequestHandler):
 
         if self.path == "/api/features":
             self._json(describe_all_features())
+        elif self.path.split("?")[0] == "/api/diagnostics":
+            self._handle_diagnostics()
         elif self.path == "/api/integrations":
             self._json({
                 "fields": config.describe_all(),
-                "tests": {"spoolman": config.last_test_result("spoolman")},
+                "tests": {k: config.last_test_result(k) for k in ("spoolman", "spaghetti", *notifiers.CHANNELS)},
                 "server_settings": _server_settings_readonly(),
             })
+        elif self.path == "/api/api-tokens":
+            self._json({"tokens": api_tokens.list_tokens(), "max": api_tokens.MAX_TOKENS})
+        elif self.path == "/api/spoolman-ledger":
+            self._handle_ledger_list()
+        elif self.path == "/api/service":
+            self._handle_service_get()
+        elif self.path == "/api/security-status":
+            import auth
+            self._json({"auth_enabled": bool(auth.AUTH_ENABLED)})
+        elif self.path.split("?")[0] == "/api/stats":
+            self._handle_stats()
+        elif self.path.split("?")[0] == "/api/history.csv":
+            self._handle_history_csv()
+        elif self.path.startswith("/api/snapshot/"):
+            self._handle_snapshot()
         elif self.path.startswith("/api/camera/"):
             self._proxy_camera()
         elif self.path.startswith("/api/thumbnail/"):
@@ -679,6 +483,9 @@ class SPHandler(SimpleHTTPRequestHandler):
                 super().do_GET()
 
     def do_PATCH(self):
+        if self.path.startswith("/api/external/"):
+            self._handle_external("PATCH")
+            return
         if not self._check_auth():
             return
         if self.path == "/api/features":
@@ -686,6 +493,9 @@ class SPHandler(SimpleHTTPRequestHandler):
             return
         if self.path == "/api/integrations":
             self._handle_patch_integrations()
+            return
+        if self.path.startswith("/api/history/"):
+            self._handle_history_update()
             return
         if proxy_spoolman_enabled() and self.path.startswith("/api/v1/"):
             self._proxy_spoolman_ui("PATCH", self.path, self._read_body())
@@ -697,6 +507,16 @@ class SPHandler(SimpleHTTPRequestHandler):
 
     def do_DELETE(self):
         if not self._check_auth():
+            return
+        if self.path.startswith("/api/spoolman-ledger/"):
+            self._handle_ledger_action("discard")
+            return
+        if self.path.startswith("/api/service/"):
+            self._handle_service_delete()
+            return
+        if self.path.startswith("/api/api-tokens/"):
+            ok = api_tokens.revoke(urllib.parse.unquote(self.path[len("/api/api-tokens/"):]))
+            self._json({"ok": True} if ok else {"error": "No such key"}, 200 if ok else 404)
             return
         if proxy_spoolman_enabled() and self.path.startswith("/api/v1/"):
             self._proxy_spoolman_ui("DELETE", self.path)
@@ -731,10 +551,21 @@ class SPHandler(SimpleHTTPRequestHandler):
             self._handle_notif_settings()
         elif self.path == "/api/push-test":
             self._handle_push_test()
+        elif self.path in ("/api/service/tasks", "/api/service/log", "/api/service/hours"):
+            self._handle_service_post(self.path.rsplit("/", 1)[1])
+        elif self.path == "/api/api-tokens":
+            self._handle_create_api_token()
+        elif self.path.startswith("/api/spoolman-ledger/") and self.path.endswith("/retry"):
+            self._handle_ledger_action("retry")
         elif self.path == "/api/import-filaments":
             self._handle_import_filaments()
         elif self.path == "/api/integrations/spoolman/test":
             self._handle_test_spoolman()
+        elif self.path == "/api/integrations/spaghetti/test":
+            self._handle_test_spaghetti()
+        elif self.path.startswith("/api/integrations/") and self.path.endswith("/test") \
+                and self.path.split("/")[3] in notifiers.CHANNELS:
+            self._handle_test_notifier(self.path.split("/")[3])
         elif self.path == "/api/restore":
             self._handle_restore()
         elif self.path.startswith("/api/v1/"):
@@ -750,313 +581,16 @@ class SPHandler(SimpleHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.end_headers()
 
     # ── Complex POST handlers ─────────────────────────────────────────────────
 
-    @requires_feature("notify_webpush")
-    def _handle_push_subscribe(self):
-        try:
-            sub = json.loads(self._read_body() or b"{}")
-        except Exception:
-            self._json({"error": "Bad request"}, 400)
-            return
-        endpoint = sub.get("endpoint", "")
-        if not endpoint:
-            self._json({"error": "Missing endpoint"}, 400)
-            return
-        add_subscription(sub)
-        self._json({"ok": True})
-
-    @requires_feature("notify_webpush")
-    def _handle_push_unsubscribe(self):
-        try:
-            body = json.loads(self._read_body() or b"{}")
-        except Exception:
-            self._json({"error": "Bad request"}, 400)
-            return
-        remove_subscription(body.get("endpoint", ""))
-        self._json({"ok": True})
-
-    @requires_feature("notifications")
-    def _handle_notif_settings(self):
-        try:
-            s = json.loads(self._read_body() or b"{}")
-        except Exception:
-            self._json({"error": "Bad request"}, 400)
-            return
-        save_notif_settings(s)
-        self._json({"ok": True})
-
-    @requires_feature("notify_webpush")
-    def _handle_push_test(self):
-        self._read_body()
-        if not WEBPUSH_AVAILABLE:
-            self._json({"error": "Web Push not available on server"}, 503)
-            return
-        if not has_subscriptions():
-            self._json({"error": "No push subscriptions registered"}, 400)
-            return
-        send_push_all("Spooler — Test notification", "Push notifications are working!")
-        self._json({"ok": True})
-
-    @requires_feature("spoolman")
-    def _handle_import_filaments(self):
-        try:
-            req_body = json.loads(self._read_body() or b"{}")
-        except Exception:
-            self._json({"error": "Bad request"}, 400)
-            return
-        brand = req_body.get("brand", "").strip()
-        if not brand:
-            self._json({"error": "brand required"}, 400)
-            return
-        db      = get_spoolman_db()
-        entries = [f for f in db if f.get("manufacturer", "").lower() == brand.lower()]
-        if not entries:
-            self._json({"error": f"No filaments found for '{brand}'"}, 404)
-            return
-        try:
-            vurl = f"{get_spoolman_url()}/api/v1/vendor?name={urllib.parse.quote(brand)}"
-            with urllib.request.urlopen(vurl, timeout=5) as r:
-                vendors = json.loads(r.read())
-            if vendors:
-                vendor_id = vendors[0]["id"]
-            else:
-                vreq = urllib.request.Request(
-                    f"{get_spoolman_url()}/api/v1/vendor",
-                    data=json.dumps({"name": brand}).encode(),
-                    headers={"Content-Type": "application/json"},
-                    method="POST",
-                )
-                with urllib.request.urlopen(vreq, timeout=5) as r:
-                    vendor_id = json.loads(r.read())["id"]
-        except Exception as e:
-            self._json({"error": f"Vendor error: {e}"}, 500)
-            return
-        try:
-            with urllib.request.urlopen(
-                f"{get_spoolman_url()}/api/v1/filament?limit=10000", timeout=5
-            ) as r:
-                existing = {f["article_number"] for f in json.loads(r.read()) if f.get("article_number")}
-        except Exception:
-            existing = set()
-        created = skipped = 0
-        for f in entries:
-            article = f.get("id", "")
-            if article and article in existing:
-                skipped += 1
-                continue
-            body: dict = {
-                "vendor_id": vendor_id,
-                "material":  f.get("material", ""),
-                "density":   f.get("density")  or 1.24,
-                "diameter":  f.get("diameter") or 1.75,
-                "weight":    f.get("weight")   or 1000,
-            }
-            if f.get("name"):          body["name"]                  = f["name"]
-            if f.get("spool_weight"):  body["spool_weight"]           = f["spool_weight"]
-            if f.get("color_hex"):     body["color_hex"]              = f["color_hex"].lstrip("#")
-            if f.get("extruder_temp"): body["settings_extruder_temp"] = f["extruder_temp"]
-            if f.get("bed_temp"):      body["settings_bed_temp"]      = f["bed_temp"]
-            if article:                body["article_number"]         = article
-            try:
-                freq = urllib.request.Request(
-                    f"{get_spoolman_url()}/api/v1/filament",
-                    data=json.dumps(body).encode(),
-                    headers={"Content-Type": "application/json"},
-                    method="POST",
-                )
-                with urllib.request.urlopen(freq, timeout=5) as r:
-                    r.read()
-                created += 1
-            except Exception:
-                skipped += 1
-        print(f"[Import] {brand}: {created} created, {skipped} skipped")
-        self._json({"brand": brand, "created": created, "skipped": skipped, "total": len(entries)})
-
-    def _handle_upload(self):
-        printer_id = urllib.parse.unquote(self.path[len("/api/upload/"):])
-        printer    = state.printers.get(printer_id)
-        if not printer:
-            self._json({"error": "Printer not found"}, 404)
-            return
-        ct = self.headers.get("Content-Type", "")
-        if not ct.startswith("multipart/form-data"):
-            self._json({"error": "Expected multipart/form-data"}, 400)
-            return
-        body = self._read_body()
-        try:
-            req = urllib.request.Request(
-                f"http://{printer.ip}/uploadFile/upload",
-                data=body,
-                headers={"Content-Type": ct},
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                result = resp.read()
-            self._json({"ok": True, "response": result.decode("utf-8", errors="replace")})
-        except Exception as e:
-            self._json({"error": str(e)}, 500)
-
     # ── Backup / restore ─────────────────────────────────────────────────────
-
-    @requires_feature("backup")
-    def _handle_backup_download(self):
-        qs = urllib.parse.urlparse(self.path).query
-        params = urllib.parse.parse_qs(qs)
-        include_secrets = params.get("include_secrets", ["0"])[0].lower() in ("1", "true", "yes")
-        tmp_fd, tmp_name = tempfile.mkstemp(suffix=".zip")
-        os.close(tmp_fd)
-        try:
-            manifest = create_backup_zip(Path(tmp_name), include_secrets=include_secrets)
-            data = Path(tmp_name).read_bytes()
-        except Exception as e:
-            self._json({"error": f"Backup failed: {e}"}, 500)
-            return
-        finally:
-            try:
-                os.unlink(tmp_name)
-            except OSError:
-                pass
-        date = time.strftime("%Y-%m-%d")
-        filename = f"spooler-backup-{manifest['spooler_version']}-{date}.zip"
-        self.send_response(200)
-        self.send_header("Content-Type", "application/zip")
-        self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
-
-    @requires_feature("backup")
-    def _handle_backup_file_download(self):
-        # Only ever resolve by exact match against what list_auto_backups()
-        # itself already reports -- the requested name is never joined onto
-        # a filesystem path, so a "../.." in it just fails to match anything.
-        name = urllib.parse.unquote(self.path[len("/api/backups/"):].split("?")[0])
-        if name not in {b["name"] for b in list_auto_backups()}:
-            self._json({"error": "Not found"}, 404)
-            return
-        data = (BACKUP_DIR / name).read_bytes()
-        self.send_response(200)
-        self.send_header("Content-Type", "application/zip")
-        self.send_header("Content-Disposition", f'attachment; filename="{name}"')
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
-
-    @requires_feature("backup")
-    def _handle_restore(self):
-        content_length = int(self.headers.get("Content-Length", 0))
-        if content_length == 0:
-            self._json({"error": "No file uploaded"}, 400)
-            return
-        body = self._read_body()
-        if body is None:
-            return  # _read_body() already sent a 413 if the body was too large
-        tmp_fd, tmp_name = tempfile.mkstemp(suffix=".zip")
-        try:
-            with os.fdopen(tmp_fd, "wb") as f:
-                f.write(body)
-            manifest = restore_from_zip(Path(tmp_name))
-        except RestoreError as e:
-            self._json({"error": str(e)}, 400)
-            return
-        except Exception as e:
-            self._json({"error": f"Restore failed: {e}"}, 500)
-            return
-        finally:
-            try:
-                os.unlink(tmp_name)
-            except OSError:
-                pass
-        self._json({
-            "ok": True,
-            "manifest": manifest,
-            "message": "Restored. Spooler is restarting — reload this page in a few seconds.",
-        })
-        # In-memory state (loaded printer connections and their live asyncio
-        # tasks, the cached VAPID key, auth sessions) can't be safely swapped
-        # out from under a running process -- a controlled restart is the
-        # robust way to pick up the restored files everywhere. Delayed so the
-        # response above actually reaches the client first. Docker's
-        # restart: unless-stopped brings the container back automatically;
-        # outside Docker the process needs restarting by hand.
-        threading.Timer(1.0, lambda: os._exit(0)).start()
 
     # ── Feature flags ─────────────────────────────────────────────────────────
 
-    def _handle_patch_features(self):
-        try:
-            body = json.loads(self._read_body() or b"{}")
-        except Exception:
-            self._json({"error": "Bad request"}, 400)
-            return
-        key = body.get("key")
-        enabled = body.get("enabled")
-        if not isinstance(key, str) or not isinstance(enabled, bool):
-            self._json({"error": "Expected {\"key\": str, \"enabled\": bool}"}, 400)
-            return
-        try:
-            cascaded = set_enabled(key, enabled)
-        except FeatureError as e:
-            self._json({"error": str(e)}, 400)
-            return
-        features = describe_all_features()
-        self._json({"ok": True, "features": features, "cascaded": cascaded})
-        # Broadcasting runs on the asyncio loop, this handler runs on its own
-        # HTTP request thread -- _ws_loop is the same loop reference the combo
-        # WebSocket adopter below already uses to bridge threads safely.
-        if _ws_loop is not None:
-            asyncio.run_coroutine_threadsafe(
-                state.broadcast_to_browsers({"type": "features_changed", "features": features}),
-                _ws_loop,
-            )
-
     # ── Integrations config ──────────────────────────────────────────────────
-
-    def _handle_patch_integrations(self):
-        try:
-            body = json.loads(self._read_body() or b"{}")
-        except Exception:
-            self._json({"error": "Bad request"}, 400)
-            return
-        values = body.get("values", {})
-        clear_keys = body.get("clear", [])
-        if not isinstance(values, dict) or not isinstance(clear_keys, list):
-            self._json({"error": 'Expected {"values": {...}, "clear": [...]}'}, 400)
-            return
-
-        errors = {}
-        for key, value in values.items():
-            field = config.FIELDS.get(key)
-            if field is None:
-                errors[key] = "Unknown field"
-                continue
-            if field.type == "secret" and value == "":
-                continue  # blank secret field on save means "leave unchanged"
-            try:
-                config.set(key, value)
-            except config.ConfigError as e:
-                errors[key] = str(e)
-        for key in clear_keys:
-            try:
-                config.clear(key)
-            except config.ConfigError as e:
-                errors[key] = str(e)
-
-        if errors:
-            self._json({"error": "Some fields could not be updated", "fields": errors}, 400)
-            return
-        self._json({"ok": True, "fields": config.describe_all()})
-
-    @requires_feature("spoolman")
-    def _handle_test_spoolman(self):
-        self._read_body()
-        result = test_spoolman_connection()
-        config.record_test_result("spoolman", result["ok"], result["message"])
-        self._json(result)
 
     # ── Response helper ───────────────────────────────────────────────────────
 
@@ -1065,6 +599,8 @@ class SPHandler(SimpleHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        if getattr(self, "_cors", False):
+            self.send_header("Access-Control-Allow-Origin", "*")   # token-only API: no cookies involved
         self.end_headers()
         self.wfile.write(body)
 
@@ -1090,6 +626,7 @@ def set_ws_adopter(loop, connection_factory) -> None:
     starts accepting connections."""
     global _ws_loop, _ws_connection_factory
     _ws_loop = loop
+    http_common.set_ws_loop(loop)
     _ws_connection_factory = connection_factory
 
 

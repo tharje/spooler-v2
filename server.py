@@ -9,6 +9,7 @@ import contextlib
 import logging
 import os
 import ssl as _ssl
+import signal
 import sys
 import threading
 from pathlib import Path
@@ -56,9 +57,12 @@ except ImportError:
 import auth
 import state
 from auth import AUTH_ENABLED, BCRYPT_AVAILABLE, session_cleanup_loop
+import diagnostics
+import spaghetti
+import uploads
 from backup import check_startup_backup, daily_backup_loop
 from http_handler import run_http, run_https, set_ws_adopter
-from persistence import DATA_DIR, load_printers, load_tray_map, migrate_history_ids
+from persistence import DATA_DIR, cleanup_orphan_snapshots, load_printers, load_tray_map, migrate_history_ids
 from printers import PRINTER_TYPES, make_printer
 from push import init_vapid
 from ws_handler import browser_handler
@@ -90,7 +94,37 @@ HTTPS_ENABLED = os.getenv("HTTPS_ENABLED", "true").lower() != "false"
 auth.set_auth_file(DATA_DIR / "auth.json")
 
 
+async def _ledger_sender() -> None:
+    """Keep trying to deliver filament deductions to Spoolman (see ledger.py)."""
+    import ledger
+    import spoolman
+    from features import is_enabled
+    loop = asyncio.get_running_loop()
+
+    def on_sent(entry, result):
+        spoolman._notify_spool_level(result, entry["printer_id"], loop)
+
+    def on_change(summary):
+        asyncio.run_coroutine_threadsafe(
+            state.broadcast_to_browsers({"type": "ledger_update", **summary}), loop)
+
+    import config
+    config.on_change("spoolman.", lambda key, value: ledger.kick())     # new URL/credentials: try again now
+    await ledger.sender_loop(lambda: is_enabled("spoolman"), spoolman.spoolman_use,
+                             spoolman.find_spool_at_location, on_sent, on_change)
+
+
+async def _service_daily() -> None:
+    """Reminders that count days come due without a print ending; check a few times a day."""
+    await asyncio.sleep(120)
+    while True:
+        for p in list(state.printers.values()):
+            p._announce_service_due()
+        await asyncio.sleep(6 * 3600)
+
+
 async def main() -> None:
+    diagnostics.install_log_capture()
     if ws_serve is None:
         print("\n[ERROR] Please install the 'websockets' package first.")
         print("  python3 -m venv venv && . venv/bin/activate && pip install websockets")
@@ -109,6 +143,10 @@ async def main() -> None:
     init_vapid()
     check_startup_backup()
     migrate_history_ids()
+    removed = cleanup_orphan_snapshots()
+    if removed:
+        print(f"[Snapshots] Removed {removed} orphaned picture file(s)")
+    uploads.remove_stale_uploads()
 
     # Load saved printers
     for entry in load_printers():
@@ -123,6 +161,7 @@ async def main() -> None:
             entry["name"],
             access_code=entry.get("access_code", ""),
         )
+        pc.auto_light = bool(entry.get("auto_light", False))
         state.printers[pc.id] = pc
         pc._task = asyncio.create_task(pc.start())
     if state.printers:
@@ -132,6 +171,9 @@ async def main() -> None:
 
     asyncio.create_task(session_cleanup_loop())
     asyncio.create_task(daily_backup_loop())
+    asyncio.create_task(_ledger_sender())
+    asyncio.create_task(spaghetti.watch_loop())
+    asyncio.create_task(_service_daily())
 
     # Let the plain HTTP server (port HTTP_PORT) also adopt WebSocket upgrade
     # requests it sees — combo mode, so single-port tunnels/proxies work.
@@ -233,7 +275,21 @@ async def main() -> None:
         else:
             print("  HTTPS: disabled (HTTPS_ENABLED=false)")
         print("─" * 50 + "\n")
-        await asyncio.Future()  # run forever
+        stop = asyncio.Event()
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            try:
+                loop.add_signal_handler(sig, stop.set)
+            except (NotImplementedError, RuntimeError):
+                pass
+        await stop.wait()   # run until docker stop / Ctrl-C
+        # Save the running prints' filament figures so the next start carries on from here.
+        for p in list(state.printers.values()):
+            try:
+                p.save_accounting_now()
+            except Exception as e:
+                print(f"[Shutdown] Could not save accounting for {p.name}: {e}")
+        print("Shutting down.")
 
 
 if __name__ == "__main__":

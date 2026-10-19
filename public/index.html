@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css?v=36" />
+  <link rel="stylesheet" href="style.css?v=72" />
 </head>
 <body>
   <header>
@@ -42,11 +42,11 @@
   <div class="app-body">
 
   <nav class="sidenav">
-    <button id="btn-history" class="sidenav-item" title="Filament history">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+    <button id="btn-stats" class="sidenav-item" title="Statistics and print history">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <line x1="6" y1="20" x2="6" y2="11"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="18" y1="20" x2="18" y2="14"/>
       </svg>
-      <span>History</span>
+      <span>Stats</span>
     </button>
     <button id="btn-spools" class="sidenav-item" title="Filament spools (Reel)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -55,6 +55,14 @@
         <line x1="2" y1="12" x2="8" y2="12"/><line x1="16" y1="12" x2="22" y2="12"/>
       </svg>
       <span>Spools</span>
+      <span id="spools-badge" class="nav-badge" hidden aria-label="Filament deductions need attention"></span>
+    </button>
+    <button id="btn-service" class="sidenav-item" title="Service logbook and reminders">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+      </svg>
+      <span>Service</span>
+      <span id="service-badge" class="nav-badge" hidden aria-label="Service is due"></span>
     </button>
     <a id="btn-slicer" class="sidenav-item" title="Open slicer" target="_blank" rel="noopener" hidden>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -154,29 +162,40 @@
     </div>
   </div>
 
-  <!-- History panel -->
-  <div id="panel-history" class="side-panel">
+  <!-- Statistics panel -->
+  <div id="panel-stats" class="side-panel stats-panel">
     <div class="side-panel-header">
       <div class="title-row">
-        <h3>Filament History</h3>
-        <div class="history-totals" id="history-totals"></div>
-        <button id="btn-history-close" class="btn btn-secondary btn-sm">Close</button>
+        <h3>Stats &amp; history</h3>
+        <a id="btn-stats-csv" class="btn btn-secondary btn-sm" href="#" download title="Download the history as a spreadsheet (CSV)">Export CSV</a>
+        <button id="btn-stats-close" class="btn btn-secondary btn-sm">Close</button>
       </div>
     </div>
     <div class="side-panel-body">
-      <table class="history-table" id="history-table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Printer</th>
-            <th>File</th>
-            <th>Filament</th>
-            <th>Time</th>
-          </tr>
-        </thead>
-        <tbody id="history-tbody"></tbody>
-      </table>
-      <p id="history-empty" style="display:none;text-align:center;color:var(--text-muted);padding:40px">No prints logged yet.</p>
+      <div class="stats-tabs seg" id="stats-tabs" role="tablist">
+        <button type="button" data-tab="overview" class="active">Overview</button>
+        <button type="button" data-tab="prints">Prints</button>
+      </div>
+      <div id="stats-filterbar">
+        <div class="stats-filters">
+          <div class="seg" id="stats-range" role="group" aria-label="Period">
+            <button type="button" data-range="7">7 days</button>
+            <button type="button" data-range="30" class="active">30 days</button>
+            <button type="button" data-range="365">12 months</button>
+            <button type="button" data-range="all">All</button>
+            <button type="button" data-range="custom">Custom</button>
+          </div>
+          <select id="stats-printer" aria-label="Printer"><option value="">All printers</option></select>
+          <input type="search" id="stats-search" placeholder="Search file or reference" aria-label="Search prints" hidden />
+        </div>
+        <div class="stats-custom" id="stats-custom" hidden>
+          <label>From <input type="date" id="stats-from" /></label>
+          <label>To <input type="date" id="stats-to" /></label>
+        </div>
+      </div>
+      <div id="stats-body" class="stats-body"></div>
+      <div id="prints-body" class="prints-body" hidden></div>
+      <div id="print-detail" class="print-detail" hidden></div>
     </div>
   </div>
   <!-- Spools panel -->
@@ -193,19 +212,25 @@
           </svg>
           Add Spool
         </button>
-        <button id="btn-import-filaments" class="btn btn-secondary btn-sm" title="Import Elegoo filament catalogue from SpoolmanDB">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-          </svg>
-          Import Elegoo
-        </button>
         <a id="btn-spoolman-ui" href="#" target="_blank" class="btn btn-secondary btn-sm" title="Open Spoolman web UI">Spoolman UI</a>
       </div>
     </div>
     <div class="side-panel-body">
+      <div id="ledger-card" class="ledger-card" hidden></div>
       <div id="spools-list"></div>
       <p id="spools-empty" style="display:none;text-align:center;color:var(--text-muted);padding:40px">No spools yet. Click <strong>Add Spool</strong> to get started.</p>
     </div>
+  </div>
+
+  <!-- Service panel -->
+  <div id="panel-service" class="side-panel">
+    <div class="side-panel-header">
+      <div class="title-row">
+        <h3>Service</h3>
+        <button id="btn-service-close" class="btn btn-secondary btn-sm">Close</button>
+      </div>
+    </div>
+    <div class="side-panel-body" id="service-body"></div>
   </div>
 
   <div id="panel-backdrop" class="panel-backdrop"></div>
@@ -214,6 +239,20 @@
   <div id="modal-files" class="modal">
     <div class="modal-box modal-box-wide">
       <h3 id="files-modal-title">Files</h3>
+      <div id="files-upload" class="files-upload">
+        <input type="file" id="files-upload-input" accept=".gcode,.gco,.bgcode" style="display:none" />
+        <div id="files-dropzone" class="files-dropzone">
+          <div class="files-upload-row">
+            <button id="btn-files-upload" class="btn btn-primary btn-sm">Upload</button>
+            <label class="files-upload-start"><input type="checkbox" id="files-upload-start" /> Start print after upload</label>
+          </div>
+          <span id="files-upload-hint" class="files-upload-hint">or drop a .gcode file here</span>
+        </div>
+        <div id="files-upload-progress" class="files-upload-progress" style="display:none">
+          <div id="files-upload-bar" class="files-upload-bar"></div>
+          <span id="files-upload-status"></span>
+        </div>
+      </div>
       <div id="files-loading" class="files-loading">Loading…</div>
       <div id="files-list"></div>
       <div class="modal-actions">
@@ -369,8 +408,38 @@
   <!-- Footer -->
   <footer class="app-footer">
     <span class="footer-brand">Spooler v2</span>
-    <button id="version-badge" class="footer-version" title="Release notes">v…</button>
+    <a id="auth-warning" class="footer-warning" href="#" hidden
+       title="Login is switched off (AUTH_ENABLED=false): anyone on your network can use Spooler, including features that need login.">⚠ Login is off</a>
+    <span class="footer-right">
+      <button id="btn-report-problem" class="footer-version report-btn" title="Report a bug"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M8 2l1.9 1.9M16 2l-1.9 1.9"/><path d="M9 7.1V6a3 3 0 0 1 6 0v1.1"/><path d="M12 20a6 6 0 0 1-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3a6 6 0 0 1-6 6z"/><path d="M12 20v-9M6.5 13H2M17.5 13H22M6 18l-2.5 2M18 18l2.5 2M6 9L3.5 7M18 9l2.5-2"/></svg>Report bug</button>
+      <button id="version-badge" class="footer-version" title="Release notes">v…</button>
+    </span>
   </footer>
+
+  <!-- Report problem modal -->
+  <div id="modal-report" class="modal">
+    <div class="modal-box modal-box-wide">
+      <h3>Report a bug</h3>
+      <p class="report-desc">Describe the problem and Spooler opens a new GitHub issue with your description, version and diagnostics filled in. Nothing is sent until you press Submit on GitHub. IP addresses, serial numbers, names and access codes are removed from the diagnostics — read through them first.</p>
+      <label id="report-printer-row" class="report-label" hidden>Which printer?
+        <select id="report-printer"></select>
+      </label>
+      <label class="report-label">Title
+        <input id="report-title" type="text" maxlength="120" placeholder="Short summary" />
+      </label>
+      <label class="report-label">What happened? What did you expect?
+        <textarea id="report-desc" class="report-text" rows="4" placeholder="Describe the problem and how to reproduce it"></textarea>
+      </label>
+      <label class="report-label">Diagnostics (attached to the issue, shortened if needed)</label>
+      <textarea id="report-diag" class="report-diag" readonly spellcheck="false">Loading…</textarea>
+      <div class="modal-actions">
+        <button id="btn-report-copy" class="btn btn-secondary btn-sm">Copy diagnostics</button>
+        <button id="btn-report-download" class="btn btn-secondary btn-sm">Download</button>
+        <button id="btn-report-github" class="btn btn-primary btn-sm">Open GitHub issue</button>
+        <button id="btn-report-close" class="btn btn-secondary">Close</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Settings modal -->
   <div id="modal-app-settings" class="modal">
@@ -425,6 +494,13 @@
               <path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/>
             </svg>
             <span>Integrations</span>
+            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
+          <button class="settings-menu-item" id="btn-settings-goto-api">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+            </svg>
+            <span>API access</span>
             <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
           </button>
           <div class="settings-menu-item settings-toggle-row">
@@ -497,6 +573,19 @@
           <input id="settings-edit-access-code" type="password" placeholder="12345" maxlength="64" />
           <span class="input-hint">Found on the printer under Settings → Network.</span>
         </label>
+        <div id="settings-edit-options" class="printer-options" style="display:none">
+          <div class="feature-group-title">Options</div>
+          <div id="settings-edit-autolight-label" class="notif-row option-row" data-option-for="cc1 cc2">
+            <div class="notif-info">
+              <span class="notif-label">Automatic light</span>
+              <span class="notif-desc">On when a print starts, off when it ends</span>
+            </div>
+            <label class="toggle-switch">
+              <input id="settings-edit-autolight" type="checkbox" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
         <div class="modal-actions">
           <button id="btn-settings-printer-remove" class="btn btn-danger" style="display:none">Remove</button>
           <button id="btn-settings-printer-save" class="btn btn-primary">Save</button>
@@ -511,6 +600,15 @@
           <h3>Notifications</h3>
         </div>
         <div class="notif-list">
+          <details class="notif-group">
+            <summary>
+              <span class="notif-group-text"><strong>Notification channels</strong><small>Browser push, ntfy, Telegram, Discord, webhook</small></span>
+              <span id="notif-channels-summary" class="notif-group-pill"></span>
+              <svg class="notif-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+            </summary>
+            <div id="notif-channels"></div>
+          </details>
+          <div class="feature-group-title">Events</div>
 
           <div class="notif-row">
             <div class="notif-info">
@@ -521,6 +619,9 @@
               <input type="checkbox" id="notif-finished-on" />
               <span class="toggle-slider"></span>
             </label>
+          </div>
+          <div class="notif-param">
+            <label class="notif-chip"><input type="checkbox" id="notif-finished-image" /><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> Include photo</span></label>
           </div>
 
           <div class="notif-row">
@@ -535,6 +636,7 @@
           </div>
           <div class="notif-param" id="notif-layer-param" style="display:none">
             <label>Notify at layer<input type="number" id="notif-layer-number" value="1" min="1" /></label>
+            <label class="notif-chip"><input type="checkbox" id="notif-layer-image" /><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> Include photo</span></label>
           </div>
 
           <div class="notif-row">
@@ -579,9 +681,10 @@
             <label>Remaining (g)<input type="number" id="notif-spool-low-threshold" value="100" min="1" max="5000" /></label>
           </div>
 
+          <div id="notif-extra-events"></div>
+          <p class="report-desc">Events are sent to every channel that is switched on above.</p>
         </div>
         <div class="modal-actions">
-          <button id="btn-notif-test" class="btn btn-secondary">Send test</button>
           <button id="btn-notif-save" class="btn btn-primary">Save</button>
         </div>
       </div>
@@ -630,6 +733,7 @@
           </button>
           <h3>Features</h3>
         </div>
+        <p id="features-auth-warning" class="login-off-note" hidden>⚠ Login is switched off (<code>AUTH_ENABLED=false</code>). Anyone on your network can use Spooler, so features that act on the printers are locked off.</p>
         <div id="features-list" class="features-list"></div>
       </div>
       <!-- Integrations sub-page -->
@@ -642,12 +746,52 @@
         </div>
         <p class="integrations-warning">Changes here affect connections to other services.</p>
         <div id="integrations-list"></div>
+        <div class="integrations-catalogue">
+          <h4>Spoolman filament catalogue</h4>
+          <p class="report-desc">Adds a brand's filament types (material, colour, weight) from the open SpoolmanDB to Spoolman so you can pick them when adding a spool. It creates filament types only, not spools, and skips any that already exist. Needs Spoolman running and internet access.</p>
+          <div class="catalogue-row">
+            <select id="import-brand" aria-label="Brand"><option value="">Loading brands…</option></select>
+            <button id="btn-import-filaments" class="btn btn-secondary btn-sm" title="Import this brand's filaments from SpoolmanDB">Import</button>
+          </div>
+        </div>
         <div class="modal-actions">
           <button id="btn-integrations-save" class="btn btn-primary">Save</button>
         </div>
         <div class="integrations-server-settings">
           <h4>Server setup (change in .env)</h4>
           <div id="integrations-server-settings-list" class="integrations-server-grid"></div>
+        </div>
+      </div>
+      <!-- API access sub-page -->
+      <div id="settings-api" style="display:none">
+        <div class="settings-subpage-header">
+          <button id="btn-settings-back-api" class="settings-back-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+          <h3>API access</h3>
+        </div>
+        <p class="report-desc">Lets another program read your print history, pictures and statistics, and change reference numbers, using a key you create here. A key opens only this API, nothing else in Spooler. See docs/external-api.md for the endpoints.</p>
+        <div class="notif-row option-row">
+          <div class="notif-info">
+            <span class="notif-label">Allow API access</span>
+            <span class="notif-desc" id="api-address"></span>
+          </div>
+          <label class="toggle-switch">
+            <input id="api-enabled" type="checkbox" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="feature-group-title">API keys</div>
+        <div id="api-token-list"></div>
+        <div id="api-new-key" class="api-new-key" hidden></div>
+        <div class="feature-group-title">Create a key</div>
+        <div class="api-create">
+          <input id="api-key-name" type="text" maxlength="60" placeholder="Name, e.g. the program using it" />
+          <select id="api-key-scope">
+            <option value="read">Read only</option>
+            <option value="write">Read + change reference numbers</option>
+          </select>
+          <button id="btn-api-create" class="btn btn-primary btn-sm">Create</button>
         </div>
       </div>
       <!-- Change password sub-page -->
@@ -689,7 +833,15 @@
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="/config.js"></script>
-  <script src="app.js?v=54"></script>
+  <script src="app-core.js?v=86"></script>
+  <script src="app-render.js?v=86"></script>
+  <script src="app-settings.js?v=83"></script>
+  <script src="app-files.js?v=83"></script>
+  <script src="app-integrations.js?v=84"></script>
+  <script src="app-stats.js?v=83"></script>
+  <script src="app-spools.js?v=83"></script>
+  <script src="app-service.js?v=87"></script>
+  <script src="app-boot.js?v=83"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});

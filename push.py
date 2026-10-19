@@ -3,6 +3,7 @@ Web Push (VAPID) support — key management, subscriptions, and send helpers.
 """
 
 import json
+import os
 
 try:
     from pywebpush import webpush, WebPushException
@@ -18,7 +19,11 @@ except ImportError:
     WEBPUSH_AVAILABLE = False
 
 from features import is_enabled
-from persistence import DATA_DIR
+from persistence import DATA_DIR, _atomic_write
+
+# Contact address sent to push services (RFC 8292 "sub" claim). Set VAPID_CONTACT
+# to e.g. mailto:you@example.org if you want push providers to be able to reach you.
+VAPID_CONTACT = os.getenv("VAPID_CONTACT", "mailto:admin@example.com")
 
 VAPID_FILE          = DATA_DIR / "vapid_keys.json"
 PUSH_SUBS_FILE      = DATA_DIR / "push_subscriptions.json"
@@ -46,10 +51,10 @@ def init_vapid() -> None:
             ).decode()
             pub = pk.public_key().public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
             _vapid_public_key = _b64.urlsafe_b64encode(pub).rstrip(b"=").decode()
-            VAPID_FILE.write_text(json.dumps({
+            _atomic_write(VAPID_FILE, json.dumps({
                 "private_pem": private_pem,
                 "public_key":  _vapid_public_key,
-            }))
+            }), mode=0o600)  # contains the VAPID private key
             print("[Push] Generated new VAPID key pair")
 
         # pywebpush 2.x requires a Vapid02 object, not a raw PEM string
@@ -107,10 +112,11 @@ def send_push_all(title: str, body: str) -> None:
                 subscription_info=sub,
                 data=json.dumps({"title": title, "body": body}),
                 vapid_private_key=_vapid,
-                vapid_claims={"sub": "mailto:tharje@gmail.com"},
+                vapid_claims={"sub": VAPID_CONTACT},
             )
         except WebPushException as e:
-            status = getattr(e.response, "status_code", None) if e.response else None
+            # `is not None`: a requests.Response is falsy for 4xx/5xx, so `if e.response` never matched.
+            status = getattr(e.response, "status_code", None) if e.response is not None else None
             if status in (404, 410):
                 dead.append(sub)
             else:

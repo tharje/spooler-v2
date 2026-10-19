@@ -13,7 +13,7 @@ from pathlib import Path
 import state
 from persistence import dump_raw_message
 from printers.base import PrinterConnection
-from printers.error_codes import lookup as lookup_error_code
+from printers.error_codes import is_api_result_code, lookup as lookup_error_code
 from spoolman import spoolman_assign, spoolman_set_location
 from printers.protocol import (
     CMD_LIGHT, CMD_PAUSE, CMD_RESUME, CMD_STOP,
@@ -56,6 +56,8 @@ _CC2_STATE_KEYS = {
     "machine_status", "print_status", "extruder",
     "heater_bed", "ztemperature_sensor", "gcode_move", "led",
     "external_device", "tool_head", "fans",
+    # {"exception_code": {"<code>": {"time": ...}}} -- when each fault was raised
+    "exception",
     # Canvas / filament
     "canvas", "canvas_info", "channel_info", "channels",
     "filament", "filament_info", "extruder_filament",
@@ -63,6 +65,55 @@ _CC2_STATE_KEYS = {
     # Device attributes (method 1001 response)
     "software_version",
 }
+
+
+# machine_status.status values that mean "busy, but not printing" -> the
+# Spooler status codes the "preparing" display state is built from.
+# 3/4 filament load/unload, 5 auto-leveling, 6 PID, 7 resonance test,
+# 8 self-check, 10 homing, 13 extruder maintenance.
+_MS_PREPARING = {3: 10, 4: 10, 5: 20, 6: 10, 7: 10, 8: 10, 10: 10, 13: 10}
+# 0 starting, 1 idle, 2 printing (handled by print_status), 9 updating,
+# 11 file transfer, 12 timelapse export: shown as before, no log noise.
+_MS_KNOWN_IDLE_OR_HANDLED = {0, 1, 2, 9, 11, 12}
+_logged_ms_status: set = set()
+_logged_sub_status: set = set()
+# sub_status values that mean material is (or is about to be) laid down.
+_EXTRUDING_SUBS = {2075, 2401, 2402, 2077, 2501, 2502, 2503, 2504, 2505}
+
+# What a busy-but-not-printing printer is doing, from sub_status (Elegoo
+# elegoo-link SDK codes) or, failing that, machine_status.status.
+_PHASE_BY_SUB = {
+    1045: "Heating nozzle", 1096: "Heating nozzle",
+    1405: "Heating bed",    1906: "Heating bed",
+    2801: "Homing", 2802: "Homing", 2803: "Homing failed",
+    2901: "Leveling", 2902: "Leveling",
+    1133: "Loading filament", 1134: "Loading filament", 1135: "Loading filament",
+    1136: "Filament loaded",
+    1143: "Unloading filament", 1144: "Unloading filament", 1145: "Filament unloaded",
+    1061: "Loading filament", 1063: "Filament loaded",
+    1062: "Unloading filament", 1064: "Filament unloaded",
+    1503: "PID calibration", 1504: "PID calibration",
+    5934: "Resonance test",
+}
+_PHASE_BY_MS = {
+    3: "Filament change", 4: "Filament change", 5: "Leveling", 6: "PID calibration",
+    7: "Resonance test", 8: "Self-check", 10: "Homing", 13: "Extruder maintenance",
+    14: "Emergency stop", 15: "Recovering after power loss",
+}
+
+
+def _cc2_phase(ms_status, sub_status, status_code) -> str:
+    # Only meaningful for pre-print/maintenance work and the odd modes that
+    # have no print_status of their own; during plain printing it stays empty.
+    # While printing/paused, only the sub_status phases are shown (e.g. a
+    # nozzle re-heat during a filament swap), never the machine mode.
+    if status_code in (3, 5, 6, 9, 0) and ms_status not in _PHASE_BY_MS:
+        return _PHASE_BY_SUB.get(sub_status, "") if status_code == 3 else ""
+    return _PHASE_BY_SUB.get(sub_status) or _PHASE_BY_MS.get(ms_status, "")
+
+
+# Requests (polled every 5 s) without any answer before we register again.
+UNANSWERED_LIMIT = 6
 
 
 class CC2Connection(PrinterConnection):
@@ -81,6 +132,8 @@ class CC2Connection(PrinterConnection):
         self._awaiting_file_list  = False
         self._current_filename    = ""
         self._mqtt_serial         = _load_cached_serial(self.id)
+        self._extruded_this_print = False  # this print has had a non-zero duration
+        self._unanswered          = 0  # requests sent since the printer last answered this client
         self._prev_active_tray_id = -2  # sentinel: not yet seen
         self._pending_thumb_fut: asyncio.Future | None = None
         self._pending_meta_fut:  asyncio.Future | None = None
@@ -175,17 +228,54 @@ class CC2Connection(PrinterConnection):
             payload["params"] = data
         try:
             await self._mqtt_client.publish(topic, json.dumps(payload))
+            self._unanswered += 1
             return True
         except Exception as e:
             print(f"[Printer {self.name}] MQTT send error: {e}")
             return False
 
+    async def _reregister(self) -> None:
+        self._mqtt_registered = False
+        self._unanswered = 0
+        self._mqtt_request_id = uuid.uuid4().hex[:16]
+        try:
+            await self._mqtt_client.publish(
+                f"elegoo/{self._mqtt_serial}/api_register",
+                json.dumps({"client_id": self._mqtt_client_id, "request_id": self._mqtt_request_id}),
+            )
+        except Exception as e:
+            print(f"[Printer {self.name}] MQTT re-register error: {e}")
+
     async def _mqtt_status_poller(self) -> None:
+        # Full state (1002), not just machine_status (1003) -- the printer's
+        # unsolicited api_status pushes (method 6000) are a delta stream, and
+        # Elegoo's own client resyncs via 1002 whenever it detects a gap in
+        # that stream. We don't track delta continuity, so poll 1002 on a
+        # timer instead: without it, a single dropped delta (e.g. the one
+        # that would clear print_status.state from "complete" back to "" /
+        # idle after the user confirms on the printer) leaves Spooler showing
+        # a stale status forever, since nothing else ever re-requests it.
+        # Verified live (2026-10-06): 1002's response is a strict superset of
+        # 1003's (same machine_status block, plus print_status/extruder/etc).
         tick = 0
+        unreg = 0
         while True:
             await asyncio.sleep(5)
-            if self._mqtt_registered:
-                await self.send_cmd(1003)   # machine_status
+            if self._mqtt_registered and self._unanswered >= UNANSWERED_LIMIT:
+                # The printer has stopped answering us although its status
+                # broadcasts still arrive: our registration is gone (the printer
+                # only keeps a few clients). Commands such as the light would be
+                # ignored silently, so register again.
+                print(f"[Printer {self.name}] No answer to {self._unanswered} requests — registering again")
+                await self._reregister()
+            elif not self._mqtt_registered and self._mqtt_serial and self._mqtt_client:
+                unreg += 1
+                if unreg >= UNANSWERED_LIMIT:   # registration never completed: ask again
+                    unreg = 0
+                    await self._reregister()
+            elif self._mqtt_registered:
+                unreg = 0
+                await self.send_cmd(1002)   # full state (includes machine_status)
                 if tick % 2 == 0:
                     await self.send_cmd(2005)  # canvas channel info
                 tick += 1
@@ -193,10 +283,18 @@ class CC2Connection(PrinterConnection):
     async def _handle_mqtt_message(self, message) -> None:
         topic = str(message.topic)
         dump_raw_message(self.id, f"cc2_mqtt:{topic}", message.payload)
+        # Only what the printer sent counts. With the cold-start wildcard
+        # subscription the broker also echoes our own requests back.
+        if topic.endswith(("/api_status", "/api_response", "/register_response")):
+            self._mark_seen()
 
         if "register_response" in topic:
             try:
                 p = json.loads(message.payload.decode())
+                # We subscribe with a wildcard, so this may be ANOTHER client's
+                # (the Elegoo app, a slicer) registration. Only our own counts.
+                if p.get("client_id") not in (None, self._mqtt_client_id):
+                    return
                 if p.get("error") == "ok":
                     self._mqtt_registered = True
                     self.connected = True
@@ -222,6 +320,7 @@ class CC2Connection(PrinterConnection):
             return
 
         if "api_response" in topic:
+            self._unanswered = 0
             inner  = payload.get("result")
 
             if self._awaiting_file_list and isinstance(inner, dict) and "file_list" in inner:
@@ -418,21 +517,49 @@ class CC2Connection(PrinterConnection):
             if spool_id is not None:
                 spoolman_set_location(spool_id, self.id)
 
+    def _active_error_codes(self) -> list:
+        """Printer fault codes currently reported, in report order.
+
+        Sources: the scalar error_code (seen on real hardware, 704) and
+        machine_status.exception_status, the list Elegoo's own SDK reads.
+        exception_status is replaced wholesale by each update (it's a list),
+        so it drops codes once cleared; exception.exception_code is a dict
+        that deep-merges and so keeps stale keys -- it's used only for the
+        timestamp of a code that's still active. Command result codes
+        (api_response result.error_code, e.g. 1009 busy) are not faults.
+        """
+        codes = []
+        scalar = self._cc2_state.get("error_code")
+        ms = self._cc2_state.get("machine_status") or {}
+        listed = ms.get("exception_status")
+        for c in [scalar] + (listed if isinstance(listed, list) else []):
+            if not c or isinstance(c, bool) or is_api_result_code(c) or c in codes:
+                continue
+            codes.append(c)
+        return codes
+
     def _protocol_reason_hint(self) -> dict | None:
-        # Most error_code values aren't verified against real hardware yet —
-        # only codes present in printers/error_codes.py have a confirmed
+        # Only codes present in printers/error_codes.py have a confirmed
         # category/message; everything else surfaces raw with "unknown"
         # rather than guessing.
-        error_code = self._cc2_state.get("error_code")
-        sub_status = self._cc2_state.get("machine_status", {}).get("sub_status")
-        if not error_code:
+        codes = self._active_error_codes()
+        if not codes:
             return None
+        ms = self._cc2_state.get("machine_status") or {}
+        # Prefer the first code we can explain; otherwise show the first raw one.
+        error_code = next((c for c in codes if lookup_error_code(c)), codes[0])
         known = lookup_error_code(error_code)
+        raw = {"error_code": self._cc2_state.get("error_code"), "sub_status": ms.get("sub_status")}
+        if ms.get("exception_status"):
+            raw["exception_status"] = ms["exception_status"]
+            times = (self._cc2_state.get("exception") or {}).get("exception_code") or {}
+            raw["exception_times"] = {str(c): (times.get(str(c)) or {}).get("time") for c in codes if str(c) in times}
         return {
             "code":     error_code,
             "category": known["category"] if known else "unknown",
             "message":  known["message"] if known else "",
-            "raw":      {"error_code": error_code, "sub_status": sub_status},
+            "action":   known.get("action", "") if known else "",
+            "raw":      raw,
         }
 
     async def _file_list_timeout(self) -> None:
@@ -443,6 +570,33 @@ class CC2Connection(PrinterConnection):
                 "type": "file_list", "printer_id": self.id, "files": [],
                 "error": "File list request timed out.",
             })
+
+    # Verified on a real CC2 (fw 02.01.00.00) by the owner, 2026-10-08. Follows what
+    # Elegoo's own elegoo-link SDK (the library ElegooSlicer uses) does -- chunked
+    # PUT /upload on port 80, see uploads.put_file_chunked and spooler-cc2-research.md.
+    supports_upload = True
+    supports_light = True
+
+    async def set_light(self, on: bool) -> bool:
+        return await self.send_cmd(CMD_LIGHT, {"LightStatus": {"SecondLight": bool(on)}})
+
+    async def upload_file(self, local_path, remote_name: str, start_after: bool = False) -> bool:
+        from uploads import UploadError, forward_timeout, put_file_chunked
+        size = local_path.stat().st_size
+        loop = asyncio.get_running_loop()
+        token = self.access_code or "123456"   # the SDK's default when no code is set
+
+        def _send():
+            return put_file_chunked(self.ip, 80, "/upload", local_path, remote_name, token,
+                                    timeout=forward_timeout(size))
+        try:
+            reply = await loop.run_in_executor(None, _send)
+        except OSError as e:
+            raise UploadError(f"Could not reach the printer: {e}") from e
+        print(f"[Printer {self.name}] CC2 upload -> {reply}")
+        if start_after and not await self.start_print_file(remote_name):
+            raise UploadError("File uploaded, but the printer didn't accept the start command.")
+        return True
 
     async def start_print_file(self, filename: str, print_opts: dict | None = None) -> bool:
         self._current_filename = filename
@@ -480,6 +634,7 @@ class CC2Connection(PrinterConnection):
                 "MainboardID":     s.get("sn", self.attrs.get("MainboardID", "")),
                 "Hostname":        s.get("hostname", self.attrs.get("Hostname", "")),
             }
+            self._note_firmware()
 
         print_duration = ps.get("print_duration", 0) or 0
         remaining      = ps.get("remaining_time_sec", 0) or 0
@@ -530,16 +685,61 @@ class CC2Connection(PrinterConnection):
             "standby":   0,
         }
 
+        if state_str not in ("printing", "paused"):
+            self._extruded_this_print = False
         if sub_status in _SUB_TRANSIENT:
             status_code = _SUB_TRANSIENT[sub_status]
         elif state_str in _STATE_STR:
             status_code = _STATE_STR[state_str]
+            # Verified live (2026-10-06): while the printer heats up before a
+            # print, print_status.state already says "printing" (duration 0,
+            # layer 0) with sub_status 1045 (nozzle) / 1405 (bed) -- showing
+            # "printing" then is wrong. Before extruding has begun, let the
+            # more specific sub_status decide (heating, homing, leveling).
+            if state_str == "printing" and print_duration:
+                self._extruded_this_print = True
+            # Once a print has been under way, a zero duration (seen as the print
+            # wraps up) must not turn it back into "preparing": the end of the
+            # print would then never be recognised (history, light, notification).
+            if (state_str == "printing" and not print_duration and not self._extruded_this_print
+                    and sub_status not in _EXTRUDING_SUBS):
+                if sub_status in _SUB_STABLE:
+                    status_code = _SUB_STABLE[sub_status]
+                else:
+                    # Nothing has been extruded yet, so whatever the printer is
+                    # doing it isn't "printing": show preparing, and log the
+                    # sub_status once so it can be given a proper label
+                    # (1066 was seen during bed leveling on 2026-10-06).
+                    status_code = 15
+                    if sub_status not in _logged_sub_status:
+                        _logged_sub_status.add(sub_status)
+                        print(f"[Printer {self.name}] CC2 sub_status {sub_status} before extrusion "
+                              f"isn't mapped -- shown as Preparing.")
         elif sub_status in _SUB_STABLE:
             status_code = _SUB_STABLE[sub_status]
         elif remaining > 0:
             status_code = 3
         else:
             status_code = 0
+
+        # machine_status.status is the printer's top-level mode (codes from
+        # Elegoo's elegoo-link SDK, documented in spooler-cc2-research.md).
+        # The print_status/sub_status logic above only knows about print
+        # phases, so anything outside a print used to show as idle.
+        ms_status = ms.get("status")
+        if ms_status == 14:                      # emergency stop
+            status_code = 14
+        elif ms_status == 15:                    # recovering after power loss
+            status_code = 12
+        elif status_code == 0 and ms_status in _MS_PREPARING:
+            status_code = _MS_PREPARING[ms_status]
+        elif status_code == 0 and ms_status is not None and ms_status not in _MS_KNOWN_IDLE_OR_HANDLED:
+            if ms_status not in _logged_ms_status:
+                _logged_ms_status.add(ms_status)
+                print(f"[Printer {self.name}] CC2 machine_status.status {ms_status!r} not mapped -- "
+                      f"showing idle. Please report this on GitHub.")
+
+        self.phase = _cc2_phase(ms_status, sub_status, status_code)
 
         if status_code == 0:
             print_duration = 0
@@ -551,6 +751,16 @@ class CC2Connection(PrinterConnection):
 
         total    = print_duration + remaining
         progress = min(100, round(print_duration / total * 100)) if total > 0 else 0
+        # machine_status.progress is the printer's own percentage (verified live
+        # 2026-10-19: steps up 1% at a time and differs from the time-based
+        # estimate by 8-12 points because remaining_time_sec only moves in
+        # 60 s steps). Prefer it while a print is active; keep the estimate as
+        # fallback for firmware that doesn't send it.
+        reported = ms.get("progress")
+        if (state_str in ("printing", "paused") and status_code != 0
+                and isinstance(reported, (int, float)) and not isinstance(reported, bool)
+                and 0 <= reported <= 100):
+            progress = round(reported)
 
         new_print = state_str == "printing" and self._prev_state_str not in ("printing", "paused")
         if new_print:
