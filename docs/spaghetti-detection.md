@@ -23,7 +23,7 @@ Only the `ml_api` service is started, not the whole Obico server. To require an 
 ## 2. Set it up in Spooler
 
 1. **Settings → Features → Spaghetti detection**: switch on.
-2. **Settings → Integrations → Spaghetti detection (Obico)**:
+2. **Settings → Services and data → Spaghetti detection (Obico)**:
    - **Detector address**: for example `http://192.0.2.10:3333`.
    - **Detector access token**: only if you set `ML_API_TOKEN`.
    - **Spooler's address as the detector sees it**: for example `http://192.0.2.10:8080`. The ML API fetches each picture from Spooler itself, so this must be an address the detector container can reach (not `localhost` unless both run in the same network namespace).

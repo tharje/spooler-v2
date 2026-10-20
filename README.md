@@ -216,7 +216,7 @@ Settings → **Printers** → pick a Centauri Carbon → **Options** → *Automa
 
 ## Picture collection
 
-Off by default. It saves a camera picture every 30 seconds (adjustable, 10–600) while a print runs, for building your own failure-detection data. Turn it on under Settings → **Features** and choose a folder under Settings → **Integrations** → *Picture collection*; nothing is saved until a folder is chosen. In Docker the folder must be mounted from the host (for example add `- /home/you/print-dataset:/dataset` under `volumes` and enter `/dataset`), otherwise the pictures are lost when the container is rebuilt.
+Off by default. It saves a camera picture every 30 seconds (adjustable, 10–600) while a print runs, for building your own failure-detection data. Turn it on under Settings → **Features** and choose a folder under Settings → **Services and data** → *Picture collection*; nothing is saved until a folder is chosen. In Docker the folder must be mounted from the host (for example add `- /home/you/print-dataset:/dataset` under `volumes` and enter `/dataset`), otherwise the pictures are lost when the container is rebuilt.
 
 Each print gets its own folder with its pictures, a `pictures.jsonl` (progress and layer per picture) and a `job.json` (file name, start, end and how the print ended). While a print runs, the printer card has two buttons, *Looks OK* and *Failing now*, that take a picture on the spot and keep it with that label. Nothing is sent anywhere; whether to share any pictures is your choice.
 
@@ -239,14 +239,14 @@ Spooler integrates with **[Spoolman](https://github.com/Donkie/Spoolman)**, an o
 - Runs on **port 7912** alongside Spooler (started automatically by Docker Compose)
 - Open **Spoolman UI** directly from the Spools panel
 - Add spools manually
-- **Filament catalogue import** (Settings → Integrations) imports any brand's filament types from SpoolmanDB (Elegoo preselected)
+- **Filament catalogue import** (Settings → Services and data) imports any brand's filament types from SpoolmanDB (Elegoo preselected)
 - Spool **location** in Spoolman is set automatically to the printer's name (e.g. `CC2`) whenever a spool is linked to a slot or the printer connects — no manual setup needed
 
 By default, Spooler proxies the Spoolman UI through itself (so one port covers everything). To redirect the browser directly to Spoolman instead — useful if you run a separate reverse proxy or need better WebSocket support — set `PROXY_SPOOLMAN=false` in your `.env` file.
 
 ### Configuring the connection
 
-Settings → **Integrations** lets you change the Spoolman URL, the proxy toggle, and an optional basic-auth username/password (for a Spoolman sitting behind a reverse proxy that requires it) — all without touching `.env` or restarting. **Test connection** checks it immediately. Values set via `.env` still work as the default if nothing's been changed in the UI; set `SPOOLER_LOCK_CONFIG=1` to make environment variables win unconditionally and the fields read-only (for someone hosting Spooler for other people).
+Settings → **Services and data** lets you change the Spoolman URL, the proxy toggle, and an optional basic-auth username/password (for a Spoolman sitting behind a reverse proxy that requires it) — all without touching `.env` or restarting. **Test connection** checks it immediately. Values set via `.env` still work as the default if nothing's been changed in the UI; set `SPOOLER_LOCK_CONFIG=1` to make environment variables win unconditionally and the fields read-only (for someone hosting Spooler for other people).
 
 The same page also has a **Slicer** field — paste the URL of a browser-based slicer (e.g. a self-hosted [Orca Slicer](https://github.com/linuxserver/docker-orcaslicer)) and a **Slicer** link appears in the sidebar that opens it in a new tab.
 

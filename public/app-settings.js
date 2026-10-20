@@ -282,7 +282,7 @@ const _EXTRA_NOTIF_EVENTS = [
   { key: "error", group: "problems",           label: "Print error",      desc: "When the printer reports an error, with the cause and code when known", image: true },
   { key: "filament_runout", group: "problems", label: "Filament runout",  desc: "When the printer stops because filament ran out", image: true },
   { key: "firmware", group: "status",        label: "Firmware changed", desc: "When a printer reports a different firmware version than before (and whether it is tested with Spooler)" },
-  { key: "spaghetti", group: "problems",       label: "Possible print failure", desc: "When the spaghetti detector thinks a print is failing (set up under Integrations)", image: true },
+  { key: "spaghetti", group: "problems",       label: "Possible print failure", desc: "When the spaghetti detector thinks a print is failing (set up under Services and data)", image: true },
   { key: "service", group: "status",         label: "Service due",      desc: "When a service reminder in the logbook has come due (set under Service)" },
   { key: "offline", group: "problems",         label: "Printer offline",  desc: "When a printer has been unreachable for a while, and when it comes back",
     param: { name: "minutes", label: "Minutes offline before notifying", def: 5, min: 1, max: 1440 } },
@@ -549,7 +549,7 @@ async function _testBrowserPush() {
 
 // ─── Notification channels (where notifications are sent) ────────────────────
 // Web push is built in; the rest are configured here with the same field
-// store as Settings → Integrations (/api/integrations), and switched on/off
+// store as Settings → Services and data (/api/integrations), and switched on/off
 // with the same feature switches the server enforces (/api/features).
 const _NOTIF_CHANNELS = [
   { key: "webpush",  feature: "notify_webpush",  title: "Browser push", prefix: null,
@@ -559,7 +559,7 @@ const _NOTIF_CHANNELS = [
   { key: "telegram", feature: "notify_telegram", title: "Telegram", prefix: "telegram.",
     help: "Create a bot with @BotFather, send it a message, and enter the bot token and your chat ID." },
   { key: "discord",  feature: "notify_discord",  title: "Discord",  prefix: "discord.",
-    help: "Channel settings → Integrations → Webhooks → copy the webhook address." },
+    help: "Channel settings → Services and data → Webhooks → copy the webhook address." },
   { key: "webhook",  feature: "notify_webhook",  title: "Webhook",  prefix: "webhook.",
     help: "Spooler sends each notification as JSON (POST) to this address." },
 ];
