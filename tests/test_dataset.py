@@ -59,3 +59,33 @@ def test_nothing_is_saved_while_not_printing_or_without_a_picture(tmp_path, monk
     run(dataset.collect_printer(FakePrinter(status=0)))
     run(dataset.collect_printer(FakePrinter(status=2, jpeg=None)))
     assert list(tmp_path.iterdir()) == []
+
+
+def test_a_marked_picture_carries_the_label_and_the_first_failure_is_noted(tmp_path, monkeypatch):
+    monkeypatch.setattr(dataset, "DATASET_DIR", tmp_path)
+    monkeypatch.setattr(dataset, "_jobs", {})
+    monkeypatch.setattr(dataset, "grab_jpeg", lambda url: b"jpeg")
+    p = FakePrinter(status=2)
+    p.camera_url, p.connected = "http://camera", True
+    dataset.label_now(p, "ok")
+    dataset.label_now(p, "failed")
+    (folder,) = [d for d in tmp_path.glob("*/*") if d.is_dir()]
+    lines = [json.loads(x) for x in (folder / "pictures.jsonl").read_text().splitlines()]
+    assert [x["label"] for x in lines] == ["ok", "failed"]
+    assert sorted(f.name[9:] for f in folder.glob("*.jpg")) == ["failed.jpg", "ok.jpg"]
+    assert json.loads((folder / "job.json").read_text())["failure_seen_at"]
+    assert dataset._jobs["p1"]["n"] == 2
+
+
+def test_label_is_refused_for_bad_label_or_idle_printer(tmp_path, monkeypatch):
+    import pytest
+    monkeypatch.setattr(dataset, "DATASET_DIR", tmp_path)
+    monkeypatch.setattr(dataset, "_jobs", {})
+    monkeypatch.setattr(dataset, "grab_jpeg", lambda url: b"jpeg")
+    p = FakePrinter(status=2)
+    p.camera_url, p.connected = "http://camera", True
+    with pytest.raises(dataset.DatasetError):
+        dataset.label_now(p, "maybe")
+    p.info["Status"] = 0
+    with pytest.raises(dataset.DatasetError):
+        dataset.label_now(p, "ok")

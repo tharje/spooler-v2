@@ -563,6 +563,8 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
             self._handle_test_spoolman()
         elif self.path == "/api/integrations/spaghetti/test":
             self._handle_test_spaghetti()
+        elif self.path == "/api/dataset/label":
+            self._handle_dataset_label()
         elif self.path.startswith("/api/integrations/") and self.path.endswith("/test") \
                 and self.path.split("/")[3] in notifiers.CHANNELS:
             self._handle_test_notifier(self.path.split("/")[3])

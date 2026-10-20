@@ -361,6 +361,23 @@ function spaghettiRowHtml(printer) {
   return `<div class="spaghetti-row ${tone}" title="Last check ${escAttr(when)}">
     <span class="spaghetti-dot"></span><span>${escHtml(text)}</span><span class="spaghetti-time">${escHtml(when)}</span></div>`;
 }
+function datasetRowHtml(printer) {
+  if (!printer.dataset) return "";
+  const id = escAttr(printer.id);
+  return `<div class="dataset-row" title="Pictures saved for the failure-detection data">
+    <span>Collecting pictures (${printer.dataset.pictures})</span>
+    <button class="btn" onclick="markPicture('${id}','ok')">Looks OK</button>
+    <button class="btn" onclick="markPicture('${id}','failed')">Failing now</button></div>`;
+}
+async function markPicture(printerId, label) {
+  try {
+    const r = await fetch("/api/dataset/label", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ printer_id: printerId, label }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || "Something went wrong");
+    toast(label === "ok" ? "Saved as OK" : "Saved as failing");
+  } catch (e) { toast(e.message, true); }
+}
 // firmware-badge:end
 
 // clock-sync:begin

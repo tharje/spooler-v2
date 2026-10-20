@@ -100,6 +100,7 @@ FIELDS: dict = {
     "spaghetti.threshold": Field(key="spaghetti.threshold", label="Sensitivity: confidence % that counts (10-95)", type="int", default=50),
     "spaghetti.frames": Field(key="spaghetti.frames", label="Pictures in a row before alerting (1-10)", type="int", default=3),
     "spaghetti.interval_s": Field(key="spaghetti.interval_s", label="Seconds between pictures (15-600)", type="int", default=60),
+    "dataset.interval_s": Field(key="dataset.interval_s", label="Seconds between pictures (10-600)", type="int", default=30),
     "backup.interval_days": Field(
         key="backup.interval_days", label="Automatic backup interval (days)", type="int",
         env="SPOOLER_BACKUP_INTERVAL_DAYS", default=1,

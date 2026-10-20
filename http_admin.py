@@ -12,6 +12,7 @@ import json
 import notifiers
 import notify
 import service
+import dataset
 import spaghetti
 import os
 import state
@@ -424,6 +425,24 @@ class AdminMixin:
             result = {"ok": False, "message": str(e)}
         config.record_test_result(channel, result["ok"], result["message"])
         self._json(result)
+
+    @requires_feature("dataset_collection")
+    def _handle_dataset_label(self):
+        try:
+            body = json.loads(self._read_body() or b"{}")
+            printer = state.printers.get(body.get("printer_id"))
+        except Exception:
+            self._json({"error": "Bad request"}, 400)
+            return
+        if printer is None:
+            self._json({"error": "Unknown printer"}, 404)
+            return
+        try:
+            dataset.label_now(printer, body.get("label"))
+        except dataset.DatasetError as e:
+            self._json({"error": str(e)}, 409)
+            return
+        self._json({"ok": True})
 
     @requires_feature("spoolman")
     @requires_feature("spaghetti_detection")

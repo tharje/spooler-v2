@@ -1808,6 +1808,10 @@ main {
 .spaghetti-row.warn { color: var(--yellow); } .spaghetti-row.warn .spaghetti-dot { background: var(--yellow); }
 .spaghetti-row.bad { color: var(--red); border-color: var(--red); } .spaghetti-row.bad .spaghetti-dot { background: var(--red); }
 .spaghetti-row.off { color: var(--text-muted); }
+.dataset-row { display: flex; align-items: center; gap: 8px; margin: 0 14px 10px; padding: 8px 12px; font-size: 12px; font-weight: 600;
+  border-radius: var(--radius-sm); background: var(--surface2); border: 1px solid var(--border); }
+.dataset-row span { margin-right: auto; }
+.dataset-row .btn { padding: 4px 10px; font-size: 12px; }
 .spaghetti-time { margin-left: auto; font-weight: 400; color: var(--text-muted); }
 
 .service-machine { display: block; width: 100%; text-align: left; color: inherit; font: inherit; cursor: pointer; }

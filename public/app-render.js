@@ -118,6 +118,7 @@ function renderPrinter(printer) {
     ` : ""}
 
     ${printing ? spaghettiRowHtml(printer) : ""}
+    ${printing ? datasetRowHtml(printer) : ""}
 
     <!-- Spool (hidden for canvas printers — tray linking handles assignment) -->
     ${!printer.status?.canvas_info?.canvas_list?.length ? (() => {
