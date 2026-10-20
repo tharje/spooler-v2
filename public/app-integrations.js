@@ -339,7 +339,7 @@ function _applyFeatures(list) {
 }
 
 const _FEATURE_GROUPS = [
-  { title: "Monitoring",    keys: ["camera", "print_snapshot", "spaghetti_detection"] },
+  { title: "Monitoring",    keys: ["camera", "print_snapshot", "spaghetti_detection", "dataset_collection"] },
   { title: "Notifications", keys: ["notifications"] },
   { title: "Data",          keys: ["backup", "statistics", "service_log"] },
   { title: "Integrations",  keys: ["spoolman"] },

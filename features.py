@@ -81,6 +81,11 @@ FEATURES: dict = {
         description="Watch running prints through the camera with an Obico detector you run yourself, and send a notification with a picture if a print looks like it is failing. Set up under Integrations.",
         requires=("camera",),
     ),
+    "dataset_collection": Feature(
+        key="dataset_collection", name="Picture collection", default=False,
+        description="Save a camera picture every 30 seconds during prints to a separate folder on the host (SPOOLER_DATASET_DIR, mounted at /dataset), with a note on how each print ended. For building your own failure-detection data; nothing is sent anywhere.",
+        requires=("camera",),
+    ),
     "external_api": Feature(
         key="external_api", name="External API", default=False,
         description="Let other programs read the print history, pictures and statistics, and change reference numbers, using an API key (create keys under Settings → API access).",

@@ -59,6 +59,7 @@ import state
 from auth import AUTH_ENABLED, BCRYPT_AVAILABLE, session_cleanup_loop
 import diagnostics
 import spaghetti
+import dataset
 import uploads
 from backup import check_startup_backup, daily_backup_loop
 from http_handler import run_http, run_https, set_ws_adopter
@@ -173,6 +174,7 @@ async def main() -> None:
     asyncio.create_task(daily_backup_loop())
     asyncio.create_task(_ledger_sender())
     asyncio.create_task(spaghetti.watch_loop())
+    asyncio.create_task(dataset.collect_loop())
     asyncio.create_task(_service_daily())
 
     # Let the plain HTTP server (port HTTP_PORT) also adopt WebSocket upgrade
