@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css?v=75" />
+  <link rel="stylesheet" href="style.css?v=76" />
 </head>
 <body>
   <header>
@@ -609,7 +609,8 @@
             </summary>
             <div id="notif-channels"></div>
           </details>
-          <details class="notif-group" id="notif-evgroup-progress">
+          <div class="feature-group-title">Events</div>
+          <details class="notif-group notif-group-events" id="notif-evgroup-progress">
             <summary>
               <span class="notif-group-text"><strong>Print progress</strong><small>Started, complete, paused, layer checkpoint</small></span>
               <span class="notif-group-pill notif-ev-pill"></span>
@@ -648,7 +649,7 @@
               <div id="notif-extra-progress"></div>
             </div>
           </details>
-          <details class="notif-group" id="notif-evgroup-problems">
+          <details class="notif-group notif-group-events" id="notif-evgroup-problems">
             <summary>
               <span class="notif-group-text"><strong>Problems</strong><small>Errors, filament runout, possible failure, overheat, offline</small></span>
               <span class="notif-group-pill notif-ev-pill"></span>
@@ -672,7 +673,7 @@
               <div id="notif-extra-problems"></div>
             </div>
           </details>
-          <details class="notif-group" id="notif-evgroup-status">
+          <details class="notif-group notif-group-events" id="notif-evgroup-status">
             <summary>
               <span class="notif-group-text"><strong>Reminders and status</strong><small>Nozzle still hot, spool low, firmware, service</small></span>
               <span class="notif-group-pill notif-ev-pill"></span>

@@ -1589,6 +1589,11 @@ main {
 .notif-group > summary::-webkit-details-marker { display: none; }
 .notif-group > summary:hover { border-color: var(--accent); }
 .notif-group[open] > summary { border-color: var(--accent); }
+.notif-group-events { margin-bottom: 8px; }
+.notif-group-events > summary { background: transparent; border-width: 1px 1px 1px 3px; border-left-color: var(--accent); padding: 10px 12px; }
+.notif-group-events .notif-group-text strong { font-size: 13px; }
+.notif-group-events[open] > summary { background: var(--surface2); }
+.notif-group-events > .notif-group-body { border-left: 3px solid var(--border); margin-left: 0; padding-left: 12px; }
 .notif-group-text { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .notif-group-text strong { font-size: 14px; }
 .notif-group-text small { font-size: 12px; color: var(--text-muted); }
