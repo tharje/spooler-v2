@@ -347,6 +347,8 @@ const _FEATURE_GROUPS = [
   { title: "Integrations",  keys: ["spoolman"] },
 ];
 
+const _openFeatureGroups = new Set();   // menus the user has opened, kept across re-renders
+
 function _renderFeaturesList() {
   const container = document.getElementById("features-list");
   if (!container) return;
@@ -370,8 +372,25 @@ function _renderFeaturesList() {
           </label>
         </div>`;
     }).join("");
-    return rows ? `<div class="feature-group-title">${escHtml(group.title)}</div>${rows}` : "";
+    if (!rows) return "";
+    const present = group.keys.filter(k => features[k]);
+    const on = present.filter(k => features[k].enabled).length;
+    return `
+      <details class="notif-group notif-group-events" data-feature-group="${escAttr(group.title)}" ${_openFeatureGroups.has(group.title) ? "open" : ""}>
+        <summary>
+          <span class="notif-group-text"><strong>${escHtml(group.title)}</strong></span>
+          <span class="notif-group-pill">${on ? `${on} of ${present.length} on` : "none on"}</span>
+          <svg class="notif-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+        </summary>
+        <div class="notif-group-body">${rows}</div>
+      </details>`;
   }).join("");
+
+  container.querySelectorAll("details[data-feature-group]").forEach(d => {
+    d.addEventListener("toggle", () => {
+      d.open ? _openFeatureGroups.add(d.dataset.featureGroup) : _openFeatureGroups.delete(d.dataset.featureGroup);
+    });
+  });
 
   container.querySelectorAll("input[data-feature-key]").forEach(input => {
     input.addEventListener("change", async () => {
