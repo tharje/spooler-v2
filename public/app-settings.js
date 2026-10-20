@@ -277,21 +277,19 @@ async function _unsubscribePush() {
 // picture switch and one numeric parameter; rendered here instead of as
 // hand-written HTML so the list, the form and the save code can't drift apart.
 const _EXTRA_NOTIF_EVENTS = [
-  { key: "started",         label: "Print started",    desc: "When a print begins", image: true },
-  { key: "paused",          label: "Print paused",     desc: "When a print pauses, with the cause (pauses you start from Spooler aren't announced)", image: true },
-  { key: "error",           label: "Print error",      desc: "When the printer reports an error, with the cause and code when known", image: true },
-  { key: "filament_runout", label: "Filament runout",  desc: "When the printer stops because filament ran out", image: true },
-  { key: "firmware",        label: "Firmware changed", desc: "When a printer reports a different firmware version than before (and whether it is tested with Spooler)" },
-  { key: "spaghetti",       label: "Possible print failure", desc: "When the spaghetti detector thinks a print is failing (set up under Integrations)", image: true },
-  { key: "service",         label: "Service due",      desc: "When a service reminder in the logbook has come due (set under Service)" },
-  { key: "offline",         label: "Printer offline",  desc: "When a printer has been unreachable for a while, and when it comes back",
+  { key: "started", group: "progress",         label: "Print started",    desc: "When a print begins", image: true },
+  { key: "paused", group: "progress",          label: "Print paused",     desc: "When a print pauses, with the cause (pauses you start from Spooler aren't announced)", image: true },
+  { key: "error", group: "problems",           label: "Print error",      desc: "When the printer reports an error, with the cause and code when known", image: true },
+  { key: "filament_runout", group: "problems", label: "Filament runout",  desc: "When the printer stops because filament ran out", image: true },
+  { key: "firmware", group: "status",        label: "Firmware changed", desc: "When a printer reports a different firmware version than before (and whether it is tested with Spooler)" },
+  { key: "spaghetti", group: "problems",       label: "Possible print failure", desc: "When the spaghetti detector thinks a print is failing (set up under Integrations)", image: true },
+  { key: "service", group: "status",         label: "Service due",      desc: "When a service reminder in the logbook has come due (set under Service)" },
+  { key: "offline", group: "problems",         label: "Printer offline",  desc: "When a printer has been unreachable for a while, and when it comes back",
     param: { name: "minutes", label: "Minutes offline before notifying", def: 5, min: 1, max: 1440 } },
 ];
 
-function _renderExtraNotifEvents(s) {
-  const host = document.getElementById("notif-extra-events");
-  if (!host) return;
-  host.innerHTML = _EXTRA_NOTIF_EVENTS.map(ev => `
+function _notifEventRowHtml(ev, s) {
+  return `
     <div class="notif-row">
       <div class="notif-info">
         <span class="notif-label">${escHtml(ev.label)}</span>
@@ -304,8 +302,26 @@ function _renderExtraNotifEvents(s) {
     </div>
     ${ev.image ? `<div class="notif-param"><label class="notif-chip"><input type="checkbox" id="notif-ev-${ev.key}-image" ${s[ev.key]?.image ? "checked" : ""} /><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> Include photo</span></label></div>` : ""}
     ${ev.param ? `<div class="notif-param"><label>${escHtml(ev.param.label)}<input type="number" id="notif-ev-${ev.key}-${ev.param.name}" value="${s[ev.key]?.[ev.param.name] ?? ev.param.def}" min="${ev.param.min}" max="${ev.param.max}" /></label></div>` : ""}
-  `).join("");
+  `;
 }
+
+function _renderExtraNotifEvents(s) {
+  for (const group of new Set(_EXTRA_NOTIF_EVENTS.map(ev => ev.group))) {
+    const host = document.getElementById(`notif-extra-${group}`);
+    if (host) host.innerHTML = _EXTRA_NOTIF_EVENTS.filter(ev => ev.group === group).map(ev => _notifEventRowHtml(ev, s)).join("");
+  }
+}
+
+// "N on" pill on each event menu, counted from the switches inside it.
+function _updateNotifEventPills() {
+  document.querySelectorAll(".notif-ev-pill").forEach(pill => {
+    const group = pill.closest(".notif-group");
+    const total = group.querySelectorAll('.notif-row input[type="checkbox"]').length;
+    const on = group.querySelectorAll('.notif-row input[type="checkbox"]:checked').length;
+    pill.textContent = on ? `${on} of ${total} on` : "none on";
+  });
+}
+document.getElementById("settings-notifications")?.addEventListener("change", _updateNotifEventPills);
 
 function _collectExtraNotifEvents() {
   const out = {};
@@ -340,6 +356,7 @@ async function _populateNotifForm() {
   set("notif-finished-image",            s.finished?.image          ?? false);
   _renderExtraNotifEvents(s);
   _syncNotifParams();
+  _updateNotifEventPills();
 }
 
 function _syncNotifParams() {
