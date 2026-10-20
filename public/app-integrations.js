@@ -347,7 +347,7 @@ const _FEATURE_GROUPS = [
   { title: "Monitoring",    keys: ["camera", "print_snapshot", "spaghetti_detection", "dataset_collection"] },
   { title: "Notifications", keys: ["notifications"] },
   { title: "Data",          keys: ["backup", "statistics", "service_log"] },
-  { title: "Integrations",  keys: ["spoolman"] },
+  { title: "Services",      keys: ["spoolman", "update_check"] },
 ];
 
 const _openFeatureGroups = new Set();   // menus the user has opened, kept across re-renders
