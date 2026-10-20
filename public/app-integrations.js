@@ -156,7 +156,7 @@ const _INTEGRATION_GROUPS = [
   { title: "Spaghetti detection (Obico)", prefix: "spaghetti.", testKey: "spaghetti",
     help: "Run Obico's ML API as its own container, give its address here, and the address Spooler has as seen from that container (for example http://spooler:8080 in the same Docker network). Then turn on Spaghetti detection under Features and 'Possible print failure' under Notifications." },
   { title: "Picture collection", prefix: "dataset.", testKey: null,
-    help: "Saves a camera picture during prints to the folder mounted at /dataset (for building your own failure-detection data). Turn it on under Features. While a print runs, each printer card gets two buttons to mark what you see." },
+    help: "Saves a camera picture during prints to the folder you choose (for building your own failure-detection data). Turn it on under Features. In Docker, choose a folder that is mounted from the host (for example add - /home/you/print-dataset:/dataset under volumes and enter /dataset here), otherwise the pictures are lost when the container is rebuilt. While a print runs, each printer card gets two buttons to mark what you see." },
 ];
 
 // Static markup in index.html; re-attached into the Spoolman group after each render.

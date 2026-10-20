@@ -6,8 +6,8 @@ folder outside Spooler's own data (the container path in DATASET_DIR, mounted
 from the host), together with a small note about the print. When the print
 ends, how it ended is written into the note, so the pictures can later be
 sorted into good and failed prints. Nothing is ever sent anywhere and nothing
-is done to the printer. Off unless the feature is switched on and the folder
-exists.
+is done to the printer. Off unless the feature is switched on and a folder is chosen
+(in Docker the folder must be mounted from the host, or it is lost with the container).
 
 Layout: <folder>/<printer name>/<start time>/<hh-mm-ss>.jpg, plus job.json in
 each print's folder and pictures.jsonl (one line per picture). A picture you
@@ -29,7 +29,6 @@ from features import is_enabled
 from snapshot import grab_jpeg
 
 PRINTING = {2, 3, 4, 13}              # printers.base.PRINTING_STATUSES
-DATASET_DIR = Path(os.environ.get("SPOOLER_DATASET_DIR", "/dataset"))
 LABELS = ("ok", "failed")
 _jobs: dict = {}                      # printer id -> {"dir": Path, "n": pictures so far}
 _lock = threading.Lock()              # the loop and the label button both write
@@ -37,6 +36,12 @@ _lock = threading.Lock()              # the loop and the label button both write
 
 class DatasetError(Exception):
     pass
+
+
+def dataset_dir() -> Path | None:
+    """The folder the user chose in Integrations (or SPOOLER_DATASET_DIR); None = not set."""
+    chosen = (config.get("dataset.dir") or "").strip()
+    return Path(chosen) if chosen else None
 
 
 def interval_s() -> int:
@@ -61,7 +66,7 @@ def _write_json(path: Path, data: dict) -> None:
 
 def _start_job(p, info: dict) -> dict:
     started = time.localtime()
-    folder = DATASET_DIR / _slug(p.name) / time.strftime("%Y-%m-%d_%H-%M-%S", started)
+    folder = dataset_dir() / _slug(p.name) / time.strftime("%Y-%m-%d_%H-%M-%S", started)
     folder.mkdir(parents=True, exist_ok=True)
     job = {"dir": folder, "n": 0,
            "meta": {"printer": p.name, "printer_type": p.printer_type,
@@ -97,8 +102,8 @@ def label_now(p, label: str) -> None:
     """Take a picture now and keep it with the label you chose. Runs in a request thread."""
     if label not in LABELS:
         raise DatasetError("The label must be ok or failed.")
-    if not DATASET_DIR.is_dir():
-        raise DatasetError("The picture folder is not available.")
+    if dataset_dir() is None:
+        raise DatasetError("Choose a picture folder under Integrations first.")
     info = p._decoded_printinfo()
     if info.get("Status") not in PRINTING:
         raise DatasetError("The printer is not printing.")
@@ -133,7 +138,7 @@ async def collect_printer(p) -> None:
 async def collect_loop() -> None:
     while True:
         await asyncio.sleep(interval_s())
-        if not (is_enabled("dataset_collection") and is_enabled("camera") and DATASET_DIR.is_dir()):
+        if not (is_enabled("dataset_collection") and is_enabled("camera") and dataset_dir() is not None):
             continue
         for p in list(state.printers.values()):
             try:

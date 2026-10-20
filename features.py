@@ -83,7 +83,7 @@ FEATURES: dict = {
     ),
     "dataset_collection": Feature(
         key="dataset_collection", name="Picture collection", default=False,
-        description="Save a camera picture every 30 seconds during prints to a separate folder on the host (SPOOLER_DATASET_DIR, mounted at /dataset), with a note on how each print ended. For building your own failure-detection data; nothing is sent anywhere.",
+        description="Save a camera picture every 30 seconds during prints to a folder you choose under Integrations, with a note on how each print ended. For building your own failure-detection data; nothing is sent anywhere.",
         requires=("camera",),
     ),
     "external_api": Feature(

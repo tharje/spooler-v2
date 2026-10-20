@@ -32,7 +32,7 @@ def run(coro):
 
 
 def test_a_print_gets_a_folder_with_pictures_and_an_ending(tmp_path, monkeypatch):
-    monkeypatch.setattr(dataset, "DATASET_DIR", tmp_path)
+    monkeypatch.setattr(dataset, "dataset_dir", lambda: tmp_path)
     monkeypatch.setattr(dataset, "_jobs", {})
     p = FakePrinter(status=2)
     run(dataset.collect_printer(p))
@@ -54,7 +54,7 @@ def test_a_print_gets_a_folder_with_pictures_and_an_ending(tmp_path, monkeypatch
 
 
 def test_nothing_is_saved_while_not_printing_or_without_a_picture(tmp_path, monkeypatch):
-    monkeypatch.setattr(dataset, "DATASET_DIR", tmp_path)
+    monkeypatch.setattr(dataset, "dataset_dir", lambda: tmp_path)
     monkeypatch.setattr(dataset, "_jobs", {})
     run(dataset.collect_printer(FakePrinter(status=0)))
     run(dataset.collect_printer(FakePrinter(status=2, jpeg=None)))
@@ -62,7 +62,7 @@ def test_nothing_is_saved_while_not_printing_or_without_a_picture(tmp_path, monk
 
 
 def test_a_marked_picture_carries_the_label_and_the_first_failure_is_noted(tmp_path, monkeypatch):
-    monkeypatch.setattr(dataset, "DATASET_DIR", tmp_path)
+    monkeypatch.setattr(dataset, "dataset_dir", lambda: tmp_path)
     monkeypatch.setattr(dataset, "_jobs", {})
     monkeypatch.setattr(dataset, "grab_jpeg", lambda url: b"jpeg")
     p = FakePrinter(status=2)
@@ -79,7 +79,7 @@ def test_a_marked_picture_carries_the_label_and_the_first_failure_is_noted(tmp_p
 
 def test_label_is_refused_for_bad_label_or_idle_printer(tmp_path, monkeypatch):
     import pytest
-    monkeypatch.setattr(dataset, "DATASET_DIR", tmp_path)
+    monkeypatch.setattr(dataset, "dataset_dir", lambda: tmp_path)
     monkeypatch.setattr(dataset, "_jobs", {})
     monkeypatch.setattr(dataset, "grab_jpeg", lambda url: b"jpeg")
     p = FakePrinter(status=2)
@@ -89,3 +89,16 @@ def test_label_is_refused_for_bad_label_or_idle_printer(tmp_path, monkeypatch):
     p.info["Status"] = 0
     with pytest.raises(dataset.DatasetError):
         dataset.label_now(p, "ok")
+
+
+def test_folder_is_chosen_by_the_user_and_must_be_a_full_path(monkeypatch):
+    import pytest
+    import config
+    assert config.get("dataset.dir") == "" and dataset.dataset_dir() is None       # off until a folder is chosen
+    config.set("dataset.dir", "/data/pictures/")
+    assert dataset.dataset_dir().as_posix() == "/data/pictures"
+    for bad in ("relative/path", "/a/../b"):
+        with pytest.raises(config.ConfigError):
+            config.set("dataset.dir", bad)
+    config.set("dataset.dir", "")
+    assert dataset.dataset_dir() is None
