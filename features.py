@@ -83,7 +83,7 @@ FEATURES: dict = {
     ),
     "dataset_collection": Feature(
         key="dataset_collection", name="Picture collection", default=False,
-        description="Save a camera picture every 30 seconds during prints to a folder you choose under Integrations, with a note on how each print ended. For building your own failure-detection data; nothing is sent anywhere.",
+        description="Save a camera picture every 30 seconds during prints to a folder you choose under Integrations, with a note on how each print ended. Meant for building failure-detection data (a Centauri-specific detector is being considered); nothing is sent anywhere, and sharing pictures is always your choice.",
         requires=("camera",),
     ),
     "external_api": Feature(
