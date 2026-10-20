@@ -220,14 +220,17 @@ function _renderIntegrationsList() {
       </div>` : "";
 
     return `
-      <details class="integration-group">
-        <summary>${escHtml(group.title)}</summary>
-        <div class="integration-group-body">${group.help ? `<p class="report-desc">${escHtml(group.help)}</p>` : ""}${fieldsHtml}${testHtml}</div>
+      <details class="integration-group notif-group notif-group-events">
+        <summary>
+          <span class="notif-group-text"><strong>${escHtml(group.title)}</strong></span>
+          <svg class="notif-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+        </summary>
+        <div class="integration-group-body notif-group-body">${group.help ? `<p class="report-desc">${escHtml(group.help)}</p>` : ""}${fieldsHtml}${testHtml}</div>
       </details>`;
   }).join("");
 
   const spoolmanBody = container.querySelector(".integration-group .integration-group-body");
-  if (_catalogueEl && spoolmanBody && container.querySelector(".integration-group summary")?.textContent === "Spoolman") {
+  if (_catalogueEl && spoolmanBody && container.querySelector(".integration-group summary strong")?.textContent === "Spoolman") {
     spoolmanBody.appendChild(_catalogueEl);
   }
 

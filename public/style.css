@@ -1389,15 +1389,8 @@ main {
   background: rgba(234,179,8,.1); border-radius: var(--radius-sm);
   padding: 8px 10px; margin-bottom: 14px;
 }
-.integration-group {
-  border: 1px solid var(--border); border-radius: var(--radius-sm);
-  margin-bottom: 10px; overflow: hidden;
-}
-.integration-group summary {
-  padding: 10px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
-  background: var(--surface2);
-}
-.integration-group-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 12px; }
+.integration-group { margin-bottom: 8px; }
+.integration-group-body { padding: 10px 0 10px 12px; display: flex; flex-direction: column; gap: 12px; }
 .integration-field label {
   display: flex; flex-direction: column; gap: 4px;
   font-size: 12px; color: var(--text-muted);
@@ -1565,7 +1558,7 @@ main {
 .modal-box .report-diag { font-size: 11px; }
 .integrations-catalogue { padding: 12px 0 0; border-top: 1px solid var(--border); }
 .integrations-catalogue.integration-group-body { padding-left: 0; padding-right: 0; }
-.integrations-catalogue h4 { margin: 0 0 4px; font-size: 14px; }
+.integrations-catalogue h4 { margin: 0 0 4px; font-size: 13px; }
 .catalogue-row { display: flex; gap: 8px; align-items: center; }
 .catalogue-row select { flex: 1; min-width: 0; }
 .modal-box { max-height: 90vh; overflow-y: auto; }
