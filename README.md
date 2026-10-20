@@ -214,6 +214,16 @@ Then choose which events to be told about; started, paused, error, filament runo
 
 Settings → **Printers** → pick a Centauri Carbon → **Options** → *Automatic light*. The light switches on when a print starts and off when it ends (after the end-of-print picture has been taken).
 
+## Picture collection
+
+Off by default. It saves a camera picture every 30 seconds (adjustable, 10–600) while a print runs, for building your own failure-detection data. Turn it on under Settings → **Features** and choose a folder under Settings → **Integrations** → *Picture collection*; nothing is saved until a folder is chosen. In Docker the folder must be mounted from the host (for example add `- /home/you/print-dataset:/dataset` under `volumes` and enter `/dataset`), otherwise the pictures are lost when the container is rebuilt.
+
+Each print gets its own folder with its pictures, a `pictures.jsonl` (progress and layer per picture) and a `job.json` (file name, start, end and how the print ended). While a print runs, the printer card has two buttons, *Looks OK* and *Failing now*, that take a picture on the spot and keep it with that label. Nothing is sent anywhere; whether to share any pictures is your choice.
+
+## New version notice
+
+Off by default (Settings → **Features** → *New version notice*). When on, Spooler asks GitHub once a day whether a newer release exists and shows a small notice in the footer, with a *Skip* button. Only a plain request is made; nothing about you or your printers is sent, and nothing updates itself.
+
 ## External API
 
 Other programs can read the print history, pictures and statistics and change reference numbers through a small HTTP API with API keys. It is off until you switch it on under Settings → **API access**. See [docs/external-api.md](docs/external-api.md).
