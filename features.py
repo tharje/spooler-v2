@@ -86,6 +86,10 @@ FEATURES: dict = {
         description="Save a camera picture every 30 seconds during prints to a folder you choose under Integrations, with a note on how each print ended. Meant for building failure-detection data (a Centauri-specific detector is being considered); nothing is sent anywhere, and sharing pictures is always your choice.",
         requires=("camera",),
     ),
+    "update_check": Feature(
+        key="update_check", name="New version notice", default=False,
+        description="Check GitHub once a day whether a newer Spooler release exists and show a small notice in the footer. No data about you or your printers is sent.",
+    ),
     "external_api": Feature(
         key="external_api", name="External API", default=False,
         description="Let other programs read the print history, pictures and statistics, and change reference numbers, using an API key (create keys under Settings → API access).",

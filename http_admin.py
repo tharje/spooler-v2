@@ -14,6 +14,7 @@ import notify
 import service
 import dataset
 import spaghetti
+import update_check
 import os
 import state
 import tempfile
@@ -425,6 +426,16 @@ class AdminMixin:
             result = {"ok": False, "message": str(e)}
         config.record_test_result(channel, result["ok"], result["message"])
         self._json(result)
+
+    @requires_feature("update_check")
+    def _handle_update_skip(self):
+        try:
+            body = json.loads(self._read_body() or b"{}")
+            update_check.skip(str(body.get("version") or ""))
+        except Exception:
+            self._json({"error": "Bad request"}, 400)
+            return
+        self._json({"ok": True})
 
     @requires_feature("dataset_collection")
     def _handle_dataset_label(self):

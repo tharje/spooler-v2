@@ -49,6 +49,8 @@ Open **`http://<server-ip>:8080`** in your browser. On first visit you will be p
 - **Notifications** – browser push, ntfy, Telegram, Discord or any webhook, for print started/complete/cancelled/paused/error, filament runout, printer offline/online, hot nozzle, layer checkpoint and low spool, optionally with a camera picture
 - **Service logbook** – note what you have done to each printer (lubrication, nozzle, belt …) and get a reminder after a set number of print hours or days. Click a printer to see its parts counting down; the total print hours of a printer can be edited.
 - **Spaghetti detection** (optional) – watches running prints through the camera with an [Obico](https://github.com/TheSpaghettiDetective/obico-server) detector that you run yourself, and notifies you with a picture if a print looks like it is failing ([docs/spaghetti-detection.md](docs/spaghetti-detection.md))
+- **New version notice** (optional, off by default) – once a day Spooler asks GitHub whether a newer release exists and shows a small notice in the footer, with a Skip button. Nothing about you or your printers is sent, and nothing updates itself. Turn it on under Settings → Features.
+- **Picture collection** (optional, off by default) – saves camera pictures during prints to a folder you choose, with Looks OK / Failing now buttons to label them, for building your own failure-detection data. Nothing is sent anywhere.
 - **Automatic light** – per printer (Centauri Carbon): light on when a print starts, off when it ends
 - **External API** – let other programs (for example a CRM) read the print history and pictures and set reference numbers, using API keys ([docs/external-api.md](docs/external-api.md))
 - **Controls** – pause, resume, stop, light toggle
