@@ -194,6 +194,13 @@ class PrinterConnection:
         self._acct: PrintAccounting | None = None
         self._acct_saved_at = 0.0
         self._acct_saved_mm = 0.0
+        # Highest layer count seen during the print in progress -- some
+        # protocols reset TotalLayer/CurrentLayer to 0 on the very status
+        # update that reports the print as finished, so the "end" event's own
+        # pi would otherwise lose the layer count right when it's needed for
+        # history.
+        self._max_total_layer = 0
+        self._max_current_layer = 0
         self._notif_state: dict = {
             "last_status":      None,
             "nozzle_idle_fired": False,
@@ -855,6 +862,10 @@ class PrinterConnection:
         now_active = cur_status in ACTIVE_STATUSES or cur_status in PAUSED_STATUSES
         saved = load_active(self.id) if first_status else None
 
+        if now_active:
+            self._max_total_layer   = max(self._max_total_layer, pi.get("TotalLayer", 0) or 0)
+            self._max_current_layer = max(self._max_current_layer, pi.get("CurrentLayer", 0) or 0)
+
         if first_status and not now_active and saved is not None:
             # Spooler was off while a print ended: don't lose what it used. If the
             # printer still shows that print's final figure, use it rather than
@@ -886,6 +897,8 @@ class PrinterConnection:
             self.state_reason = None
             self._current_print_pauses = []
             self._print_start_time = time.time()
+            self._max_total_layer   = pi.get("TotalLayer", 0) or 0
+            self._max_current_layer = pi.get("CurrentLayer", 0) or 0
             self._emit("print_started", f"{self.name} — Print started",
                        pi.get("Filename") or "A print has started.")
             asyncio.create_task(self._auto_light(True))
@@ -943,6 +956,9 @@ class PrinterConnection:
                     "started_at":    (time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(self._print_start_time))
                                       if self._print_start_time else None),
                 }
+                if self._max_total_layer > 0:
+                    entry["total_layers"]  = self._max_total_layer
+                    entry["current_layer"] = max(self._max_current_layer, self._max_total_layer if completed else 0)
                 info = last_spool_info(self.id)
                 if info.get("material"):
                     entry["material"] = info["material"]
@@ -964,6 +980,8 @@ class PrinterConnection:
                         loop.run_in_executor(None, update_history_entry, entry["id"], {"spools": used})
                     clear_active(self.id)
             self._acct = None
+            self._max_total_layer = 0
+            self._max_current_layer = 0
             if not extras_started:
                 clear_active(self.id)
 

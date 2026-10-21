@@ -142,6 +142,47 @@ async def test_print_complete_records_history_entry(printer):
 
 
 @pytest.mark.asyncio
+async def test_history_entry_records_layer_count(printer):
+    _set_status(printer, 2, TotalExtrusion=0, Filename="a.gcode", CurrentLayer=1, TotalLayer=80)
+    await printer._check_print_transition()
+    _set_status(printer, 2, TotalExtrusion=500, Filename="a.gcode", CurrentLayer=40, TotalLayer=80)
+    await printer._check_print_transition()
+
+    _set_status(printer, 9, TotalExtrusion=1000, Filename="a.gcode", PrintTime=600, CurrentLayer=0, TotalLayer=0)
+    await printer._check_print_transition()
+
+    history = persistence.load_history()
+    assert history[0]["total_layers"] == 80
+    assert history[0]["current_layer"] == 80   # completed: assume it reached the last layer
+
+
+@pytest.mark.asyncio
+async def test_history_entry_uses_last_seen_layer_when_cancelled_early(printer):
+    _set_status(printer, 2, TotalExtrusion=0, Filename="a.gcode", CurrentLayer=1, TotalLayer=80)
+    await printer._check_print_transition()
+    _set_status(printer, 2, TotalExtrusion=200, Filename="a.gcode", CurrentLayer=23, TotalLayer=80)
+    await printer._check_print_transition()
+
+    _set_status(printer, 8, TotalExtrusion=300, Filename="a.gcode", PrintTime=120, CurrentLayer=0, TotalLayer=0)
+    await printer._check_print_transition()
+
+    history = persistence.load_history()
+    assert history[0]["total_layers"] == 80
+    assert history[0]["current_layer"] == 23   # cancelled: last real layer seen, not the total
+
+
+@pytest.mark.asyncio
+async def test_history_entry_omits_layer_fields_when_never_reported(printer):
+    _set_status(printer, 2, TotalExtrusion=0, Filename="a.gcode")
+    await printer._check_print_transition()
+    _set_status(printer, 9, TotalExtrusion=1000, Filename="a.gcode", PrintTime=600)
+    await printer._check_print_transition()
+
+    history = persistence.load_history()
+    assert "total_layers" not in history[0] and "current_layer" not in history[0]
+
+
+@pytest.mark.asyncio
 async def test_print_cancelled_records_history_with_completed_false(printer):
     _set_status(printer, 2, TotalExtrusion=0, Filename="b.gcode")
     await printer._check_print_transition()
