@@ -1789,6 +1789,18 @@ main {
 .service-x { background: none; border: 0; color: var(--text-muted); font-size: 20px; line-height: 1; cursor: pointer; padding: 4px 6px; border-radius: 6px; }
 .service-x:hover { color: var(--red); background: var(--surface); }
 .service-empty { color: var(--text-muted); font-size: 13px; padding: 8px 0; }
+.service-code { padding: 2px 0; }
+.service-code + .service-code { border-top: 1px solid var(--border); }
+.service-code > summary { display: flex; align-items: center; gap: 10px; padding: 10px 0; cursor: pointer; list-style: none; }
+.service-code > summary::-webkit-details-marker { display: none; }
+.service-code[open] > summary .service-chev { transform: rotate(90deg); }
+.service-code-num { flex: none; min-width: 2.4em; font-weight: 600; color: var(--accent); }
+.service-code-msg { flex: 1; min-width: 0; font-size: 13px; }
+.service-code-detail { padding: 2px 0 14px 2.4em; display: flex; flex-direction: column; gap: 6px; }
+.service-code-row { display: flex; gap: 8px; font-size: 13px; }
+.service-code-row strong { flex: none; min-width: 110px; color: var(--text-muted); font-weight: 500; }
+.service-code-ask { font-size: 12px; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+.service-code-ask a { color: var(--accent); }
 .service-form { margin: 0 0 14px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 0 14px; }
 .service-form[open] { padding: 14px; }
 .service-form-title { font-weight: 700; font-size: 14px; }
