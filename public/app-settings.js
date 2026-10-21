@@ -557,7 +557,7 @@ const _NOTIF_CHANNELS = [
   { key: "ntfy",     feature: "notify_ntfy",     title: "ntfy",     prefix: "ntfy.",
     help: "ntfy.sh or your own ntfy server. Install the ntfy app and subscribe to the topic." },
   { key: "telegram", feature: "notify_telegram", title: "Telegram", prefix: "telegram.",
-    help: "Create a bot with @BotFather, send it a message, and enter the bot token and your chat ID." },
+    help: "Create a bot with @BotFather, send it a message, and enter the bot token and your chat ID. For a group with topics, add the topic number too (the number in the topic link, e.g. t.me/c/123/7 → 7)." },
   { key: "discord",  feature: "notify_discord",  title: "Discord",  prefix: "discord.",
     help: "Channel settings → Services and data → Webhooks → copy the webhook address." },
   { key: "webhook",  feature: "notify_webhook",  title: "Webhook",  prefix: "webhook.",

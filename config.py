@@ -86,6 +86,7 @@ FIELDS: dict = {
     "ntfy.token": Field(key="ntfy.token", label="ntfy access token (optional)", type="secret", default=""),
     "telegram.token": Field(key="telegram.token", label="Telegram bot token", type="secret", default=""),
     "telegram.chat_id": Field(key="telegram.chat_id", label="Telegram chat ID", type="text", default=""),
+    "telegram.thread_id": Field(key="telegram.thread_id", label="Telegram topic number (optional, for groups with topics)", type="text", default=""),
     "discord.webhook": Field(key="discord.webhook", label="Discord webhook address", type="secret", default=""),
     "webhook.url": Field(key="webhook.url", label="Webhook address", type="secret", default=""),
     "spaghetti.url": Field(

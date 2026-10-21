@@ -204,7 +204,7 @@ Settings → **Notifications**. Under **Notification channels** switch on the pl
 
 - **Browser push** – on this device, also when the app is closed
 - **ntfy** – ntfy.sh or your own server (topic, optional access token)
-- **Telegram** – your own bot (bot token and chat ID)
+- **Telegram** – your own bot (bot token and chat ID, optionally a topic number for groups with topics)
 - **Discord** – a channel webhook
 - **Webhook** – every notification as JSON (`POST`) to an address you choose
 
