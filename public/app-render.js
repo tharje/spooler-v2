@@ -72,6 +72,7 @@ function renderPrinter(printer) {
     </div>
 
     ${renderReasonBox(printer)}
+    ${renderStandaloneFaultBox(printer)}
     ${stale ? `<div class="stale-notice">Last updated ${formatAgo(printer.last_seen)}</div>` : ""}
 
     <!-- Camera -->

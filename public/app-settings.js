@@ -279,7 +279,7 @@ async function _unsubscribePush() {
 const _EXTRA_NOTIF_EVENTS = [
   { key: "started", group: "progress",         label: "Print started",    desc: "When a print begins", image: true },
   { key: "paused", group: "progress",          label: "Print paused",     desc: "When a print pauses, with the cause (pauses you start from Spooler aren't announced)", image: true },
-  { key: "error", group: "problems",           label: "Print error",      desc: "When the printer reports an error, with the cause and code when known", image: true },
+  { key: "error", group: "problems",           label: "Print error",      desc: "When the printer reports an error, with the cause and code when known -- during a print, or a standalone run (e.g. a failed bed levelling/calibration)", image: true },
   { key: "filament_runout", group: "problems", label: "Filament runout",  desc: "When the printer stops because filament ran out", image: true },
   { key: "firmware", group: "status",        label: "Firmware changed", desc: "When a printer reports a different firmware version than before (and whether it is tested with Spooler)" },
   { key: "spaghetti", group: "problems",       label: "Possible print failure", desc: "When the spaghetti detector thinks a print is failing (set up under Services and data)", image: true },

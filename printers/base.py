@@ -202,6 +202,14 @@ class PrinterConnection:
             "nozzle_hot_fired": False,
         }
         self.state_reason: dict | None = None
+        # A fault reported while the printer is neither printing nor in any
+        # print-related pause/stop/error state -- e.g. a standalone bed
+        # levelling/calibration run that fails. state_reason only exists for
+        # print-flow states (see _update_state_reason), so without this a
+        # fault like that would never be noticed. Same shape as state_reason
+        # minus "kind"/"initiated_by" (always the printer, there's no print
+        # command to attribute it to).
+        self.standalone_fault: dict | None = None
         # Short label for what a "preparing" printer is doing right now
         # ("Leveling", "Homing", ...); "" when the protocol can't say.
         self.phase: str = ""
@@ -282,6 +290,7 @@ class PrinterConnection:
             "state":           classify_display_state(
                                    self.connected, pi.get("Status"), self._is_busy_between_prints()),
             "state_reason":    self.state_reason,
+            "standalone_fault": self.standalone_fault,
             "phase":           self.phase if self.connected else "",   # stale once the printer is gone
             "last_seen":       self.last_seen,
             "firmware_version": self.firmware_version,
@@ -797,6 +806,35 @@ class PrinterConnection:
                     "category":     self.state_reason["category"],
                 })
 
+    def _check_standalone_fault(self, display_state: str) -> None:
+        """A fault code can appear while the printer is doing something that
+        isn't part of any print at all -- a manual bed levelling or
+        calibration run, say -- so classify_display_state's kind mapping
+        (which only covers print-related states) never notices it and
+        _update_state_reason never fires. This fills that gap: it only looks
+        when display_state isn't already a print-flow state, notifies once
+        per new code (not on every poll while it's still the same one), and
+        clears itself once the printer is idle again with nothing reported."""
+        if display_state in ("printing", "pausing", "paused", "stopping", "cancelled", "error"):
+            return
+        hint = self._protocol_reason_hint() or {}
+        code = str(hint["code"]) if hint.get("code") not in (None, "") else ""
+        if not code:
+            self.standalone_fault = None
+            return
+        if self.standalone_fault is not None and self.standalone_fault.get("code") == code:
+            return
+        self.standalone_fault = {
+            "code":     code,
+            "category": hint.get("category") or "unknown",
+            "message":  hint.get("message") or "",
+            "action":   hint.get("action") or "",
+            "since":    time.strftime("%Y-%m-%dT%H:%M:%S"),
+        }
+        text = self._reason_text(self.standalone_fault)
+        self._emit("printer_fault", f"{self.name} — Printer fault", text or "The printer reported a fault.",
+                   priority="high", extra={"category": self.standalone_fault["category"], "code": code})
+
     async def _check_print_transition(self) -> None:
         pi = self._decoded_printinfo()
         cur_status = pi.get("Status")
@@ -810,6 +848,7 @@ class PrinterConnection:
 
         display_state = classify_display_state(self.connected, cur_status, self._is_busy_between_prints())
         self._update_state_reason(display_state)
+        self._check_standalone_fault(display_state)
 
         extras_started = False
         first_status = self._last_print_status is None

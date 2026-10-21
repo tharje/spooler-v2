@@ -452,6 +452,27 @@ const _REASON_INITIATOR_LABEL = {
   unknown: "from printer screen, app, or unknown source",
 };
 
+function renderStandaloneFaultBox(printer) {
+  // A fault reported outside any print (e.g. a failed bed levelling/
+  // calibration run) -- printer.state_reason doesn't cover this, so it has
+  // its own box. Shown only when there's no print-related reason already
+  // (that one takes priority; the two shouldn't both be live at once anyway).
+  const f = printer.standalone_fault;
+  if (!f || printer.state_reason) return "";
+  const detail = f.message || _REASON_CATEGORY_LABEL[f.category] || _REASON_CATEGORY_LABEL.unknown;
+  return `
+    <div class="reason-box reason-box-error">
+      <div class="reason-box-main">
+        <strong>Fault</strong> reported by printer${detail ? ` — ${escHtml(detail)}` : ""}
+      </div>
+      ${f.action ? `<div class="reason-box-action">${escHtml(f.action)}</div>` : ""}
+      ${f.code ? (featureEnabled("service_log")
+          ? `<button type="button" class="reason-box-code reason-box-code-btn" onclick="viewErrorCode('${escAttr(printer.id)}', '${escAttr(String(f.code))}')">Code: ${escHtml(String(f.code))} ›</button>`
+          : `<div class="reason-box-code">Code: ${escHtml(String(f.code))}</div>`) : ""}
+    </div>
+  `;
+}
+
 function renderReasonBox(printer) {
   const r = printer.state_reason;
   if (!r) return "";

@@ -415,3 +415,48 @@ def test_progress_ignores_invalid_reported_value(printer, bad):
 def test_progress_ignores_reported_value_when_not_printing(printer):
     # Outside printing/paused the reported value is not used (stale after a finished print).
     assert _progress_state(printer, 42, state="") != 42
+
+
+# ── Standalone fault (a failed bed levelling/calibration run, not a print) ──
+
+@pytest.fixture
+def quiet_emit(monkeypatch):
+    from printers.base import PrinterConnection
+    emitted = []
+    monkeypatch.setattr(PrinterConnection, "_emit",
+                        lambda self, event, title, body="", priority="default", extra=None: emitted.append((event, title, body, extra)))
+    return emitted
+
+
+def test_standalone_fault_noticed_while_idle(printer, quiet_emit):
+    printer._cc2_state["machine_status"] = {"exception_status": [704]}
+    printer._check_standalone_fault("idle")
+    assert printer.standalone_fault["code"] == "704"
+    assert printer.standalone_fault["message"] == "Leveling failed. Please try again."
+    assert quiet_emit == [("printer_fault", "Test CC2 — Printer fault",
+                            "Leveling failed. Please try again. (code 704)", {"category": "leveling", "code": "704"})]
+
+
+def test_standalone_fault_does_not_renotify_the_same_code(printer, quiet_emit):
+    printer._cc2_state["machine_status"] = {"exception_status": [704]}
+    printer._check_standalone_fault("idle")
+    printer._check_standalone_fault("idle")
+    assert len(quiet_emit) == 1
+
+
+def test_standalone_fault_clears_once_resolved(printer, quiet_emit):
+    printer._cc2_state["machine_status"] = {"exception_status": [704]}
+    printer._check_standalone_fault("idle")
+    printer._cc2_state["machine_status"] = {"exception_status": []}
+    printer._check_standalone_fault("idle")
+    assert printer.standalone_fault is None
+
+
+def test_standalone_fault_ignored_during_print_flow_states(printer, quiet_emit):
+    # Already covered by the normal print-flow reason (_update_state_reason);
+    # this channel must stay out of the way.
+    printer._cc2_state["machine_status"] = {"exception_status": [704]}
+    for display_state in ("printing", "pausing", "paused", "stopping", "cancelled", "error"):
+        printer._check_standalone_fault(display_state)
+    assert printer.standalone_fault is None
+    assert quiet_emit == []
