@@ -135,6 +135,11 @@ class MoonrakerConnection(PrinterConnection):
 
     def _apply_status(self, status: dict) -> None:
         ps  = status.get("print_stats") or {}
+        # print_stats.info.{current_layer,total_layer} only exist once the gcode
+        # itself calls SET_PRINT_STATS_INFO (most slicers' Klipper flavor does
+        # this automatically); absent that, both stay 0 and the frontend shows
+        # no layer count at all rather than a misleading "Layer 0".
+        pi  = ps.get("info") or {}
         ds  = status.get("display_status") or {}
         ext = status.get("extruder") or {}
         bed = status.get("heater_bed") or {}
@@ -175,8 +180,8 @@ class MoonrakerConnection(PrinterConnection):
         self.status = {
             "PrintInfo": {
                 "Status":         status_code,
-                "CurrentLayer":   0,
-                "TotalLayer":     0,
+                "CurrentLayer":   int(pi.get("current_layer") or 0),
+                "TotalLayer":     int(pi.get("total_layer") or 0),
                 "CurrentTicks":   round(progress),
                 "TotalTicks":     100,
                 "PrintTime":      round(print_duration),

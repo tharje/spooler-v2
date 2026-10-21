@@ -27,6 +27,26 @@ def test_protocol_reason_hint_none_when_no_message(printer):
     assert printer._protocol_reason_hint() is None
 
 
+def test_apply_status_reads_layer_count_from_print_stats_info(printer):
+    printer._apply_status({
+        "print_stats": {"state": "printing", "info": {"current_layer": 12, "total_layer": 80}},
+        "display_status": {"progress": 0.15},
+        "extruder": {}, "heater_bed": {}, "webhooks": {},
+    })
+    pi = printer.status["PrintInfo"]
+    assert pi["CurrentLayer"] == 12 and pi["TotalLayer"] == 80
+
+
+def test_apply_status_layer_count_zero_when_slicer_never_set_it(printer):
+    printer._apply_status({
+        "print_stats": {"state": "printing"},
+        "display_status": {"progress": 0.15},
+        "extruder": {}, "heater_bed": {}, "webhooks": {},
+    })
+    pi = printer.status["PrintInfo"]
+    assert pi["CurrentLayer"] == 0 and pi["TotalLayer"] == 0
+
+
 def test_protocol_reason_hint_surfaces_print_stats_message(printer):
     printer._apply_status({
         "print_stats": {"state": "paused", "message": "Filament runout detected"},
