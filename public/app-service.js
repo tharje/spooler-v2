@@ -209,7 +209,6 @@ function _machineHtml(d, p) {
   const kopts = d.kinds.map(k => `<option value="${escAttr(k)}">${escHtml(_kindLabel(k))}</option>`).join("");
   const tasks = d.tasks.filter(t => t.printer_id === p.id).sort((a, b) => _left(a) - _left(b));
   const log = d.log.filter(e => e.printer_id === p.id);
-  const errorCount = (d.errors || []).filter(e => e.printer_id === p.id).length;
   return `
     <div class="service-machine-head">
       <button type="button" class="service-back" data-back="1" aria-label="Back to all printers">‹</button>
@@ -226,7 +225,7 @@ function _machineHtml(d, p) {
     <div class="service-toolbar">
       <button class="btn btn-primary btn-sm" data-toggle="task">Add part</button>
       <button class="btn btn-secondary btn-sm" data-toggle="log">Log service</button>
-      <button class="btn btn-secondary btn-sm" data-open-errors="1">Error codes${errorCount ? ` (${errorCount})` : ""}</button>
+      <button class="btn btn-secondary btn-sm" data-open-errors="1">Error codes</button>
     </div>
     <details class="service-form" data-form="task" ${open.has("task") ? "open" : ""}><summary hidden></summary>
       <div class="service-form-title">Add part</div>
