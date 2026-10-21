@@ -15,6 +15,8 @@ import time
 import uuid
 
 from persistence import DATA_DIR, _atomic_write, load_history
+from printers.error_codes import reference_table
+from stats import end_state_of
 
 SERVICE_FILE = DATA_DIR / "service_log.json"
 _lock = threading.Lock()
@@ -22,6 +24,7 @@ _lock = threading.Lock()
 KINDS = ("lubrication", "nozzle", "belt", "cleaning", "calibration", "part_replaced", "other")
 MAX_LOG = 2000
 MAX_TASKS = 200
+MAX_ERROR_HISTORY = 50  # shown on the service page; the full record stays in history.json
 
 
 class ServiceError(Exception):
@@ -112,21 +115,59 @@ def _task_view(t: dict, hours: float, now: float | None = None) -> dict:
             "remaining": round(interval - since, 1), "due": since >= interval}
 
 
+def error_history(history: list, printer_id: str | None = None, limit: int = MAX_ERROR_HISTORY) -> list:
+    """Past prints that ended in a printer error, most recent first -- the
+    service page's error log. Reads what printers/base.py already saves to
+    history.json on a failed print (error_code/error_message); records
+    nothing new and tracks nothing the printer itself didn't report."""
+    out = [
+        {
+            "timestamp":     e.get("timestamp"),
+            "printer_id":    e.get("printer_id"),
+            "printer_name":  e.get("printer_name"),
+            "filename":      e.get("filename"),
+            "error_code":    e.get("error_code"),
+            "error_message": e.get("error_message"),
+        }
+        for e in history
+        if end_state_of(e) == "error" and (printer_id is None or e.get("printer_id") == printer_id)
+    ]
+    out.sort(key=lambda x: x["timestamp"] or "", reverse=True)
+    return out[:limit]
+
+
+def _printer_info(printers: dict, pid: str) -> dict:
+    """printers maps id -> {"name", "type"}, or (older callers, and tests)
+    id -> name as a plain string; both are accepted."""
+    v = printers.get(pid)
+    if isinstance(v, dict):
+        return v
+    return {"name": v} if v else {}
+
+
 def overview(printers: dict | None = None) -> dict:
-    """Everything the page shows. `printers` maps id -> name."""
+    """Everything the page shows. `printers` maps id -> {"name", "type"}
+    (type is "cc1"/"cc2"/etc., used only to pick the right error code
+    reference table; missing/unknown types just get no reference list)."""
     d = _load()
     hist = load_history()
     data = d
-    ids = list(printers or {})
+    printers = printers or {}
+    ids = list(printers)
     for x in d["tasks"] + d["log"]:
         if x.get("printer_id") not in ids:
             ids.append(x.get("printer_id"))
     hours = {pid: print_hours(pid, hist, data) for pid in ids}
+    types_in_use = {_printer_info(printers, pid).get("type") for pid in ids} - {None}
     return {
         "kinds": list(KINDS),
-        "printers": [{"id": pid, "name": (printers or {}).get(pid) or pid, "hours": hours[pid]} for pid in ids],
+        "printers": [{"id": pid, "name": _printer_info(printers, pid).get("name") or pid,
+                      "type": _printer_info(printers, pid).get("type"),
+                      "hours": hours[pid]} for pid in ids],
         "tasks": [_task_view(t, hours.get(t["printer_id"], 0.0)) for t in d["tasks"]],
         "log": sorted(d["log"], key=lambda e: (e.get("date", ""), e.get("created_at", 0)), reverse=True),
+        "errors": error_history(hist),
+        "error_code_reference": {t: reference_table(t) for t in types_in_use},
     }
 
 

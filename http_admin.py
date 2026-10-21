@@ -319,7 +319,8 @@ class AdminMixin:
 
     @requires_feature("service_log")
     def _handle_service_get(self):
-        self._json(service.overview({p.id: p.name for p in state.printers.values()}))
+        self._json(service.overview({p.id: {"name": p.name, "type": p.printer_type}
+                                      for p in state.printers.values()}))
 
     @requires_feature("service_log")
     def _handle_service_post(self, what: str):

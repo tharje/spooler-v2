@@ -125,3 +125,11 @@ def lookup(error_code, printer_type: str = "cc2") -> dict | None:
         return table.get(int(error_code))
     except (TypeError, ValueError):
         return None
+
+
+def reference_table(printer_type: str = "cc2") -> list:
+    """Every known code for this printer type, sorted -- the service page's
+    error code reference list. Same entries lookup() uses, just all of them
+    at once instead of one at a time."""
+    table = CC1_ERROR_CODES if printer_type == "cc1" else CC2_ERROR_CODES
+    return [{"code": code, **info} for code, info in sorted(table.items())]

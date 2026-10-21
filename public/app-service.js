@@ -88,6 +88,38 @@ function _taskHtml(t) {
     </div>`;
 }
 
+const _ERR_CATEGORY_LABEL = {
+  thermal: "Thermal", motion: "Motion", sensor: "Sensor", fan: "Fan", leveling: "Leveling",
+  hardware: "Hardware", connection: "Connection", system: "System",
+  filament_runout: "Filament runout", filament_feed: "Filament feed",
+  filament_tangle: "Filament tangle", unknown: "Unknown",
+};
+
+function _errHtml(e) {
+  const when = e.timestamp ? escHtml(e.timestamp.replace("T", " ")) : "Unknown time";
+  const code = e.error_code != null ? ` (code ${escHtml(String(e.error_code))})` : "";
+  return `
+    <div class="service-entry">
+      <span class="service-icon k-hardware"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg></span>
+      <div class="service-main">
+        <div class="service-title">${escHtml(e.error_message || "Print error")}${code}</div>
+        <div class="service-meta">${when}${e.filename ? ` · ${escHtml(e.filename)}` : ""}</div>
+      </div>
+    </div>`;
+}
+
+function _errorReferenceHtml(codes) {
+  if (!codes || !codes.length) return "";
+  const rows = codes.map(c => `
+    <div class="service-entry">
+      <div class="service-main">
+        <div class="service-title">Code ${escHtml(String(c.code))} · ${escHtml(_ERR_CATEGORY_LABEL[c.category] || c.category || "Unknown")}</div>
+        <div class="service-meta">${escHtml(c.message || "")}${c.action ? ` — ${escHtml(c.action)}` : ""}</div>
+      </div>
+    </div>`).join("");
+  return `<div class="service-h">Error code reference</div><div class="service-card">${rows}</div>`;
+}
+
 function _logHtml(e) {
   return `
     <div class="service-entry">
@@ -135,6 +167,7 @@ function _machineHtml(d, p) {
   const kopts = d.kinds.map(k => `<option value="${escAttr(k)}">${escHtml(_kindLabel(k))}</option>`).join("");
   const tasks = d.tasks.filter(t => t.printer_id === p.id).sort((a, b) => _left(a) - _left(b));
   const log = d.log.filter(e => e.printer_id === p.id);
+  const errors = (d.errors || []).filter(e => e.printer_id === p.id);
   return `
     <div class="service-machine-head">
       <button type="button" class="service-back" data-back="1" aria-label="Back to all printers">‹</button>
@@ -172,7 +205,10 @@ function _machineHtml(d, p) {
       <button id="svc-l-add" class="btn btn-primary btn-sm">Save entry</button>
     </details>
     <div class="service-h">Logbook</div>
-    <div class="service-card">${log.length ? log.map(_logHtml).join("") : '<p class="service-empty">Nothing logged yet.</p>'}</div>`;
+    <div class="service-card">${log.length ? log.map(_logHtml).join("") : '<p class="service-empty">Nothing logged yet.</p>'}</div>
+    <div class="service-h">Error history</div>
+    <div class="service-card">${errors.length ? errors.map(_errHtml).join("") : '<p class="service-empty">No print errors recorded.</p>'}</div>
+    ${_errorReferenceHtml((d.error_code_reference || {})[p.type])}`;
 }
 
 function renderService() {

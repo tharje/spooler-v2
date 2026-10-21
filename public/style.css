@@ -1775,6 +1775,7 @@ main {
 .service-icon.k-nozzle, .service-icon.k-calibration { background: rgba(59,130,246,.14); color: var(--blue); }
 .service-icon.k-cleaning, .service-icon.k-belt { background: rgba(34,197,94,.14); color: var(--green); }
 .service-icon.k-other { background: var(--surface); color: var(--text-muted); }
+.service-icon.k-hardware { background: rgba(239,68,68,.14); color: var(--red); }
 .service-main { flex: 1; min-width: 0; }
 .service-title { font-weight: 600; font-size: 14px; }
 .service-note { font-weight: 400; color: var(--text-dim-strong); }
