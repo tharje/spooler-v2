@@ -65,8 +65,24 @@ def test_grams_per_material_with_unknown_bucket():
 
 def test_per_printer_breakdown():
     s = stats.compute_stats(H)
-    assert s["by_printer"]["CC1"] == {"prints": 4, "hours": round((3600 + 600 + 3000 + 500) / 3600, 2), "grams": 21.5}
+    assert s["by_printer"]["CC1"] == {"prints": 4, "hours": round((3600 + 600 + 3000 + 500) / 3600, 2),
+                                       "grams": 21.5, "layers": 0}
     assert s["by_printer"]["CC2"]["prints"] == 2
+
+
+def test_layer_totals_use_full_count_when_complete_and_last_seen_when_not():
+    history = [
+        {"id": "1", "timestamp": "2026-10-05T10:00:00", "printer_id": "A", "printer_name": "CC1",
+         "filament_g": 1, "print_time_s": 1, "end_state": "complete", "total_layers": 80, "current_layer": 80},
+        {"id": "2", "timestamp": "2026-10-05T11:00:00", "printer_id": "A", "printer_name": "CC1",
+         "filament_g": 1, "print_time_s": 1, "end_state": "cancelled", "total_layers": 80, "current_layer": 23},
+        {"id": "3", "timestamp": "2026-10-05T12:00:00", "printer_id": "B", "printer_name": "CC2",
+         "filament_g": 1, "print_time_s": 1, "end_state": "complete"},   # no layer info at all
+    ]
+    s = stats.compute_stats(history)
+    assert s["layers"] == 80 + 23
+    assert s["by_printer"]["CC1"]["layers"] == 103
+    assert s["by_printer"]["CC2"]["layers"] == 0
 
 
 def test_failure_reasons_use_cause_and_code():

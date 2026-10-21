@@ -231,6 +231,9 @@ function renderStats() {
     _statTile("Print time", _fmtHours(d.hours), d.avg_print_s ? `avg ${formatTime(d.avg_print_s)} per finished print` : ""),
     _statTile("Filament", d.grams >= 1000 ? `${_fmtNum(d.grams / 1000, 2)} kg` : `${_fmtNum(d.grams, 0)} g`, "includes stopped prints"),
   );
+  if (d.layers) {
+    tiles.append(_statTile("Layers printed", _fmtNum(d.layers), "across all prints in this period"));
+  }
   frag.append(tiles);
 
   // Chart card: metric switch + chart/table switch
@@ -269,7 +272,8 @@ function renderStats() {
   const mats = Object.entries(d.by_material).map(([k, v]) => ({ label: k, value: v, text: `${_fmtNum(v, 0)} g` }));
   frag.append(_barList("Filament by material", mats));
   const prs = Object.entries(d.by_printer).map(([k, v]) => ({
-    label: k, value: v.grams, text: `${_fmtNum(v.grams, 0)} g`, sub: `${v.prints} prints · ${_fmtNum(v.hours, 1)} h` }));
+    label: k, value: v.grams, text: `${_fmtNum(v.grams, 0)} g`,
+    sub: `${v.prints} prints · ${_fmtNum(v.hours, 1)} h${v.layers ? ` · ${_fmtNum(v.layers)} layers` : ""}` }));
   frag.append(_barList("By printer", prs));
 
   const res = _el("div", "stats-card");
