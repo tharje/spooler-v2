@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css?v=72" />
+  <link rel="stylesheet" href="style.css?v=77" />
 </head>
 <body>
   <header>
@@ -411,6 +411,7 @@
     <a id="auth-warning" class="footer-warning" href="#" hidden
        title="Login is switched off (AUTH_ENABLED=false): anyone on your network can use Spooler, including features that need login.">⚠ Login is off</a>
     <span class="footer-right">
+      <span id="update-notice" class="update-notice" hidden></span>
       <button id="btn-report-problem" class="footer-version report-btn" title="Report a bug"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M8 2l1.9 1.9M16 2l-1.9 1.9"/><path d="M9 7.1V6a3 3 0 0 1 6 0v1.1"/><path d="M12 20a6 6 0 0 1-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3a6 6 0 0 1-6 6z"/><path d="M12 20v-9M6.5 13H2M17.5 13H22M6 18l-2.5 2M18 18l2.5 2M6 9L3.5 7M18 9l2.5-2"/></svg>Report bug</button>
       <button id="version-badge" class="footer-version" title="Release notes">v…</button>
     </span>
@@ -493,7 +494,7 @@
               <circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>
               <path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/>
             </svg>
-            <span>Integrations</span>
+            <span>Services and data</span>
             <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
           </button>
           <button class="settings-menu-item" id="btn-settings-goto-api">
@@ -609,7 +610,13 @@
             <div id="notif-channels"></div>
           </details>
           <div class="feature-group-title">Events</div>
-
+          <details class="notif-group notif-group-events" id="notif-evgroup-progress">
+            <summary>
+              <span class="notif-group-text"><strong>Print progress</strong><small>Started, complete, paused, layer checkpoint</small></span>
+              <span class="notif-group-pill notif-ev-pill"></span>
+              <svg class="notif-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+            </summary>
+            <div class="notif-group-body">
           <div class="notif-row">
             <div class="notif-info">
               <span class="notif-label">Print complete</span>
@@ -639,6 +646,40 @@
             <label class="notif-chip"><input type="checkbox" id="notif-layer-image" /><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> Include photo</span></label>
           </div>
 
+              <div id="notif-extra-progress"></div>
+            </div>
+          </details>
+          <details class="notif-group notif-group-events" id="notif-evgroup-problems">
+            <summary>
+              <span class="notif-group-text"><strong>Problems</strong><small>Errors, filament runout, possible failure, overheat, offline</small></span>
+              <span class="notif-group-pill notif-ev-pill"></span>
+              <svg class="notif-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+            </summary>
+            <div class="notif-group-body">
+          <div class="notif-row">
+            <div class="notif-info">
+              <span class="notif-label">Nozzle overheat</span>
+              <span class="notif-desc">When the nozzle exceeds a temperature during printing</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="notif-nozzle-printing-on" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="notif-param" id="notif-nozzle-printing-param" style="display:none">
+            <label>Temperature (°C)<input type="number" id="notif-nozzle-printing-threshold" value="260" min="1" max="400" /></label>
+          </div>
+
+              <div id="notif-extra-problems"></div>
+            </div>
+          </details>
+          <details class="notif-group notif-group-events" id="notif-evgroup-status">
+            <summary>
+              <span class="notif-group-text"><strong>Reminders and status</strong><small>Nozzle still hot, spool low, firmware, service</small></span>
+              <span class="notif-group-pill notif-ev-pill"></span>
+              <svg class="notif-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+            </summary>
+            <div class="notif-group-body">
           <div class="notif-row">
             <div class="notif-info">
               <span class="notif-label">Nozzle still hot</span>
@@ -655,20 +696,6 @@
 
           <div class="notif-row">
             <div class="notif-info">
-              <span class="notif-label">Nozzle overheat</span>
-              <span class="notif-desc">When the nozzle exceeds a temperature during printing</span>
-            </div>
-            <label class="toggle-switch">
-              <input type="checkbox" id="notif-nozzle-printing-on" />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-          <div class="notif-param" id="notif-nozzle-printing-param" style="display:none">
-            <label>Temperature (°C)<input type="number" id="notif-nozzle-printing-threshold" value="260" min="1" max="400" /></label>
-          </div>
-
-          <div class="notif-row">
-            <div class="notif-info">
               <span class="notif-label">Spool almost empty</span>
               <span class="notif-desc">When a spool drops below a set amount of filament</span>
             </div>
@@ -681,7 +708,9 @@
             <label>Remaining (g)<input type="number" id="notif-spool-low-threshold" value="100" min="1" max="5000" /></label>
           </div>
 
-          <div id="notif-extra-events"></div>
+              <div id="notif-extra-status"></div>
+            </div>
+          </details>
           <p class="report-desc">Events are sent to every channel that is switched on above.</p>
         </div>
         <div class="modal-actions">
@@ -742,7 +771,7 @@
           <button id="btn-settings-back-integrations" class="settings-back-btn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
           </button>
-          <h3>Integrations</h3>
+          <h3>Services and data</h3>
         </div>
         <p class="integrations-warning">Changes here affect connections to other services.</p>
         <div id="integrations-list"></div>
@@ -833,15 +862,15 @@
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="/config.js"></script>
-  <script src="app-core.js?v=86"></script>
-  <script src="app-render.js?v=86"></script>
-  <script src="app-settings.js?v=83"></script>
+  <script src="app-core.js?v=87"></script>
+  <script src="app-render.js?v=87"></script>
+  <script src="app-settings.js?v=86"></script>
   <script src="app-files.js?v=83"></script>
-  <script src="app-integrations.js?v=84"></script>
+  <script src="app-integrations.js?v=89"></script>
   <script src="app-stats.js?v=83"></script>
   <script src="app-spools.js?v=83"></script>
   <script src="app-service.js?v=87"></script>
-  <script src="app-boot.js?v=83"></script>
+  <script src="app-boot.js?v=84"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});

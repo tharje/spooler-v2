@@ -123,6 +123,19 @@ def test_telegram_message_and_photo(sent):
     assert sent[1]["headers"]["Content-Type"].startswith("multipart/form-data")
 
 
+def test_telegram_topic_number(sent):
+    config.set("telegram.token", "123:ABC")
+    config.set("telegram.chat_id", "-100123")
+    config.set("telegram.thread_id", "7")
+    notifiers.send("telegram", Notification("x", "p", "Title", "Body"))
+    assert json.loads(sent[0]["data"]) == {"chat_id": "-100123", "text": "Title\nBody", "message_thread_id": 7}
+    notifiers.send("telegram", Notification("x", "p", "Title", "Body", image=b"\xff\xd8x\xff\xd9"))
+    assert b'name="message_thread_id"' in sent[1]["data"]
+    config.set("telegram.thread_id", "abc")
+    with pytest.raises(notifiers.NotifierError):
+        notifiers.send("telegram", Notification("x", "p", "Title", "Body"))
+
+
 def test_discord_json_and_picture(sent):
     config.set("discord.webhook", "https://discord.com/api/webhooks/1/abc")
     notifiers.send("discord", Notification("x", "p", "T", "B"))

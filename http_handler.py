@@ -34,6 +34,7 @@ from http_admin import AdminMixin
 import config
 import api_tokens
 import spaghetti
+import update_check
 import notifiers
 
 try:
@@ -397,6 +398,8 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
                 "tests": {k: config.last_test_result(k) for k in ("spoolman", "spaghetti", *notifiers.CHANNELS)},
                 "server_settings": _server_settings_readonly(),
             })
+        elif self.path == "/api/update-status":
+            self._json({"update": update_check.status()})
         elif self.path == "/api/api-tokens":
             self._json({"tokens": api_tokens.list_tokens(), "max": api_tokens.MAX_TOKENS})
         elif self.path == "/api/spoolman-ledger":
@@ -563,6 +566,10 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
             self._handle_test_spoolman()
         elif self.path == "/api/integrations/spaghetti/test":
             self._handle_test_spaghetti()
+        elif self.path == "/api/update-skip":
+            self._handle_update_skip()
+        elif self.path == "/api/dataset/label":
+            self._handle_dataset_label()
         elif self.path.startswith("/api/integrations/") and self.path.endswith("/test") \
                 and self.path.split("/")[3] in notifiers.CHANNELS:
             self._handle_test_notifier(self.path.split("/")[3])

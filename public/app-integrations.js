@@ -155,6 +155,8 @@ const _INTEGRATION_GROUPS = [
   { title: "Slicer",   prefix: "slicer.",   testKey: null },
   { title: "Spaghetti detection (Obico)", prefix: "spaghetti.", testKey: "spaghetti",
     help: "Run Obico's ML API as its own container, give its address here, and the address Spooler has as seen from that container (for example http://spooler:8080 in the same Docker network). Then turn on Spaghetti detection under Features and 'Possible print failure' under Notifications." },
+  { title: "Picture collection", prefix: "dataset.", testKey: null,
+    help: "Saves camera pictures during prints to a folder you choose. Spooler's developer is considering building a print-failure (spaghetti) detector made specifically for Elegoo Centauri printers, and these pictures could help train it. Nothing is ever sent automatically: the pictures stay on your own machine, and you decide whether to share some. If you would like to, open an issue on Spooler's GitHub page and we will work out how. Turn it on under Features. While a print runs, each printer card gets two buttons (Looks OK / Failing now) to mark what you see; marked pictures are the most useful. In Docker, choose a folder that is mounted from the host (for example add - /home/you/print-dataset:/dataset under volumes and enter /dataset here), otherwise the pictures are lost when the container is rebuilt." },
 ];
 
 // Static markup in index.html; re-attached into the Spoolman group after each render.
@@ -218,14 +220,17 @@ function _renderIntegrationsList() {
       </div>` : "";
 
     return `
-      <details class="integration-group">
-        <summary>${escHtml(group.title)}</summary>
-        <div class="integration-group-body">${group.help ? `<p class="report-desc">${escHtml(group.help)}</p>` : ""}${fieldsHtml}${testHtml}</div>
+      <details class="integration-group notif-group notif-group-events">
+        <summary>
+          <span class="notif-group-text"><strong>${escHtml(group.title)}</strong></span>
+          <svg class="notif-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+        </summary>
+        <div class="integration-group-body notif-group-body">${group.help ? `<p class="report-desc">${escHtml(group.help)}</p>` : ""}${fieldsHtml}${testHtml}</div>
       </details>`;
   }).join("");
 
   const spoolmanBody = container.querySelector(".integration-group .integration-group-body");
-  if (_catalogueEl && spoolmanBody && container.querySelector(".integration-group summary")?.textContent === "Spoolman") {
+  if (_catalogueEl && spoolmanBody && container.querySelector(".integration-group summary strong")?.textContent === "Spoolman") {
     spoolmanBody.appendChild(_catalogueEl);
   }
 
@@ -339,11 +344,13 @@ function _applyFeatures(list) {
 }
 
 const _FEATURE_GROUPS = [
-  { title: "Monitoring",    keys: ["camera", "print_snapshot", "spaghetti_detection"] },
+  { title: "Monitoring",    keys: ["camera", "print_snapshot", "spaghetti_detection", "dataset_collection"] },
   { title: "Notifications", keys: ["notifications"] },
   { title: "Data",          keys: ["backup", "statistics", "service_log"] },
-  { title: "Integrations",  keys: ["spoolman"] },
+  { title: "Services",      keys: ["spoolman", "update_check"] },
 ];
+
+const _openFeatureGroups = new Set();   // menus the user has opened, kept across re-renders
 
 function _renderFeaturesList() {
   const container = document.getElementById("features-list");
@@ -368,8 +375,25 @@ function _renderFeaturesList() {
           </label>
         </div>`;
     }).join("");
-    return rows ? `<div class="feature-group-title">${escHtml(group.title)}</div>${rows}` : "";
+    if (!rows) return "";
+    const present = group.keys.filter(k => features[k]);
+    const on = present.filter(k => features[k].enabled).length;
+    return `
+      <details class="notif-group notif-group-events" data-feature-group="${escAttr(group.title)}" ${_openFeatureGroups.has(group.title) ? "open" : ""}>
+        <summary>
+          <span class="notif-group-text"><strong>${escHtml(group.title)}</strong></span>
+          <span class="notif-group-pill">${on ? `${on} of ${present.length} on` : "none on"}</span>
+          <svg class="notif-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+        </summary>
+        <div class="notif-group-body">${rows}</div>
+      </details>`;
   }).join("");
+
+  container.querySelectorAll("details[data-feature-group]").forEach(d => {
+    d.addEventListener("toggle", () => {
+      d.open ? _openFeatureGroups.add(d.dataset.featureGroup) : _openFeatureGroups.delete(d.dataset.featureGroup);
+    });
+  });
 
   container.querySelectorAll("input[data-feature-key]").forEach(input => {
     input.addEventListener("change", async () => {

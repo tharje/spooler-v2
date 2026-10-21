@@ -104,13 +104,22 @@ def _telegram_send(n) -> None:
     chat = (config.get("telegram.chat_id") or "").strip()
     if not token or not chat:
         raise NotifierError("The Telegram bot token and chat ID must both be set.")
+    thread = (config.get("telegram.thread_id") or "").strip()
+    if thread and not thread.isdigit():
+        raise NotifierError("The Telegram topic number must be a number (or empty).")
     api = f"https://api.telegram.org/bot{token}"
     text = f"{n.title}\n{n.body}" if n.body else n.title
     if n.image:
-        body, ctype = _multipart({"chat_id": chat, "caption": text[:1000]}, "photo", "snapshot.jpg", n.image)
+        fields = {"chat_id": chat, "caption": text[:1000]}
+        if thread:
+            fields["message_thread_id"] = thread
+        body, ctype = _multipart(fields, "photo", "snapshot.jpg", n.image)
         _request(f"{api}/sendPhoto", body, {"Content-Type": ctype}, "POST")
     else:
-        _request(f"{api}/sendMessage", json.dumps({"chat_id": chat, "text": text[:4000]}).encode(),
+        payload = {"chat_id": chat, "text": text[:4000]}
+        if thread:
+            payload["message_thread_id"] = int(thread)
+        _request(f"{api}/sendMessage", json.dumps(payload).encode(),
                  {"Content-Type": "application/json"}, "POST")
 
 

@@ -54,7 +54,7 @@ LOCK_CONFIG = os.getenv("SPOOLER_LOCK_CONFIG", "").lower() in ("1", "true", "yes
 class Field:
     key: str            # "spoolman.url"
     label: str
-    type: str            # "url" | "text" | "secret" | "int" | "bool"
+    type: str            # "url" | "text" | "secret" | "int" | "bool" | "path"
     env: str = None      # environment variable used as the default value source
     default: object = None
     schemes: tuple = ()  # allowed URL schemes, e.g. ("http", "https")
@@ -86,6 +86,7 @@ FIELDS: dict = {
     "ntfy.token": Field(key="ntfy.token", label="ntfy access token (optional)", type="secret", default=""),
     "telegram.token": Field(key="telegram.token", label="Telegram bot token", type="secret", default=""),
     "telegram.chat_id": Field(key="telegram.chat_id", label="Telegram chat ID", type="text", default=""),
+    "telegram.thread_id": Field(key="telegram.thread_id", label="Telegram topic number (optional, for groups with topics)", type="text", default=""),
     "discord.webhook": Field(key="discord.webhook", label="Discord webhook address", type="secret", default=""),
     "webhook.url": Field(key="webhook.url", label="Webhook address", type="secret", default=""),
     "spaghetti.url": Field(
@@ -100,6 +101,11 @@ FIELDS: dict = {
     "spaghetti.threshold": Field(key="spaghetti.threshold", label="Sensitivity: confidence % that counts (10-95)", type="int", default=50),
     "spaghetti.frames": Field(key="spaghetti.frames", label="Pictures in a row before alerting (1-10)", type="int", default=3),
     "spaghetti.interval_s": Field(key="spaghetti.interval_s", label="Seconds between pictures (15-600)", type="int", default=60),
+    "dataset.dir": Field(
+        key="dataset.dir", label="Folder for the pictures (full path, empty = off)", type="path",
+        env="SPOOLER_DATASET_DIR", default="",
+    ),
+    "dataset.interval_s": Field(key="dataset.interval_s", label="Seconds between pictures (10-600)", type="int", default=30),
     "backup.interval_days": Field(
         key="backup.interval_days", label="Automatic backup interval (days)", type="int",
         env="SPOOLER_BACKUP_INTERVAL_DAYS", default=1,
@@ -192,6 +198,11 @@ def _validate(field: Field, value):
         if not parsed.netloc:
             raise ConfigError(f"{field.label}: not a valid URL.")
         return value.rstrip("/")
+    if field.type == "path":
+        value = str(value).strip()
+        if value and (not value.startswith("/") or ".." in value.split("/")):
+            raise ConfigError(f"{field.label}: use a full path starting with / and without '..'.")
+        return value.rstrip("/") if len(value) > 1 else value
     if field.type == "bool":
         if isinstance(value, bool):
             return value

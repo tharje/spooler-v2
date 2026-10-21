@@ -1,5 +1,16 @@
 [
   {
+    "version": "2.3.1",
+    "date": "2026-10-21",
+    "changes": [
+      "Picture collection (off until you choose a folder): saves a camera picture at an adjustable interval during prints, with a note on how each print ended and Looks OK / Failing now buttons that save a labelled picture",
+      "New version notice (off by default): a daily check against GitHub shows a small notice in the footer when a newer release exists, with a Skip button; nothing about you or your printers is sent",
+      "Notifications: Telegram can now send to one topic in a group (optional topic number)",
+      "Settings: notification events and the Features switches are grouped into drop-down menus that keep their open state; the Notification channels menu and the other Settings pages share one look",
+      "Settings: Integrations is now called Services and data"
+    ]
+  },
+  {
     "version": "2.3.0",
     "date": "2026-10-19",
     "changes": [

@@ -15,6 +15,25 @@ async function loadChangelog() {
   } catch (_) {}
 }
 
+async function loadUpdateNotice() {
+  const el = document.getElementById("update-notice");
+  if (!el) return;
+  try {
+    const r = await fetch("/api/update-status");
+    const u = r.ok ? (await r.json()).update : null;
+    if (!u) { el.hidden = true; return; }
+    const link = /^https:\/\/github\.com\//.test(u.url) ? u.url : "https://github.com/tharje/spooler-v2/releases";
+    el.innerHTML = `<a href="${escAttr(link)}" target="_blank" rel="noopener" title="${escAttr(u.notes || "Open the release page")}">New version ${escHtml(u.version)} available</a>` +
+      ` <button class="update-skip" title="Hide this version">Skip</button>`;
+    el.querySelector(".update-skip").onclick = async () => {
+      await fetch("/api/update-skip", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ version: u.version }) }).catch(() => {});
+      el.hidden = true;
+    };
+    el.hidden = false;
+  } catch (_) {}
+}
+
 function openChangelog() {
   const body = document.getElementById("changelog-body");
   if (!body) return;
@@ -93,6 +112,8 @@ if (new URLSearchParams(location.search).get("demo") === "states") {
     })
     .catch(() => {});
   loadChangelog();
+  loadUpdateNotice();
+  setInterval(loadUpdateNotice, 3600 * 1000);
   loadFeatures();
   loadIntegrations();
   connect();

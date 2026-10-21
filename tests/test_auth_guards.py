@@ -55,7 +55,7 @@ def test_the_features_list_shows_it_locked_with_the_reason(control_feature, monk
 def test_other_features_are_untouched_by_the_login_rule(monkeypatch):
     monkeypatch.setattr(auth, "AUTH_ENABLED", False)
     for key, feat in features.FEATURES.items():
-        if not feat.requires_auth and key not in ("external_api", "spaghetti_detection"):
+        if not feat.requires_auth and key not in ("external_api", "spaghetti_detection", "dataset_collection", "update_check"):
             assert features.is_enabled(key) is True, key
     features.set_enabled("external_api", True)       # needs a key, adds nothing to an open UI
     assert features.is_enabled("external_api")
