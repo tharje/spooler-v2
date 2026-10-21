@@ -347,4 +347,21 @@ const closeService = () => {
   btnService.classList.remove("active");
 };
 btnService.addEventListener("click", openService);
+
+function _focusCodeRow(code) {
+  const row = document.querySelector(`#service-body .service-code[data-code="${CSS.escape(String(code))}"]`);
+  if (row) { row.open = true; row.scrollIntoView({ block: "center" }); }
+}
+
+// Jumps straight to one printer's error code panel, scrolled and opened to
+// that code -- called from the card's error badge/reason box, so the printer
+// may not be the one already open in the Service book (or it may not be
+// open at all yet).
+function viewErrorCode(printerId, code) {
+  _serviceView = printerId;
+  _serviceErrorView = true;
+  openService();
+  _focusCodeRow(code);
+  loadService().then(() => _focusCodeRow(code));
+}
 document.getElementById("btn-service-close").addEventListener("click", closeService);

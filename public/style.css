@@ -576,6 +576,9 @@ main {
 }
 .reason-box-main strong { color: var(--text); }
 .reason-box-code { margin-top: 2px; opacity: .7; font-size: 11px; }
+.reason-box-code-btn { background: none; border: 0; padding: 0; margin-top: 2px; opacity: .85; font-size: 11px;
+  color: inherit; text-decoration: underline; cursor: pointer; font: inherit; }
+.reason-box-code-btn:hover { opacity: 1; }
 
 /* Stale-data indicator (T4) — the printer is still connected, but we haven't
    heard anything fresh from it in a while, so temps/progress may be frozen. */

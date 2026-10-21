@@ -471,7 +471,9 @@ function renderReasonBox(printer) {
         ${detail ? ` — ${escHtml(detail)}` : ""}
       </div>
       ${r.action ? `<div class="reason-box-action">${escHtml(r.action)}</div>` : ""}
-      ${r.code ? `<div class="reason-box-code">Code: ${escHtml(String(r.code))}</div>` : ""}
+      ${r.code ? (featureEnabled("service_log")
+          ? `<button type="button" class="reason-box-code reason-box-code-btn" onclick="viewErrorCode('${escAttr(printer.id)}', '${escAttr(String(r.code))}')">Code: ${escHtml(String(r.code))} ›</button>`
+          : `<div class="reason-box-code">Code: ${escHtml(String(r.code))}</div>`) : ""}
     </div>
   `;
 }
