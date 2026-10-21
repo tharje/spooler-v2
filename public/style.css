@@ -1801,6 +1801,9 @@ main {
 .service-code-row strong { flex: none; min-width: 110px; color: var(--text-muted); font-weight: 500; }
 .service-code-ask { font-size: 12px; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
 .service-code-ask a { color: var(--accent); }
+.service-code-search { width: 100%; box-sizing: border-box; margin: 0 0 8px; background: var(--surface2); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; font: inherit; font-size: 13px; }
+.service-code-search:focus { outline: none; border-color: var(--accent); }
 .service-form { margin: 0 0 14px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 0 14px; }
 .service-form[open] { padding: 14px; }
 .service-form-title { font-weight: 700; font-size: 14px; }

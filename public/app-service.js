@@ -137,7 +137,7 @@ function _codeDetailHtml(c, printerType) {
 function _errorReferenceHtml(codes, printerType) {
   if (!codes || !codes.length) return '<p class="service-empty">No error code reference for this printer type yet.</p>';
   return codes.map(c => `
-    <details class="service-code">
+    <details class="service-code" data-code="${escAttr(String(c.code))}">
       <summary>
         <span class="service-code-num">${escHtml(String(c.code))}</span>
         <span class="service-code-msg">${escHtml(c.message || "Unknown code")}</span>
@@ -145,6 +145,18 @@ function _errorReferenceHtml(codes, printerType) {
       </summary>
       ${_codeDetailHtml(c, printerType)}
     </details>`).join("");
+}
+
+// Filters the already-rendered reference rows in place (hide/show), rather
+// than re-rendering the whole panel on every keystroke -- keeps focus and
+// the cursor position in the search field while typing.
+function _filterCodeRows(query) {
+  const q = (query || "").trim();
+  document.querySelectorAll("#service-body .service-code").forEach(row => {
+    row.hidden = q !== "" && !row.dataset.code.includes(q);
+  });
+  const empty = document.getElementById("svc-code-noresult");
+  if (empty) empty.hidden = !q || [...document.querySelectorAll("#service-body .service-code")].some(r => !r.hidden);
 }
 
 function _errorPanelHtml(d, p) {
@@ -158,7 +170,11 @@ function _errorPanelHtml(d, p) {
     <div class="service-h">Error history</div>
     <div class="service-card">${errors.length ? errors.map(_errHtml).join("") : '<p class="service-empty">No print errors recorded.</p>'}</div>
     <div class="service-h">Error code reference</div>
-    <div class="service-card">${_errorReferenceHtml(codes, p.type)}</div>`;
+    ${codes && codes.length ? `<input id="svc-code-search" type="search" inputmode="numeric" placeholder="Search by code number…" class="service-code-search" />` : ""}
+    <div class="service-card">
+      ${_errorReferenceHtml(codes, p.type)}
+      <p id="svc-code-noresult" class="service-empty" hidden>No code matches that number.</p>
+    </div>`;
 }
 
 function _logHtml(e) {
@@ -264,6 +280,10 @@ async function _serviceAct(fn) {
   try { await fn(); await loadService(); }
   catch (e) { toast(e.message, true); }
 }
+
+document.getElementById("service-body").addEventListener("input", (ev) => {
+  if (ev.target.id === "svc-code-search") _filterCodeRows(ev.target.value);
+});
 
 document.getElementById("service-body").addEventListener("click", (ev) => {
   const t = ev.target.closest("button");
