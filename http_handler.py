@@ -472,10 +472,23 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
         ):
             # Spoolman SPA sub-route (e.g. /spools after client-side navigation + refresh)
             self._proxy_spoolman_ui("GET", "/")
+        elif self.path.split("?")[0] in ("/", "/index.html"):
+            # index.html itself must never be cached: it's the only thing that
+            # names which ?v= of each script/stylesheet to load, so a stale
+            # cached copy of it keeps a browser/PWA on old JS forever even
+            # after every versioned asset underneath has already updated.
+            index_file = Path(__file__).parent / "public" / "index.html"
+            data = index_file.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(data)
         else:
-            # Root/directory paths fall through to index.html via super().
-            # Static assets not in public/ are proxied to Spoolman when enabled
-            # (handles favicon, kofi logo, etc. rendered without /spoolman/ prefix).
+            # Other root/directory paths fall through via super(). Static assets
+            # not in public/ are proxied to Spoolman when enabled (handles
+            # favicon, kofi logo, etc. rendered without /spoolman/ prefix).
             path_part = self.path.lstrip("/").split("?")[0] or "index.html"
             local = Path(__file__).parent / "public" / path_part
             if local.is_file():
