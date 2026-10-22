@@ -555,11 +555,24 @@ class PrinterConnection:
         right away often shows the toolhead blocking the model rather than the
         finished print. force=True on the grab skips reusing whatever picture
         a "print complete" notification may have already cached a moment ago
-        for that exact same too-early instant."""
+        for that exact same too-early instant.
+
+        Turns the light on first if it's off -- regardless of the auto-light
+        option, since a dark picture is useless either way -- and turns it
+        back off itself afterward if auto-light wouldn't otherwise do that
+        (auto-light is off, or this printer doesn't normally manage the light
+        at print end at all)."""
+        we_turned_it_on = False
         try:
             if not is_enabled("print_snapshot") or not is_enabled("camera"):
                 return
             await asyncio.sleep(PRINT_PICTURE_DELAY_S)
+            if self.supports_light and self.connected and self._light_state() is False:
+                try:
+                    await self.set_light(True)
+                    we_turned_it_on = True
+                except Exception as e:
+                    print(f"[Printer {self.name}] Could not turn the light on for the picture: {type(e).__name__}")
             jpeg = await self._camera_picture(force=True)
             if not jpeg:
                 return
@@ -572,6 +585,12 @@ class PrinterConnection:
                 delete_snapshots([entry_id])   # entry vanished meanwhile
         except Exception as e:
             print(f"[Printer {self.name}] Print picture skipped: {type(e).__name__}")
+        finally:
+            if we_turned_it_on:
+                try:
+                    await self.set_light(False)
+                except Exception as e:
+                    print(f"[Printer {self.name}] Could not turn the light back off after the picture: {type(e).__name__}")
 
     def _announce_service_due(self) -> None:
         """After a print has been added to the history: tell about service reminders that came due."""

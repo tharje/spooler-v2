@@ -107,6 +107,41 @@ async def test_picture_saved_and_history_flagged(printer, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_light_turned_on_for_a_dark_picture_then_back_off(printer, monkeypatch):
+    monkeypatch.setattr(base, "grab_jpeg", lambda url: JPEG)
+    printer.supports_light = True
+    printer.auto_light = False          # must work even when the user never asked for light management
+    printer.status = {"LightStatus": {"SecondLight": False}}
+    calls = []
+    async def set_light(on):
+        calls.append(on)
+        printer.status = {"LightStatus": {"SecondLight": on}}
+        return True
+    printer.set_light = set_light
+    i = _id()
+    persistence.append_history({"id": i})
+    await printer._save_print_picture(i)
+    assert calls == [True, False]
+    assert persistence.snapshot_path(i).read_bytes() == JPEG
+
+
+@pytest.mark.asyncio
+async def test_light_already_on_is_left_alone(printer, monkeypatch):
+    monkeypatch.setattr(base, "grab_jpeg", lambda url: JPEG)
+    printer.supports_light = True
+    printer.status = {"LightStatus": {"SecondLight": True}}
+    calls = []
+    async def set_light(on):
+        calls.append(on)
+        return True
+    printer.set_light = set_light
+    i = _id()
+    persistence.append_history({"id": i})
+    await printer._save_print_picture(i)
+    assert calls == []      # already on: nothing to turn on, nothing of ours to turn back off
+
+
+@pytest.mark.asyncio
 async def test_no_camera_or_failed_grab_leaves_no_trace(printer, monkeypatch):
     i = _id()
     persistence.append_history({"id": i})
