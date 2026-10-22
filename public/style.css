@@ -1407,8 +1407,8 @@ main {
   padding: 1px 6px; border-radius: 99px;
 }
 .integration-locked-note { color: var(--yellow); font-size: 11px; }
-.integration-test-row { display: flex; align-items: center; gap: 10px; }
-.integration-test-result { font-size: 12px; }
+.integration-test-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.integration-test-result { font-size: 12px; line-height: 1.4; margin-top: 2px; }
 .integration-test-result.ok   { color: var(--green); }
 .integration-test-result.fail { color: var(--red); }
 .integrations-server-settings { margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--border); }

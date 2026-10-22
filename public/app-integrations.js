@@ -161,6 +161,7 @@ const _INTEGRATION_GROUPS = [
 
 // Static markup in index.html; re-attached into the Spoolman group after each render.
 const _catalogueEl = document.querySelector(".integrations-catalogue");
+const _openIntegrationGroups = new Set();   // groups the user has opened, kept across re-renders (e.g. after "Test connection")
 
 function _renderIntegrationsList() {
   const container = document.getElementById("integrations-list");
@@ -220,7 +221,7 @@ function _renderIntegrationsList() {
       </div>` : "";
 
     return `
-      <details class="integration-group notif-group notif-group-events">
+      <details class="integration-group notif-group notif-group-events" data-integration-group="${escAttr(group.title)}" ${_openIntegrationGroups.has(group.title) ? "open" : ""}>
         <summary>
           <span class="notif-group-text"><strong>${escHtml(group.title)}</strong></span>
           <svg class="notif-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
@@ -228,6 +229,12 @@ function _renderIntegrationsList() {
         <div class="integration-group-body notif-group-body">${group.help ? `<p class="report-desc">${escHtml(group.help)}</p>` : ""}${fieldsHtml}${testHtml}</div>
       </details>`;
   }).join("");
+
+  container.querySelectorAll("details[data-integration-group]").forEach(d => {
+    d.addEventListener("toggle", () => {
+      d.open ? _openIntegrationGroups.add(d.dataset.integrationGroup) : _openIntegrationGroups.delete(d.dataset.integrationGroup);
+    });
+  });
 
   const spoolmanBody = container.querySelector(".integration-group .integration-group-body");
   if (_catalogueEl && spoolmanBody && container.querySelector(".integration-group summary strong")?.textContent === "Spoolman") {
