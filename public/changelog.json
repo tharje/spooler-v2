@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.4.0-beta",
+    "date": "2026-10-22",
+    "changes": [
+      "Print history now records the layer count reached, for every printer type, not just Centauri Carbon (#26)",
+      "Klipper/Moonraker: layer count is now read from the printer, once the slicer's start g-code sets it (#26)",
+      "Stats: a \"Layers printed\" total, overall and per printer (#26)",
+      "index.html is no longer cached, so an update always shows up without a hard refresh or clearing the app's cache",
+      "Integrations: a settings group no longer closes itself right after pressing \"Test connection\" (#27)",
+      "The end-of-print picture now waits a few seconds after the print is reported done, so it doesn't show the toolhead still parking over the model",
+      "The end-of-print picture turns the light on first if it was off, then back off afterwards, so the picture isn't dark even without automatic light switching on",
+      "Picture collection: a picture of the plate is saved the moment each print starts, before anything is on it, to build towards a future build-plate-readiness check"
+    ]
+  },
+  {
     "version": "2.3.1",
     "date": "2026-10-21",
     "changes": [

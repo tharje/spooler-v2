@@ -943,6 +943,7 @@ class PrinterConnection:
                                          started_at=self._print_start_time)
             self._save_accounting(force=True)
             asyncio.create_task(self._capture_start_spool(self._acct))
+            asyncio.create_task(dataset.capture_before_print(self, pi))
         elif self._acct is not None and now_active:
             self._observe_extrusion()
 

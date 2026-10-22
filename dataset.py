@@ -13,6 +13,8 @@ Layout: <folder>/<printer name>/<start time>/<hh-mm-ss>.jpg, plus job.json in
 each print's folder and pictures.jsonl (one line per picture). A picture you
 mark from the printer card ("Looks OK" / "Failing now") is taken at that moment
 and carries your label; the first "Failing now" is also written into job.json.
+The very first picture of each job, taken the moment the print starts (before
+it has put anything on the plate), is labelled "before".
 """
 
 import asyncio
@@ -115,6 +117,23 @@ def label_now(p, label: str) -> None:
         if job is None:
             job = _jobs[p.id] = _start_job(p, info)
     save_picture(job, jpeg, info, label)
+
+
+async def capture_before_print(p, info: dict) -> None:
+    """Called right when a new print starts: the earliest look we get at the plate,
+    before this print has put anything on it. Builds up an "empty/ready plate" class
+    alongside the during-print pictures, for a future plate-readiness check."""
+    if not (is_enabled("dataset_collection") and is_enabled("camera") and dataset_dir() is not None):
+        return
+    jpeg = await p._camera_picture(max_age_s=0)
+    if not jpeg:
+        return
+    loop = asyncio.get_running_loop()
+    job = _jobs.get(p.id)
+    if job is None:
+        job = await loop.run_in_executor(None, _start_job, p, info)
+        job = _jobs.setdefault(p.id, job)          # the loop or label button may have started it meanwhile
+    await loop.run_in_executor(None, save_picture, job, jpeg, info, "before")
 
 
 async def collect_printer(p) -> None:
