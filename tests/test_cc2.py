@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from printers.cc2 import CC2Connection
+from printers.cc2 import CC2Connection, _valid_slot_map
 
 
 class _FakePayload:
@@ -460,3 +460,53 @@ def test_standalone_fault_ignored_during_print_flow_states(printer, quiet_emit):
         printer._check_standalone_fault(display_state)
     assert printer.standalone_fault is None
     assert quiet_emit == []
+
+
+# ─── slot_map (multi-material tool→tray mapping, confirmed from the firmware binary) ──
+
+def test_valid_slot_map_accepts_a_well_formed_list():
+    raw = [{"t": 0, "canvas_id": 0, "tray_id": 2}, {"t": 1, "canvas_id": 0, "tray_id": 5}]
+    assert _valid_slot_map(raw) == raw
+
+
+def test_valid_slot_map_coerces_numeric_strings():
+    assert _valid_slot_map([{"t": "0", "canvas_id": "0", "tray_id": "2"}]) == [
+        {"t": 0, "canvas_id": 0, "tray_id": 2}
+    ]
+
+
+@pytest.mark.parametrize("bad", [
+    None, [], "slot_map", [1, 2],
+    [{"t": 0, "canvas_id": 0}],                     # missing tray_id
+    [{"t": "x", "canvas_id": 0, "tray_id": 0}],      # not numeric
+])
+def test_valid_slot_map_rejects_malformed_input(bad):
+    assert _valid_slot_map(bad) is None
+
+
+@pytest.mark.asyncio
+async def test_start_print_file_forwards_a_valid_slot_map(printer, monkeypatch):
+    sent = {}
+
+    async def fake_send(cmd, data):
+        sent["cmd"], sent["data"] = cmd, data
+        return True
+    monkeypatch.setattr(printer, "send_cmd", fake_send)
+
+    await printer.start_print_file("a.gcode", {"slot_map": [{"t": 0, "canvas_id": 0, "tray_id": 3}]})
+    assert sent["cmd"] == 1020
+    assert sent["data"]["slot_map"] == [{"t": 0, "canvas_id": 0, "tray_id": 3}]
+
+
+@pytest.mark.asyncio
+async def test_start_print_file_omits_slot_map_when_absent_or_invalid(printer, monkeypatch):
+    sent = []
+
+    async def fake_send(cmd, data):
+        sent.append(data)
+        return True
+    monkeypatch.setattr(printer, "send_cmd", fake_send)
+
+    await printer.start_print_file("a.gcode")
+    await printer.start_print_file("a.gcode", {"slot_map": "garbage"})
+    assert all("slot_map" not in data for data in sent)

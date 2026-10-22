@@ -1045,6 +1045,18 @@ main {
   font-size: 14px;
 }
 .print-opts-row:last-child { border-bottom: none; padding-bottom: 2px; }
+.print-opts-slots-hint { font-size: 12px; color: var(--text-muted); margin: 0 0 10px; }
+.print-opts-slot-row {
+  display: flex; align-items: center; gap: 10px; padding: 8px 0;
+  border-bottom: 1px solid var(--surface3, rgba(255,255,255,0.06));
+}
+.print-opts-slot-row:last-child { border-bottom: none; padding-bottom: 0; }
+.print-opts-slot-dot { width: 14px; height: 14px; border-radius: 50%; flex: none; border: 1px solid var(--border); }
+.print-opts-slot-label { font-size: 13px; flex: none; width: 70px; color: var(--text-muted); }
+.print-opts-slot-row select {
+  flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  color: var(--text); font-size: 13px; padding: 6px 8px;
+}
 
 /* ─── Spool picker modal ──────────────────────────────────────────────────── */
 .modal-box-wide { width: min(500px, 92vw); }
