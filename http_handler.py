@@ -423,6 +423,8 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
             self._json([p.to_dict() for p in state.printers.values()])
         elif self.path == "/api/history":
             self._json(load_history())
+        elif self.path == "/api/queue":
+            self._handle_queue_list()
         elif self.path.startswith("/api/lookup-ean"):
             if not is_enabled("spoolman"):
                 self._json({"error": "feature_disabled", "feature": "spoolman"}, 403)
@@ -513,6 +515,9 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
         if self.path.startswith("/api/history/"):
             self._handle_history_update()
             return
+        if self.path.startswith("/api/queue/"):
+            self._handle_queue_update()
+            return
         if proxy_spoolman_enabled() and self.path.startswith("/api/v1/"):
             self._proxy_spoolman_ui("PATCH", self.path, self._read_body())
             return
@@ -529,6 +534,9 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
             return
         if self.path.startswith("/api/service/"):
             self._handle_service_delete()
+            return
+        if self.path.startswith("/api/queue/"):
+            self._handle_queue_delete()
             return
         if self.path.startswith("/api/api-tokens/"):
             ok = api_tokens.revoke(urllib.parse.unquote(self.path[len("/api/api-tokens/"):]))
@@ -594,6 +602,10 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
             self._proxy_spoolman("POST", self.path[len("/api/spoolman"):], self._read_body())
         elif self.path.startswith("/api/upload/"):
             self._handle_upload()
+        elif self.path == "/api/queue/upload":
+            self._handle_queue_upload()
+        elif self.path.startswith("/api/queue/") and self.path.endswith("/confirm"):
+            self._handle_queue_confirm()
         else:
             self._json({"error": "Not found"}, 404)
 

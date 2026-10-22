@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css?v=82" />
+  <link rel="stylesheet" href="style.css?v=83" />
 </head>
 <body>
   <header>
@@ -63,6 +63,14 @@
       </svg>
       <span>Service</span>
       <span id="service-badge" class="nav-badge" hidden aria-label="Service is due"></span>
+    </button>
+    <button id="btn-queue" class="sidenav-item" title="Print queue">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+        <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+      </svg>
+      <span>Queue</span>
+      <span id="queue-badge" class="nav-badge" hidden aria-label="A job is ready to start"></span>
     </button>
     <a id="btn-slicer" class="sidenav-item" title="Open slicer" target="_blank" rel="noopener" hidden>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -231,6 +239,17 @@
       </div>
     </div>
     <div class="side-panel-body" id="service-body"></div>
+  </div>
+
+  <!-- Queue panel -->
+  <div id="panel-queue" class="side-panel">
+    <div class="side-panel-header">
+      <div class="title-row">
+        <h3>Queue</h3>
+        <button id="btn-queue-close" class="btn btn-secondary btn-sm">Close</button>
+      </div>
+    </div>
+    <div class="side-panel-body" id="queue-body"></div>
   </div>
 
   <div id="panel-backdrop" class="panel-backdrop"></div>
@@ -862,14 +881,15 @@
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="/config.js"></script>
-  <script src="app-core.js?v=89"></script>
+  <script src="app-core.js?v=90"></script>
   <script src="app-render.js?v=88"></script>
   <script src="app-settings.js?v=87"></script>
   <script src="app-files.js?v=83"></script>
-  <script src="app-integrations.js?v=90"></script>
+  <script src="app-integrations.js?v=91"></script>
   <script src="app-stats.js?v=85"></script>
   <script src="app-spools.js?v=83"></script>
   <script src="app-service.js?v=92"></script>
+  <script src="app-queue.js?v=1"></script>
   <script src="app-boot.js?v=84"></script>
   <script>
     if ("serviceWorker" in navigator) {

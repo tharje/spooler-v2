@@ -330,6 +330,8 @@ function _applyFeatures(list) {
   if (statsBtn) statsBtn.style.display = featureEnabled("statistics") ? "" : "none";
   const serviceBtn = document.getElementById("btn-service");
   if (serviceBtn) serviceBtn.style.display = featureEnabled("service_log") ? "" : "none";
+  const queueBtn = document.getElementById("btn-queue");
+  if (queueBtn) queueBtn.style.display = featureEnabled("job_queue") ? "" : "none";
   const spoolsBtn = document.getElementById("btn-spools");
   if (spoolsBtn) spoolsBtn.style.display = featureEnabled("spoolman") ? "" : "none";
 

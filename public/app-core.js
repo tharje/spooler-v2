@@ -152,6 +152,7 @@ function connect() {
     loadHistory();
     loadLedger();
     if (featureEnabled("service_log")) loadService();
+    if (featureEnabled("job_queue")) loadQueue();
     loadSecurityStatus();
     fetchSpools();
   };
@@ -240,6 +241,7 @@ function handleMessage(msg) {
       renderHistory();
       toast(`Print logged: ${msg.entry.filament_g}g used`);
       if (featureEnabled("service_log")) loadService();
+      if (featureEnabled("job_queue")) loadQueue();
       break;
     case "spool_empty":
       spools = spools.map(s => s.id === msg.spool.id ? msg.spool : s);

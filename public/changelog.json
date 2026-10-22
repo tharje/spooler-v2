@@ -10,7 +10,8 @@
       "Integrations: a settings group no longer closes itself right after pressing \"Test connection\" (#27)",
       "The end-of-print picture now waits a few seconds after the print is reported done, so it doesn't show the toolhead still parking over the model",
       "The end-of-print picture turns the light on first if it was off, then back off afterwards, so the picture isn't dark even without automatic light switching on",
-      "Picture collection: a picture of the plate is saved the moment each print starts, before anything is on it, to build towards a future build-plate-readiness check"
+      "Picture collection: a picture of the plate is saved the moment each print starts, before anything is on it, to build towards a future build-plate-readiness check",
+      "New: a print queue (off by default) — queue up g-code files with requirements (printer type/material/quantity/priority); a free, matching printer is offered the job, but nothing is ever uploaded or started until you confirm the plate is clear, from the new Queue panel"
     ]
   },
   {

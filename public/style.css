@@ -1792,6 +1792,25 @@ main {
 .service-x { background: none; border: 0; color: var(--text-muted); font-size: 20px; line-height: 1; cursor: pointer; padding: 4px 6px; border-radius: 6px; }
 .service-x:hover { color: var(--red); background: var(--surface); }
 .service-empty { color: var(--text-muted); font-size: 13px; padding: 8px 0; }
+.queue-form { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-bottom: 14px; }
+.queue-form > summary { cursor: pointer; font-weight: 600; font-size: 14px; list-style: none; }
+.queue-form > summary::-webkit-details-marker { display: none; }
+.queue-dropzone { border: 1px dashed var(--border); border-radius: var(--radius); padding: 12px; margin: 10px 0; font-size: 13px; color: var(--text-muted); text-align: center; }
+.queue-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 10px; }
+.queue-form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-muted); }
+.queue-job { display: flex; gap: 12px; align-items: center; padding: 10px 0; flex-wrap: wrap; }
+.queue-job + .queue-job { border-top: 1px solid var(--border); }
+.queue-job-main { flex: 1; min-width: 0; }
+.queue-job-name { font-weight: 600; font-size: 14px; word-break: break-word; }
+.queue-job-reqs { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+.queue-job-error { color: var(--red); font-size: 12px; margin-top: 2px; }
+.queue-job-status { font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 999px; background: var(--surface); color: var(--text-muted); flex: none; }
+.queue-status-assigned { background: rgba(255,107,43,.14); color: var(--accent); }
+.queue-status-printing { background: rgba(59,130,246,.14); color: var(--blue); }
+.queue-status-done { background: rgba(34,197,94,.14); color: var(--green); }
+.queue-status-cancelled { color: var(--text-dim-strong); }
+.queue-job-actions { display: flex; gap: 6px; flex: none; }
+
 .service-code { padding: 2px 0; }
 .service-code + .service-code { border-top: 1px solid var(--border); }
 .service-code > summary { display: flex; align-items: center; gap: 10px; padding: 10px 0; cursor: pointer; list-style: none; }

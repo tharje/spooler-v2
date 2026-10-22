@@ -8,6 +8,7 @@ import http_common
 import asyncio
 import config
 import diagnostics
+import job_queue
 import json
 import notifiers
 import notify
@@ -233,6 +234,80 @@ class AdminMixin:
                 local_path.unlink(missing_ok=True)
             with _uploads_lock:
                 _uploads_active.discard(printer_id)
+
+    @requires_feature("job_queue")
+    def _handle_queue_list(self):
+        self._json({"jobs": job_queue.list_jobs()})
+
+    @requires_feature("job_queue")
+    def _handle_queue_upload(self):
+        """POST /api/queue/upload?name=<file>&printer_type=&printer_id=&material=&colour=&quantity=&priority=
+        with the raw file as the request body -- same streaming pattern as
+        _handle_upload, but the file goes into the queue instead of straight
+        to a printer."""
+        qs = urllib.parse.urlparse(self.path).query
+        params = urllib.parse.parse_qs(qs)
+        local_path = None
+        try:
+            name = uploads.sanitize_filename(params.get("name", [""])[0])
+            length = int(self.headers.get("Content-Length", 0))
+            try:
+                local_path = uploads.save_stream(self.rfile, length, name)
+            except uploads.UploadError as e:
+                self.close_connection = True
+                self._json({"error": str(e)}, 413 if "too large" in str(e) else 400)
+                return
+            requirements = {k: params.get(k, [""])[0] for k in
+                             ("printer_type", "printer_id", "material", "colour", "quantity", "priority")}
+            job = job_queue.add_job(local_path, name, requirements)
+            local_path = None  # add_job() moved it into the queue folder
+            self._json({"ok": True, "job": job})
+        except (uploads.UploadError, job_queue.QueueError) as e:
+            self._json({"error": str(e)}, 400)
+        except Exception as e:
+            print(f"[Queue] upload failed: {e}")
+            self._json({"error": f"Could not add to the queue: {e}"}, 500)
+        finally:
+            if local_path is not None:
+                local_path.unlink(missing_ok=True)
+
+    @requires_feature("job_queue")
+    def _handle_queue_update(self):
+        """PATCH /api/queue/<job id> {priority?, quantity?, status: "cancelled"?}"""
+        job_id = urllib.parse.unquote(self.path[len("/api/queue/"):])
+        try:
+            changes = json.loads(self._read_body() or b"{}")
+            job = job_queue.update_job(job_id, changes)
+            self._json({"ok": True, "job": job})
+        except job_queue.QueueError as e:
+            self._json({"error": str(e)}, 404 if "not found" in str(e).lower() else 400)
+        except Exception as e:
+            self._json({"error": f"Could not update the job: {e}"}, 500)
+
+    @requires_feature("job_queue")
+    def _handle_queue_delete(self):
+        job_id = urllib.parse.unquote(self.path[len("/api/queue/"):])
+        try:
+            job_queue.delete_job(job_id)
+            self._json({"ok": True})
+        except job_queue.QueueError as e:
+            self._json({"error": str(e)}, 404)
+
+    @requires_feature("job_queue")
+    def _handle_queue_confirm(self):
+        """POST /api/queue/<printer id>/confirm -- the user has cleared the
+        plate; upload and start this printer's assigned job now."""
+        printer_id = urllib.parse.unquote(self.path[len("/api/queue/"):-len("/confirm")])
+        try:
+            fut = asyncio.run_coroutine_threadsafe(
+                job_queue.confirm_plate_cleared(printer_id), http_common.ws_loop())
+            job = fut.result(timeout=120)
+            self._json({"ok": True, "job": job})
+        except job_queue.QueueError as e:
+            self._json({"error": str(e)}, 400)
+        except Exception as e:
+            print(f"[Queue] confirm failed for {printer_id}: {e}")
+            self._json({"error": f"Could not start the print: {e}"}, 500)
 
     @requires_feature("backup")
     def _handle_backup_download(self):
