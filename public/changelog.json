@@ -1,6 +1,6 @@
 [
   {
-    "version": "2.4.0-beta",
+    "version": "2.4.0",
     "date": "2026-10-22",
     "changes": [
       "Print history now records the layer count reached, for every printer type, not just Centauri Carbon (#26)",
