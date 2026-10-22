@@ -604,6 +604,8 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
             self._handle_upload()
         elif self.path == "/api/queue/upload":
             self._handle_queue_upload()
+        elif self.path == "/api/queue/from-printer":
+            self._handle_queue_from_printer()
         elif self.path.startswith("/api/queue/") and self.path.endswith("/confirm"):
             self._handle_queue_confirm()
         else:

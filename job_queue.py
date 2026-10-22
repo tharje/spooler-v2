@@ -1,18 +1,22 @@
 """
 T20: a simple print queue.
 
-A job is a g-code file plus requirements (printer type, optionally a specific
-printer, material, colour) and a quantity. assign_ready_jobs() matches queued
+A job is either a newly uploaded g-code file (source "upload") with
+requirements (printer type, optionally a specific printer, material,
+colour), or a file already sitting on one specific printer's own storage,
+picked from its file browser (source "printer_file", add_existing_job()) --
+that one is always tied to that printer, since the file only exists there.
+Either way a job also has a quantity. assign_ready_jobs() matches queued
 jobs to idle printers, preferring a printer whose currently linked spool
 (persistence.load_tray_map(), via Spoolman) matches the job's material, but
 it never uploads or starts anything by itself -- a job only moves past
 "assigned" when confirm_plate_cleared() is called for that printer, which is
 the UI's "Plate tømt - start neste" button. There is no automatic retry and
-no automatic pause/cancel handling here: a failed upload just leaves the job
-assigned so the button can be pressed again.
+no automatic pause/cancel handling here: a failed upload/start just leaves
+the job assigned so the button can be pressed again.
 
-Layout: DATA_DIR/queue/<job id>.gcode (the file) and queue.json (the job
-list, in the same shape list_jobs() returns).
+Layout: DATA_DIR/queue/<job id>.gcode (the file, "upload" jobs only) and
+queue.json (the job list, in the same shape list_jobs() returns).
 """
 
 import asyncio
@@ -95,6 +99,7 @@ def add_job(local_path: Path, filename: str, requirements: dict) -> dict:
     local_path.replace(dest)
     job = {
         "id": job_id,
+        "source": "upload",
         "filename": name,
         "added_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "printer_type": printer_type,
@@ -107,6 +112,41 @@ def add_job(local_path: Path, filename: str, requirements: dict) -> dict:
         "assigned_printer_id": None,
         "gcode_printer_model": gcode_model,
         "gcode_filament_type": first_value(meta, "filament_type"),
+        "error": None,
+    }
+    with _lock:
+        jobs = _load()
+        jobs.append(job)
+        _save(jobs)
+    return job
+
+
+def add_existing_job(printer_id: str, filename: str, requirements: dict) -> dict:
+    """Queue a file that's already on a specific printer's own storage (picked
+    from its file browser) to print next, instead of uploading a new one.
+    Tied to that one printer -- there's no cross-printer matching to do,
+    since the file only exists there. confirm_plate_cleared() starts it with
+    start_print_file() rather than uploading anything."""
+    printer = state.printers.get(printer_id)
+    if printer is None:
+        raise QueueError("No such printer.")
+    quantity = max(1, int(requirements.get("quantity") or 1))
+    priority = int(requirements.get("priority") or 0)
+    job = {
+        "id": uuid.uuid4().hex,
+        "source": "printer_file",
+        "filename": filename,
+        "added_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "printer_type": printer.printer_type,
+        "printer_id": printer_id,
+        "material": (requirements.get("material") or "").strip() or None,
+        "colour": (requirements.get("colour") or "").strip() or None,
+        "quantity": quantity,
+        "priority": priority,
+        "status": "queued",
+        "assigned_printer_id": None,
+        "gcode_printer_model": None,   # already on this exact printer -- nothing to validate
+        "gcode_filament_type": None,
         "error": None,
     }
     with _lock:
@@ -248,13 +288,19 @@ async def confirm_plate_cleared(printer_id: str) -> dict:
         job = next((j for j in jobs if j["status"] == "assigned" and j["assigned_printer_id"] == printer_id), None)
         if job is None:
             raise QueueError("No job is assigned to this printer.")
-    if not _model_matches(job["gcode_printer_model"], printer.printer_type):
-        raise QueueError("This file's printer model does not look compatible with this printer; refusing to send it.")
-    path = QUEUE_DIR / f"{job['id']}.gcode"
-    if not path.exists():
-        raise QueueError("The queued file is missing.")
     try:
-        ok = await printer.upload_file(path, job["filename"], start_after=True)
+        if job.get("source") == "printer_file":
+            # Already on this printer's own storage -- just start it, nothing to upload.
+            ok = await printer.start_print_file(job["filename"])
+            fail_msg = "Could not start the print."
+        else:
+            if not _model_matches(job["gcode_printer_model"], printer.printer_type):
+                raise QueueError("This file's printer model does not look compatible with this printer; refusing to send it.")
+            path = QUEUE_DIR / f"{job['id']}.gcode"
+            if not path.exists():
+                raise QueueError("The queued file is missing.")
+            ok = await printer.upload_file(path, job["filename"], start_after=True)
+            fail_msg = "Upload succeeded but starting the print failed."
     except UploadError as e:
         raise QueueError(str(e))
     with _lock:
@@ -262,7 +308,7 @@ async def confirm_plate_cleared(printer_id: str) -> dict:
         for j in jobs:
             if j["id"] == job["id"]:
                 if not ok:
-                    j["error"] = "Upload succeeded but starting the print failed."
+                    j["error"] = fail_msg
                     break
                 j["quantity"] -= 1
                 if j["quantity"] > 0:
@@ -274,7 +320,7 @@ async def confirm_plate_cleared(printer_id: str) -> dict:
                 break
         _save(jobs)
     if not ok:
-        raise QueueError("Upload succeeded but starting the print failed.")
+        raise QueueError(fail_msg)
     return job
 
 

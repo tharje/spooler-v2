@@ -19,7 +19,9 @@ class FakePrinter:
         self._state = state_
         self._tray = tray_spool
         self.uploaded = None
+        self.started = None
         self.upload_result = True
+        self.start_result = True
 
     def to_dict(self):
         return {"state": self._state}
@@ -30,6 +32,10 @@ class FakePrinter:
     async def upload_file(self, local_path, remote_name, start_after=False):
         self.uploaded = (local_path, remote_name, start_after)
         return self.upload_result
+
+    async def start_print_file(self, filename, print_opts=None):
+        self.started = filename
+        return self.start_result
 
 
 def run(coro):
@@ -173,6 +179,31 @@ def test_confirm_plate_cleared_refuses_without_an_assigned_job(tmp_path):
 def test_confirm_plate_cleared_refuses_unknown_printer():
     with pytest.raises(job_queue.QueueError):
         run(job_queue.confirm_plate_cleared("nope"))
+
+
+def test_add_existing_job_ties_to_that_printer_and_needs_no_file():
+    state.printers["p1"] = FakePrinter("p1", printer_type="cc2")
+    job = job_queue.add_existing_job("p1", "/local/benchy.gcode", {"quantity": 2})
+    assert job["source"] == "printer_file"
+    assert job["printer_id"] == "p1" and job["printer_type"] == "cc2"
+    assert job["filename"] == "/local/benchy.gcode"
+    assert not (job_queue.QUEUE_DIR / f"{job['id']}.gcode").exists()
+
+
+def test_add_existing_job_refuses_unknown_printer():
+    with pytest.raises(job_queue.QueueError):
+        job_queue.add_existing_job("nope", "/local/a.gcode", {})
+
+
+def test_confirm_plate_cleared_starts_an_existing_printer_file_without_uploading():
+    printer = FakePrinter("p1")
+    state.printers["p1"] = printer
+    job_queue.add_existing_job("p1", "/local/benchy.gcode", {"quantity": 1})
+    job_queue.assign_ready_jobs()
+    run(job_queue.confirm_plate_cleared("p1"))
+    assert printer.uploaded is None  # never uploaded, only started
+    assert printer.started == "/local/benchy.gcode"
+    assert job_queue.list_jobs()[0]["status"] == "done"
 
 
 def test_confirm_plate_cleared_leaves_job_assigned_when_start_fails(tmp_path):

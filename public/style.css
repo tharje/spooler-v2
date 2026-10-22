@@ -1798,6 +1798,14 @@ main {
 .queue-dropzone { border: 1px dashed var(--border); border-radius: var(--radius); padding: 12px; margin: 10px 0; font-size: 13px; color: var(--text-muted); text-align: center; }
 .queue-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 10px; }
 .queue-form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-muted); }
+.queue-form-grid input,
+.queue-form-grid select {
+  background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  color: var(--text); font-size: 14px; padding: 8px 10px; width: 100%; outline: none; transition: border-color .15s;
+}
+.queue-form-grid input:focus,
+.queue-form-grid select:focus { border-color: var(--accent); }
+.queue-form-grid select option { background: var(--surface2); color: var(--text); }
 .queue-job { display: flex; gap: 12px; align-items: center; padding: 10px 0; flex-wrap: wrap; }
 .queue-job + .queue-job { border-top: 1px solid var(--border); }
 .queue-job-main { flex: 1; min-width: 0; }

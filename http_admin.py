@@ -272,6 +272,24 @@ class AdminMixin:
                 local_path.unlink(missing_ok=True)
 
     @requires_feature("job_queue")
+    def _handle_queue_from_printer(self):
+        """POST /api/queue/from-printer {printer_id, filename, quantity?, priority?,
+        material?, colour?} -- queue a file that's already on that printer."""
+        try:
+            body = json.loads(self._read_body() or b"{}")
+            printer_id = (body.get("printer_id") or "").strip()
+            filename = (body.get("filename") or "").strip()
+            if not printer_id or not filename:
+                self._json({"error": "printer_id and filename are required"}, 400)
+                return
+            job = job_queue.add_existing_job(printer_id, filename, body)
+            self._json({"ok": True, "job": job})
+        except job_queue.QueueError as e:
+            self._json({"error": str(e)}, 400)
+        except Exception as e:
+            self._json({"error": f"Could not add to the queue: {e}"}, 500)
+
+    @requires_feature("job_queue")
     def _handle_queue_update(self):
         """PATCH /api/queue/<job id> {priority?, quantity?, status: "cancelled"?}"""
         job_id = urllib.parse.unquote(self.path[len("/api/queue/"):])
