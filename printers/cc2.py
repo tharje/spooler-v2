@@ -822,6 +822,8 @@ class CC2Connection(PrinterConnection):
         self.status = {
             "PrintInfo": {
                 "Status":         status_code,
+                # Verified 2026-10-22 against a real CC2 (Tharje): the printer
+                # does push current_layer/total_layer in print_status.
                 "CurrentLayer":   ps.get("current_layer", 0),
                 "TotalLayer":     ps.get("total_layer", 0),
                 "CurrentTicks":   progress,
