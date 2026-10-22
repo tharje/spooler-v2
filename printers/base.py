@@ -43,6 +43,12 @@ PRINTING_STATUSES = {2, 3, 4, 13}
 PAUSED_STATUSES   = {5, 6}   # pausing, paused
 _END_STATUSES     = {9, 8, 14, 0}
 
+# How long to wait after a print is reported done before taking its history
+# picture, so the toolhead's own end-of-print park/home move is out of the
+# shot. A guess, not measured against real hardware -- raise it if the
+# picture still shows the toolhead blocking the model.
+PRINT_PICTURE_DELAY_S = 6.0
+
 
 def classify_print_transition(prev_status, cur_status) -> str | None:
     """Pure state-machine step: given the previous and current raw status
@@ -522,15 +528,18 @@ class PrinterConnection:
             notifylib.notify(notifylib.Notification(event, self.id, title, body, None, priority,
                                                     self.name, extra or {}))
 
-    async def _camera_picture(self, max_age_s: float = 20.0) -> bytes | None:
+    async def _camera_picture(self, max_age_s: float = 20.0, force: bool = False) -> bytes | None:
         """One JPEG from the camera, or None (no camera, offline, timeout).
         A picture taken in the last few seconds is reused, so the end-of-print
-        picture and a notification about the same moment cost one grab."""
+        picture and a notification about the same moment cost one grab --
+        unless force skips that reuse, for a caller that specifically wants a
+        fresh frame instead of whatever (possibly stale) one is cached."""
         if not self.camera_url or not self.connected:
             return None
-        cached = getattr(self, "_picture_cache", None)
-        if cached and time.monotonic() - cached[0] < max_age_s:
-            return cached[1]
+        if not force:
+            cached = getattr(self, "_picture_cache", None)
+            if cached and time.monotonic() - cached[0] < max_age_s:
+                return cached[1]
         jpeg = await asyncio.get_running_loop().run_in_executor(None, grab_jpeg, self.camera_url)
         if jpeg:
             self._picture_cache = (time.monotonic(), jpeg)
@@ -538,11 +547,20 @@ class PrinterConnection:
 
     async def _save_print_picture(self, entry_id: str) -> None:
         """Keep a picture of the finished print with its history entry. Runs
-        beside, never inside, history writing and filament deduction."""
+        beside, never inside, history writing and filament deduction.
+
+        Waits a few seconds first: the instant a print is reported done, the
+        printer is usually still mid-way through its own end-of-print routine
+        (parking/homing the toolhead, lowering the bed), so a picture taken
+        right away often shows the toolhead blocking the model rather than the
+        finished print. force=True on the grab skips reusing whatever picture
+        a "print complete" notification may have already cached a moment ago
+        for that exact same too-early instant."""
         try:
             if not is_enabled("print_snapshot") or not is_enabled("camera"):
                 return
-            jpeg = await self._camera_picture()
+            await asyncio.sleep(PRINT_PICTURE_DELAY_S)
+            jpeg = await self._camera_picture(force=True)
             if not jpeg:
                 return
             loop = asyncio.get_running_loop()
