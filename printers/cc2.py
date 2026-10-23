@@ -112,27 +112,6 @@ def _cc2_phase(ms_status, sub_status, status_code) -> str:
     return _PHASE_BY_SUB.get(sub_status) or _PHASE_BY_MS.get(ms_status, "")
 
 
-def _valid_slot_map(raw) -> list[dict] | None:
-    """Maps the g-code's own tool/colour index (color_map's "t") to a
-    physical Canvas tray: [{"t": int, "canvas_id": int, "tray_id": int}, ...].
-    Confirmed 2026-10-22 against the printer's own firmware binary
-    (api_module::APIPrinter::handle_start_print / set_print_tray_map) --
-    not from any published Elegoo documentation, so shape-checked defensively
-    before it's forwarded. Garbage in any entry drops the whole mapping
-    rather than sending a half-valid one."""
-    if not isinstance(raw, list) or not raw:
-        return None
-    out = []
-    for entry in raw:
-        if not isinstance(entry, dict):
-            return None
-        try:
-            out.append({"t": int(entry["t"]), "canvas_id": int(entry["canvas_id"]), "tray_id": int(entry["tray_id"])})
-        except (KeyError, TypeError, ValueError):
-            return None
-    return out
-
-
 # Requests (polled every 5 s) without any answer before we register again.
 UNANSWERED_LIMIT = 6
 
@@ -627,7 +606,7 @@ class CC2Connection(PrinterConnection):
     async def start_print_file(self, filename: str, print_opts: dict | None = None) -> bool:
         self._current_filename = filename
         opts = print_opts or {}
-        payload = {
+        return await self.send_cmd(1020, {
             "filename":      filename,
             "storage_media": "local",
             "config": {
@@ -635,11 +614,7 @@ class CC2Connection(PrinterConnection):
                 "bedlevel_force": bool(opts.get("leveling")),
                 "print_layout":  "B" if opts.get("smooth_plate") else "A",
             },
-        }
-        slot_map = _valid_slot_map(opts.get("slot_map"))
-        if slot_map:
-            payload["slot_map"] = slot_map
-        return await self.send_cmd(1020, payload)
+        })
 
     def _apply_cc2_status(self) -> None:
         s     = self._cc2_state

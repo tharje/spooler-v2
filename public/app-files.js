@@ -212,7 +212,6 @@ let _printOptsFile = null;
 let _printOptsName = null;
 
 let _printOptsFilename = null; // bare filename used as key for file_info matching
-let _printOptsColorMap = [];   // the open file's own tool/colour list (CC2 Canvas only)
 
 function _applyFileInfo(msg) {
   // Only update if the modal is still open for the same printer+file
@@ -282,13 +281,6 @@ function openPrintOpts(filePath, fileName, meta = {}) {
   // CC1 and CC2 support leveling/timelapse/plate; Prusa/Moonraker handle these natively
   document.getElementById("print-opts-cc1-only").style.display = isHttpPrinter ? "none" : "";
 
-  // CC2 with a Canvas unit and a multi-tool file: let the user pick which
-  // physical slot feeds each tool the slicer used (color_map's own "t" index).
-  // Confirmed from the printer firmware 2026-10-22: start_print's "slot_map"
-  // field, one {t, canvas_id, tray_id} per tool.
-  _printOptsColorMap = (isCC2 && Array.isArray(meta.color_map)) ? meta.color_map : [];
-  renderPrintOptsSlots(_currentFilePrinterId);
-
   // Load thumbnail
   const thumbImg  = document.getElementById("print-opts-thumb");
   const thumbWrap = document.getElementById("print-opts-thumb-wrap");
@@ -316,7 +308,6 @@ function closePrintOpts() {
   _printOptsFile = null;
   _printOptsName = null;
   _printOptsFilename = null;
-  _printOptsColorMap = [];
 }
 
 function _setPrintPlate(plateId) {
@@ -336,46 +327,6 @@ document.getElementById("modal-print-opts").addEventListener("click", e => {
   if (e.target === document.getElementById("modal-print-opts")) closePrintOpts();
 });
 
-// One Canvas tray per {canvas_id, tray_id}, flattened across every Canvas unit.
-function _canvasTrays(printerId) {
-  const ci = printers[printerId]?.status?.canvas_info;
-  if (!ci?.canvas_list?.length) return [];
-  return ci.canvas_list.flatMap(c => (c.tray_list || []).map(t => ({ ...t, canvas_id: c.canvas_id ?? 0 })));
-}
-
-// All text below is escaped with escHtml/escAttr before going into innerHTML,
-// same convention as the rest of this file (see renderFileList).
-function renderPrintOptsSlots(printerId) {
-  const group = document.getElementById("print-opts-slots");
-  const rows  = document.getElementById("print-opts-slots-rows");
-  if (!_printOptsColorMap.length) { group.style.display = "none"; rows.innerHTML = ""; return; }
-  const trays = _canvasTrays(printerId);
-  group.style.display = "";
-  rows.innerHTML = _printOptsColorMap.map((tool, i) => {
-    const trayOptions = trays.length
-      ? trays.map(t => `<option value="${t.canvas_id}:${t.tray_id}">Slot ${t.tray_id + 1}${t.filament_type ? ` — ${escHtml(t.filament_type)}` : ""}</option>`).join("")
-      : `<option value="">No Canvas slots found</option>`;
-    return `<div class="print-opts-slot-row" data-tool="${tool.t ?? i}">
-      <div class="print-opts-slot-dot" style="background:${escAttr(tool.color || "#888")}"></div>
-      <div class="print-opts-slot-label">${escHtml(tool.name || `Tool ${tool.t ?? i}`)}</div>
-      <select ${trays.length ? "" : "disabled"}>${trayOptions}</select>
-    </div>`;
-  }).join("");
-}
-
-function _collectSlotMap() {
-  if (!_printOptsColorMap.length) return null;
-  const rows = document.querySelectorAll("#print-opts-slots-rows .print-opts-slot-row");
-  const slot_map = [];
-  for (const row of rows) {
-    const sel = row.querySelector("select");
-    if (!sel || !sel.value) continue;
-    const [canvas_id, tray_id] = sel.value.split(":").map(Number);
-    slot_map.push({ t: Number(row.dataset.tool), canvas_id, tray_id });
-  }
-  return slot_map.length ? slot_map : null;
-}
-
 document.getElementById("btn-print-opts-send").addEventListener("click", () => {
   if (!_printOptsFile) return;
   const opts = {
@@ -383,8 +334,6 @@ document.getElementById("btn-print-opts-send").addEventListener("click", () => {
     leveling:     document.getElementById("print-opt-leveling").checked,
     smooth_plate: document.getElementById("print-plate-smooth").dataset.selected === "1",
   };
-  const slot_map = _collectSlotMap();
-  if (slot_map) opts.slot_map = slot_map;
   send({
     action:     "start_print",
     printer_id: _currentFilePrinterId,
