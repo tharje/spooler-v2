@@ -345,39 +345,23 @@ function _canvasTrays(printerId) {
 
 // All text below is escaped with escHtml/escAttr before going into innerHTML,
 // same convention as the rest of this file (see renderFileList).
-let _printOptsTrays = [];   // the printer's own Canvas trays, for the colour-swap below
-
 function renderPrintOptsSlots(printerId) {
   const group = document.getElementById("print-opts-slots");
   const rows  = document.getElementById("print-opts-slots-rows");
   if (!_printOptsColorMap.length) { group.style.display = "none"; rows.innerHTML = ""; return; }
-  const trays = _printOptsTrays = _canvasTrays(printerId);
+  const trays = _canvasTrays(printerId);
   group.style.display = "";
   rows.innerHTML = _printOptsColorMap.map((tool, i) => {
     const trayOptions = trays.length
       ? trays.map(t => `<option value="${t.canvas_id}:${t.tray_id}">Slot ${t.tray_id + 1}${t.filament_type ? ` — ${escHtml(t.filament_type)}` : ""}</option>`).join("")
       : `<option value="">No Canvas slots found</option>`;
-    return `<div class="print-opts-slot-row" data-tool="${tool.t ?? i}" data-file-color="${escAttr(tool.color || "#888")}">
+    return `<div class="print-opts-slot-row" data-tool="${tool.t ?? i}">
       <div class="print-opts-slot-dot" style="background:${escAttr(tool.color || "#888")}"></div>
       <div class="print-opts-slot-label">${escHtml(tool.name || `Tool ${tool.t ?? i}`)}</div>
       <select ${trays.length ? "" : "disabled"}>${trayOptions}</select>
     </div>`;
   }).join("");
 }
-
-// The dot starts out showing the colour the slicer expected for that tool;
-// once you actually pick a slot, it switches to what's really loaded there,
-// so a mismatch (wrong slot picked) is visible before you hit Send.
-document.getElementById("print-opts-slots-rows").addEventListener("change", (ev) => {
-  const sel = ev.target.closest("select");
-  const row = ev.target.closest(".print-opts-slot-row");
-  if (!sel || !row) return;
-  const dot = row.querySelector(".print-opts-slot-dot");
-  if (!sel.value) { dot.style.background = row.dataset.fileColor; return; }
-  const [canvas_id, tray_id] = sel.value.split(":").map(Number);
-  const tray = _printOptsTrays.find(t => t.canvas_id === canvas_id && t.tray_id === tray_id);
-  dot.style.background = tray?.filament_color || row.dataset.fileColor;
-});
 
 function _collectSlotMap() {
   if (!_printOptsColorMap.length) return null;
