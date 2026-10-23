@@ -88,6 +88,95 @@ function _taskHtml(t) {
     </div>`;
 }
 
+const _ERR_CATEGORY_LABEL = {
+  thermal: "Thermal", motion: "Motion", sensor: "Sensor", fan: "Fan", leveling: "Leveling",
+  hardware: "Hardware", connection: "Connection", system: "System",
+  filament_runout: "Filament runout", filament_feed: "Filament feed",
+  filament_tangle: "Filament tangle", unknown: "Unknown",
+};
+
+function _errHtml(e) {
+  const when = e.timestamp ? escHtml(e.timestamp.replace("T", " ")) : "Unknown time";
+  const code = e.error_code != null ? ` (code ${escHtml(String(e.error_code))})` : "";
+  return `
+    <div class="service-entry">
+      <span class="service-icon k-hardware"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg></span>
+      <div class="service-main">
+        <div class="service-title">${escHtml(e.error_message || "Print error")}${code}</div>
+        <div class="service-meta">${when}${e.filename ? ` · ${escHtml(e.filename)}` : ""}</div>
+      </div>
+    </div>`;
+}
+
+// Where to ask when a code has nothing (or little) written about it yet.
+const _ISSUE_REPO_URL = "https://github.com/tharje/spooler-v2/issues/new";
+
+function _codeIssueUrl(c, printerType) {
+  const title = `Error code ${c.code} (${printerType || "?"}): more detail wanted`;
+  const body = `I'd like a more thorough description / fix for this error code.\n\n` +
+    `Printer type: ${printerType || "unknown"}\nCode: ${c.code}\n` +
+    `Current short text: ${c.message || "(none)"}${c.action ? `\nCurrent tip: ${c.action}` : ""}\n\n` +
+    `What happened when you saw it, and what fixed it (if anything):\n`;
+  return `${_ISSUE_REPO_URL}?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
+}
+
+function _codeDetailHtml(c, printerType) {
+  const hasTip = !!c.action;
+  return `
+    <div class="service-code-detail">
+      <div class="service-code-row"><strong>Category</strong><span>${escHtml(_ERR_CATEGORY_LABEL[c.category] || c.category || "Unknown")}</span></div>
+      <div class="service-code-row"><strong>What it means</strong><span>${escHtml(c.message || "Not described yet.")}</span></div>
+      ${hasTip ? `<div class="service-code-row"><strong>Fix tip</strong><span>${escHtml(c.action)}</span></div>` : ""}
+      <div class="service-code-ask">
+        ${hasTip ? "Know more about this one, or found a different fix?" : "No fix tip for this one yet — know what causes or fixes it?"}
+        <a href="${_codeIssueUrl(c, printerType)}" target="_blank" rel="noopener">Tell us on GitHub</a>
+      </div>
+    </div>`;
+}
+
+function _errorReferenceHtml(codes, printerType) {
+  if (!codes || !codes.length) return '<p class="service-empty">No error code reference for this printer type yet.</p>';
+  return codes.map(c => `
+    <details class="service-code" data-code="${escAttr(String(c.code))}">
+      <summary>
+        <span class="service-code-num">${escHtml(String(c.code))}</span>
+        <span class="service-code-msg">${escHtml(c.message || "Unknown code")}</span>
+        <span class="service-chev" aria-hidden="true">›</span>
+      </summary>
+      ${_codeDetailHtml(c, printerType)}
+    </details>`).join("");
+}
+
+// Filters the already-rendered reference rows in place (hide/show), rather
+// than re-rendering the whole panel on every keystroke -- keeps focus and
+// the cursor position in the search field while typing.
+function _filterCodeRows(query) {
+  const q = (query || "").trim();
+  document.querySelectorAll("#service-body .service-code").forEach(row => {
+    row.hidden = q !== "" && !row.dataset.code.includes(q);
+  });
+  const empty = document.getElementById("svc-code-noresult");
+  if (empty) empty.hidden = !q || [...document.querySelectorAll("#service-body .service-code")].some(r => !r.hidden);
+}
+
+function _errorPanelHtml(d, p) {
+  const errors = (d.errors || []).filter(e => e.printer_id === p.id);
+  const codes = (d.error_code_reference || {})[p.type];
+  return `
+    <div class="service-machine-head">
+      <button type="button" class="service-back" data-back-errors="1" aria-label="Back">‹</button>
+      <div><div class="service-printer">${escHtml(p.name)}</div><div class="service-meta">Error codes</div></div>
+    </div>
+    <div class="service-h">Error history</div>
+    <div class="service-card">${errors.length ? errors.map(_errHtml).join("") : '<p class="service-empty">No print errors recorded.</p>'}</div>
+    <div class="service-h">Error code reference</div>
+    ${codes && codes.length ? `<input id="svc-code-search" type="search" inputmode="numeric" placeholder="Search by code number…" class="service-code-search" />` : ""}
+    <div class="service-card">
+      ${_errorReferenceHtml(codes, p.type)}
+      <p id="svc-code-noresult" class="service-empty" hidden>No code matches that number.</p>
+    </div>`;
+}
+
 function _logHtml(e) {
   return `
     <div class="service-entry">
@@ -101,6 +190,7 @@ function _logHtml(e) {
 }
 
 let _serviceView = null;          // id of the printer whose parts are open, or null for the overview
+let _serviceErrorView = false;    // within _serviceView: showing the error codes panel instead of parts/logbook
 
 function _overviewHtml(d) {
   const dueTotal = d.tasks.filter(t => t.due).length;
@@ -151,6 +241,7 @@ function _machineHtml(d, p) {
     <div class="service-toolbar">
       <button class="btn btn-primary btn-sm" data-toggle="task">Add part</button>
       <button class="btn btn-secondary btn-sm" data-toggle="log">Log service</button>
+      <button class="btn btn-secondary btn-sm" data-open-errors="1">Error codes</button>
     </div>
     <details class="service-form" data-form="task" ${open.has("task") ? "open" : ""}><summary hidden></summary>
       <div class="service-form-title">Add part</div>
@@ -181,8 +272,8 @@ function renderService() {
   if (!d) { host.textContent = "Loading…"; return; }
   if (!d.printers.length) { host.innerHTML = '<p class="service-empty">Add a printer first.</p>'; return; }
   const p = d.printers.find(x => x.id === _serviceView);
-  if (!p) _serviceView = null;
-  host.innerHTML = p ? _machineHtml(d, p) : _overviewHtml(d);
+  if (!p) { _serviceView = null; _serviceErrorView = false; }
+  host.innerHTML = !p ? _overviewHtml(d) : _serviceErrorView ? _errorPanelHtml(d, p) : _machineHtml(d, p);
 }
 
 async function _serviceAct(fn) {
@@ -190,12 +281,22 @@ async function _serviceAct(fn) {
   catch (e) { toast(e.message, true); }
 }
 
+document.getElementById("service-body").addEventListener("input", (ev) => {
+  if (ev.target.id === "svc-code-search") _filterCodeRows(ev.target.value);
+});
+
 document.getElementById("service-body").addEventListener("click", (ev) => {
   const t = ev.target.closest("button");
   if (!t) return;
   const v = (id) => document.getElementById(id).value;
   if (t.dataset.openPrinter) {
     _serviceView = t.dataset.openPrinter;
+    renderService();
+  } else if (t.dataset.openErrors) {
+    _serviceErrorView = true;
+    renderService();
+  } else if (t.dataset.backErrors) {
+    _serviceErrorView = false;
     renderService();
   } else if (t.dataset.editHours) {
     const box = document.querySelector(".service-hours-edit"), tot = document.querySelector(".service-total");
@@ -246,4 +347,21 @@ const closeService = () => {
   btnService.classList.remove("active");
 };
 btnService.addEventListener("click", openService);
+
+function _focusCodeRow(code) {
+  const row = document.querySelector(`#service-body .service-code[data-code="${CSS.escape(String(code))}"]`);
+  if (row) { row.open = true; row.scrollIntoView({ block: "center" }); }
+}
+
+// Jumps straight to one printer's error code panel, scrolled and opened to
+// that code -- called from the card's error badge/reason box, so the printer
+// may not be the one already open in the Service book (or it may not be
+// open at all yet).
+function viewErrorCode(printerId, code) {
+  _serviceView = printerId;
+  _serviceErrorView = true;
+  openService();
+  _focusCodeRow(code);
+  loadService().then(() => _focusCodeRow(code));
+}
 document.getElementById("btn-service-close").addEventListener("click", closeService);

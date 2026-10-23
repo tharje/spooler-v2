@@ -231,6 +231,9 @@ function renderStats() {
     _statTile("Print time", _fmtHours(d.hours), d.avg_print_s ? `avg ${formatTime(d.avg_print_s)} per finished print` : ""),
     _statTile("Filament", d.grams >= 1000 ? `${_fmtNum(d.grams / 1000, 2)} kg` : `${_fmtNum(d.grams, 0)} g`, "includes stopped prints"),
   );
+  if (d.layers) {
+    tiles.append(_statTile("Layers printed", _fmtNum(d.layers), "across all prints in this period"));
+  }
   frag.append(tiles);
 
   // Chart card: metric switch + chart/table switch
@@ -269,7 +272,8 @@ function renderStats() {
   const mats = Object.entries(d.by_material).map(([k, v]) => ({ label: k, value: v, text: `${_fmtNum(v, 0)} g` }));
   frag.append(_barList("Filament by material", mats));
   const prs = Object.entries(d.by_printer).map(([k, v]) => ({
-    label: k, value: v.grams, text: `${_fmtNum(v.grams, 0)} g`, sub: `${v.prints} prints · ${_fmtNum(v.hours, 1)} h` }));
+    label: k, value: v.grams, text: `${_fmtNum(v.grams, 0)} g`,
+    sub: `${v.prints} prints · ${_fmtNum(v.hours, 1)} h${v.layers ? ` · ${_fmtNum(v.layers)} layers` : ""}` }));
   frag.append(_barList("By printer", prs));
 
   const res = _el("div", "stats-card");
@@ -408,8 +412,11 @@ function renderPrints() {
     const title = _el("div", "print-row-title");
     title.append(_el("span", "print-row-name", e.filename || "Unnamed print"));
     if (e.reference) title.append(_el("span", "ref-badge", "#" + e.reference));
+    const layerPart = e.total_layers
+      ? ` · ${_endStateOf(e) === "complete" ? e.total_layers : (e.current_layer || 0)}/${e.total_layers} layers`
+      : "";
     const meta = _el("div", "print-row-meta",
-      `${(e.timestamp || "").replace("T", " ").slice(0, 16)} · ${e.printer_name || "Printer"} · ${formatTime(e.print_time_s || 0)} · ${_fmtNum(e.filament_g || 0, 1)} g`);
+      `${(e.timestamp || "").replace("T", " ").slice(0, 16)} · ${e.printer_name || "Printer"} · ${formatTime(e.print_time_s || 0)} · ${_fmtNum(e.filament_g || 0, 1)} g${layerPart}`);
     main.append(title, meta);
     const icon = _el("span", `result-icon ${st.cls}`, st.icon);
     icon.title = st.label;
@@ -494,6 +501,10 @@ function _renderPrintDetail() {
     _fact("Print time", formatTime(e.print_time_s || 0)),
     _fact("Filament", `${_fmtNum((e.filament_mm || 0) / 1000, 2)} m · ${_fmtNum(e.filament_g || 0, 1)} g`),
   );
+  if (e.total_layers) {
+    const atLayer = _endStateOf(e) === "complete" ? e.total_layers : (e.current_layer || 0);
+    facts.append(_fact("Layers", `${atLayer} / ${e.total_layers}`));
+  }
   if (e.material || e.vendor) facts.append(_fact("Material", [e.vendor, e.material].filter(Boolean).join(" ")));
   if (Array.isArray(e.spools) && e.spools.length) {
     const names = e.spools.map(sp => {

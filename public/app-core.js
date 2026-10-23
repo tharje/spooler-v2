@@ -152,6 +152,7 @@ function connect() {
     loadHistory();
     loadLedger();
     if (featureEnabled("service_log")) loadService();
+    if (featureEnabled("job_queue")) loadQueue();
     loadSecurityStatus();
     fetchSpools();
   };
@@ -240,6 +241,7 @@ function handleMessage(msg) {
       renderHistory();
       toast(`Print logged: ${msg.entry.filament_g}g used`);
       if (featureEnabled("service_log")) loadService();
+      if (featureEnabled("job_queue")) loadQueue();
       break;
     case "spool_empty":
       spools = spools.map(s => s.id === msg.spool.id ? msg.spool : s);
@@ -452,6 +454,27 @@ const _REASON_INITIATOR_LABEL = {
   unknown: "from printer screen, app, or unknown source",
 };
 
+function renderStandaloneFaultBox(printer) {
+  // A fault reported outside any print (e.g. a failed bed levelling/
+  // calibration run) -- printer.state_reason doesn't cover this, so it has
+  // its own box. Shown only when there's no print-related reason already
+  // (that one takes priority; the two shouldn't both be live at once anyway).
+  const f = printer.standalone_fault;
+  if (!f || printer.state_reason) return "";
+  const detail = f.message || _REASON_CATEGORY_LABEL[f.category] || _REASON_CATEGORY_LABEL.unknown;
+  return `
+    <div class="reason-box reason-box-error">
+      <div class="reason-box-main">
+        <strong>Fault</strong> reported by printer${detail ? ` — ${escHtml(detail)}` : ""}
+      </div>
+      ${f.action ? `<div class="reason-box-action">${escHtml(f.action)}</div>` : ""}
+      ${f.code ? (featureEnabled("service_log")
+          ? `<button type="button" class="reason-box-code reason-box-code-btn" onclick="viewErrorCode('${escAttr(printer.id)}', '${escAttr(String(f.code))}')">Code: ${escHtml(String(f.code))} ›</button>`
+          : `<div class="reason-box-code">Code: ${escHtml(String(f.code))}</div>`) : ""}
+    </div>
+  `;
+}
+
 function renderReasonBox(printer) {
   const r = printer.state_reason;
   if (!r) return "";
@@ -471,7 +494,9 @@ function renderReasonBox(printer) {
         ${detail ? ` — ${escHtml(detail)}` : ""}
       </div>
       ${r.action ? `<div class="reason-box-action">${escHtml(r.action)}</div>` : ""}
-      ${r.code ? `<div class="reason-box-code">Code: ${escHtml(String(r.code))}</div>` : ""}
+      ${r.code ? (featureEnabled("service_log")
+          ? `<button type="button" class="reason-box-code reason-box-code-btn" onclick="viewErrorCode('${escAttr(printer.id)}', '${escAttr(String(r.code))}')">Code: ${escHtml(String(r.code))} ›</button>`
+          : `<div class="reason-box-code">Code: ${escHtml(String(r.code))}</div>`) : ""}
     </div>
   `;
 }

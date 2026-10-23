@@ -43,6 +43,12 @@ PRINTING_STATUSES = {2, 3, 4, 13}
 PAUSED_STATUSES   = {5, 6}   # pausing, paused
 _END_STATUSES     = {9, 8, 14, 0}
 
+# How long to wait after a print is reported done before taking its history
+# picture, so the toolhead's own end-of-print park/home move is out of the
+# shot. A guess, not measured against real hardware -- raise it if the
+# picture still shows the toolhead blocking the model.
+PRINT_PICTURE_DELAY_S = 6.0
+
 
 def classify_print_transition(prev_status, cur_status) -> str | None:
     """Pure state-machine step: given the previous and current raw status
@@ -194,6 +200,13 @@ class PrinterConnection:
         self._acct: PrintAccounting | None = None
         self._acct_saved_at = 0.0
         self._acct_saved_mm = 0.0
+        # Highest layer count seen during the print in progress -- some
+        # protocols reset TotalLayer/CurrentLayer to 0 on the very status
+        # update that reports the print as finished, so the "end" event's own
+        # pi would otherwise lose the layer count right when it's needed for
+        # history.
+        self._max_total_layer = 0
+        self._max_current_layer = 0
         self._notif_state: dict = {
             "last_status":      None,
             "nozzle_idle_fired": False,
@@ -202,6 +215,14 @@ class PrinterConnection:
             "nozzle_hot_fired": False,
         }
         self.state_reason: dict | None = None
+        # A fault reported while the printer is neither printing nor in any
+        # print-related pause/stop/error state -- e.g. a standalone bed
+        # levelling/calibration run that fails. state_reason only exists for
+        # print-flow states (see _update_state_reason), so without this a
+        # fault like that would never be noticed. Same shape as state_reason
+        # minus "kind"/"initiated_by" (always the printer, there's no print
+        # command to attribute it to).
+        self.standalone_fault: dict | None = None
         # Short label for what a "preparing" printer is doing right now
         # ("Leveling", "Homing", ...); "" when the protocol can't say.
         self.phase: str = ""
@@ -282,6 +303,7 @@ class PrinterConnection:
             "state":           classify_display_state(
                                    self.connected, pi.get("Status"), self._is_busy_between_prints()),
             "state_reason":    self.state_reason,
+            "standalone_fault": self.standalone_fault,
             "phase":           self.phase if self.connected else "",   # stale once the printer is gone
             "last_seen":       self.last_seen,
             "firmware_version": self.firmware_version,
@@ -506,15 +528,18 @@ class PrinterConnection:
             notifylib.notify(notifylib.Notification(event, self.id, title, body, None, priority,
                                                     self.name, extra or {}))
 
-    async def _camera_picture(self, max_age_s: float = 20.0) -> bytes | None:
+    async def _camera_picture(self, max_age_s: float = 20.0, force: bool = False) -> bytes | None:
         """One JPEG from the camera, or None (no camera, offline, timeout).
         A picture taken in the last few seconds is reused, so the end-of-print
-        picture and a notification about the same moment cost one grab."""
+        picture and a notification about the same moment cost one grab --
+        unless force skips that reuse, for a caller that specifically wants a
+        fresh frame instead of whatever (possibly stale) one is cached."""
         if not self.camera_url or not self.connected:
             return None
-        cached = getattr(self, "_picture_cache", None)
-        if cached and time.monotonic() - cached[0] < max_age_s:
-            return cached[1]
+        if not force:
+            cached = getattr(self, "_picture_cache", None)
+            if cached and time.monotonic() - cached[0] < max_age_s:
+                return cached[1]
         jpeg = await asyncio.get_running_loop().run_in_executor(None, grab_jpeg, self.camera_url)
         if jpeg:
             self._picture_cache = (time.monotonic(), jpeg)
@@ -522,11 +547,33 @@ class PrinterConnection:
 
     async def _save_print_picture(self, entry_id: str) -> None:
         """Keep a picture of the finished print with its history entry. Runs
-        beside, never inside, history writing and filament deduction."""
+        beside, never inside, history writing and filament deduction.
+
+        Waits a few seconds first: the instant a print is reported done, the
+        printer is usually still mid-way through its own end-of-print routine
+        (parking/homing the toolhead, lowering the bed), so a picture taken
+        right away often shows the toolhead blocking the model rather than the
+        finished print. force=True on the grab skips reusing whatever picture
+        a "print complete" notification may have already cached a moment ago
+        for that exact same too-early instant.
+
+        Turns the light on first if it's off -- regardless of the auto-light
+        option, since a dark picture is useless either way -- and turns it
+        back off itself afterward if auto-light wouldn't otherwise do that
+        (auto-light is off, or this printer doesn't normally manage the light
+        at print end at all)."""
+        we_turned_it_on = False
         try:
             if not is_enabled("print_snapshot") or not is_enabled("camera"):
                 return
-            jpeg = await self._camera_picture()
+            await asyncio.sleep(PRINT_PICTURE_DELAY_S)
+            if self.supports_light and self.connected and self._light_state() is False:
+                try:
+                    await self.set_light(True)
+                    we_turned_it_on = True
+                except Exception as e:
+                    print(f"[Printer {self.name}] Could not turn the light on for the picture: {type(e).__name__}")
+            jpeg = await self._camera_picture(force=True)
             if not jpeg:
                 return
             loop = asyncio.get_running_loop()
@@ -538,6 +585,12 @@ class PrinterConnection:
                 delete_snapshots([entry_id])   # entry vanished meanwhile
         except Exception as e:
             print(f"[Printer {self.name}] Print picture skipped: {type(e).__name__}")
+        finally:
+            if we_turned_it_on:
+                try:
+                    await self.set_light(False)
+                except Exception as e:
+                    print(f"[Printer {self.name}] Could not turn the light back off after the picture: {type(e).__name__}")
 
     def _announce_service_due(self) -> None:
         """After a print has been added to the history: tell about service reminders that came due."""
@@ -797,6 +850,35 @@ class PrinterConnection:
                     "category":     self.state_reason["category"],
                 })
 
+    def _check_standalone_fault(self, display_state: str) -> None:
+        """A fault code can appear while the printer is doing something that
+        isn't part of any print at all -- a manual bed levelling or
+        calibration run, say -- so classify_display_state's kind mapping
+        (which only covers print-related states) never notices it and
+        _update_state_reason never fires. This fills that gap: it only looks
+        when display_state isn't already a print-flow state, notifies once
+        per new code (not on every poll while it's still the same one), and
+        clears itself once the printer is idle again with nothing reported."""
+        if display_state in ("printing", "pausing", "paused", "stopping", "cancelled", "error"):
+            return
+        hint = self._protocol_reason_hint() or {}
+        code = str(hint["code"]) if hint.get("code") not in (None, "") else ""
+        if not code:
+            self.standalone_fault = None
+            return
+        if self.standalone_fault is not None and self.standalone_fault.get("code") == code:
+            return
+        self.standalone_fault = {
+            "code":     code,
+            "category": hint.get("category") or "unknown",
+            "message":  hint.get("message") or "",
+            "action":   hint.get("action") or "",
+            "since":    time.strftime("%Y-%m-%dT%H:%M:%S"),
+        }
+        text = self._reason_text(self.standalone_fault)
+        self._emit("printer_fault", f"{self.name} — Printer fault", text or "The printer reported a fault.",
+                   priority="high", extra={"category": self.standalone_fault["category"], "code": code})
+
     async def _check_print_transition(self) -> None:
         pi = self._decoded_printinfo()
         cur_status = pi.get("Status")
@@ -810,11 +892,16 @@ class PrinterConnection:
 
         display_state = classify_display_state(self.connected, cur_status, self._is_busy_between_prints())
         self._update_state_reason(display_state)
+        self._check_standalone_fault(display_state)
 
         extras_started = False
         first_status = self._last_print_status is None
         now_active = cur_status in ACTIVE_STATUSES or cur_status in PAUSED_STATUSES
         saved = load_active(self.id) if first_status else None
+
+        if now_active:
+            self._max_total_layer   = max(self._max_total_layer, pi.get("TotalLayer", 0) or 0)
+            self._max_current_layer = max(self._max_current_layer, pi.get("CurrentLayer", 0) or 0)
 
         if first_status and not now_active and saved is not None:
             # Spooler was off while a print ended: don't lose what it used. If the
@@ -847,6 +934,8 @@ class PrinterConnection:
             self.state_reason = None
             self._current_print_pauses = []
             self._print_start_time = time.time()
+            self._max_total_layer   = pi.get("TotalLayer", 0) or 0
+            self._max_current_layer = pi.get("CurrentLayer", 0) or 0
             self._emit("print_started", f"{self.name} — Print started",
                        pi.get("Filename") or "A print has started.")
             asyncio.create_task(self._auto_light(True))
@@ -854,6 +943,7 @@ class PrinterConnection:
                                          started_at=self._print_start_time)
             self._save_accounting(force=True)
             asyncio.create_task(self._capture_start_spool(self._acct))
+            asyncio.create_task(dataset.capture_before_print(self, pi))
         elif self._acct is not None and now_active:
             self._observe_extrusion()
 
@@ -904,6 +994,9 @@ class PrinterConnection:
                     "started_at":    (time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(self._print_start_time))
                                       if self._print_start_time else None),
                 }
+                if self._max_total_layer > 0:
+                    entry["total_layers"]  = self._max_total_layer
+                    entry["current_layer"] = max(self._max_current_layer, self._max_total_layer if completed else 0)
                 info = last_spool_info(self.id)
                 if info.get("material"):
                     entry["material"] = info["material"]
@@ -925,6 +1018,8 @@ class PrinterConnection:
                         loop.run_in_executor(None, update_history_entry, entry["id"], {"spools": used})
                     clear_active(self.id)
             self._acct = None
+            self._max_total_layer = 0
+            self._max_current_layer = 0
             if not extras_started:
                 clear_active(self.id)
 

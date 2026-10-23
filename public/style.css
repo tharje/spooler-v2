@@ -576,6 +576,9 @@ main {
 }
 .reason-box-main strong { color: var(--text); }
 .reason-box-code { margin-top: 2px; opacity: .7; font-size: 11px; }
+.reason-box-code-btn { background: none; border: 0; padding: 0; margin-top: 2px; opacity: .85; font-size: 11px;
+  color: inherit; text-decoration: underline; cursor: pointer; font: inherit; }
+.reason-box-code-btn:hover { opacity: 1; }
 
 /* Stale-data indicator (T4) — the printer is still connected, but we haven't
    heard anything fresh from it in a while, so temps/progress may be frozen. */
@@ -1404,8 +1407,8 @@ main {
   padding: 1px 6px; border-radius: 99px;
 }
 .integration-locked-note { color: var(--yellow); font-size: 11px; }
-.integration-test-row { display: flex; align-items: center; gap: 10px; }
-.integration-test-result { font-size: 12px; }
+.integration-test-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.integration-test-result { font-size: 12px; line-height: 1.4; margin-top: 2px; }
 .integration-test-result.ok   { color: var(--green); }
 .integration-test-result.fail { color: var(--red); }
 .integrations-server-settings { margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--border); }
@@ -1775,6 +1778,7 @@ main {
 .service-icon.k-nozzle, .service-icon.k-calibration { background: rgba(59,130,246,.14); color: var(--blue); }
 .service-icon.k-cleaning, .service-icon.k-belt { background: rgba(34,197,94,.14); color: var(--green); }
 .service-icon.k-other { background: var(--surface); color: var(--text-muted); }
+.service-icon.k-hardware { background: rgba(239,68,68,.14); color: var(--red); }
 .service-main { flex: 1; min-width: 0; }
 .service-title { font-weight: 600; font-size: 14px; }
 .service-note { font-weight: 400; color: var(--text-dim-strong); }
@@ -1788,6 +1792,48 @@ main {
 .service-x { background: none; border: 0; color: var(--text-muted); font-size: 20px; line-height: 1; cursor: pointer; padding: 4px 6px; border-radius: 6px; }
 .service-x:hover { color: var(--red); background: var(--surface); }
 .service-empty { color: var(--text-muted); font-size: 13px; padding: 8px 0; }
+.queue-form { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-bottom: 14px; }
+.queue-form > summary { cursor: pointer; font-weight: 600; font-size: 14px; list-style: none; }
+.queue-form > summary::-webkit-details-marker { display: none; }
+.queue-dropzone { border: 1px dashed var(--border); border-radius: var(--radius); padding: 12px; margin: 10px 0; font-size: 13px; color: var(--text-muted); text-align: center; }
+.queue-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 10px; }
+.queue-form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-muted); }
+.queue-form-grid input,
+.queue-form-grid select {
+  background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  color: var(--text); font-size: 14px; padding: 8px 10px; width: 100%; outline: none; transition: border-color .15s;
+}
+.queue-form-grid input:focus,
+.queue-form-grid select:focus { border-color: var(--accent); }
+.queue-form-grid select option { background: var(--surface2); color: var(--text); }
+.queue-job { display: flex; gap: 12px; align-items: center; padding: 10px 0; flex-wrap: wrap; }
+.queue-job + .queue-job { border-top: 1px solid var(--border); }
+.queue-job-main { flex: 1; min-width: 0; }
+.queue-job-name { font-weight: 600; font-size: 14px; word-break: break-word; }
+.queue-job-reqs { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+.queue-job-error { color: var(--red); font-size: 12px; margin-top: 2px; }
+.queue-job-status { font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 999px; background: var(--surface); color: var(--text-muted); flex: none; }
+.queue-status-assigned { background: rgba(255,107,43,.14); color: var(--accent); }
+.queue-status-printing { background: rgba(59,130,246,.14); color: var(--blue); }
+.queue-status-done { background: rgba(34,197,94,.14); color: var(--green); }
+.queue-status-cancelled { color: var(--text-dim-strong); }
+.queue-job-actions { display: flex; gap: 6px; flex: none; }
+
+.service-code { padding: 2px 0; }
+.service-code + .service-code { border-top: 1px solid var(--border); }
+.service-code > summary { display: flex; align-items: center; gap: 10px; padding: 10px 0; cursor: pointer; list-style: none; }
+.service-code > summary::-webkit-details-marker { display: none; }
+.service-code[open] > summary .service-chev { transform: rotate(90deg); }
+.service-code-num { flex: none; min-width: 2.4em; font-weight: 600; color: var(--accent); }
+.service-code-msg { flex: 1; min-width: 0; font-size: 13px; }
+.service-code-detail { padding: 2px 0 14px 2.4em; display: flex; flex-direction: column; gap: 6px; }
+.service-code-row { display: flex; gap: 8px; font-size: 13px; }
+.service-code-row strong { flex: none; min-width: 110px; color: var(--text-muted); font-weight: 500; }
+.service-code-ask { font-size: 12px; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+.service-code-ask a { color: var(--accent); }
+.service-code-search { width: 100%; box-sizing: border-box; margin: 0 0 8px; background: var(--surface2); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; font: inherit; font-size: 13px; }
+.service-code-search:focus { outline: none; border-color: var(--accent); }
 .service-form { margin: 0 0 14px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 0 14px; }
 .service-form[open] { padding: 14px; }
 .service-form-title { font-weight: 700; font-size: 14px; }

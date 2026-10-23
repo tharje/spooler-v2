@@ -91,6 +91,37 @@ def test_label_is_refused_for_bad_label_or_idle_printer(tmp_path, monkeypatch):
         dataset.label_now(p, "ok")
 
 
+def test_before_print_picture_starts_the_job_and_is_labelled(tmp_path, monkeypatch):
+    import features
+    monkeypatch.setattr(dataset, "dataset_dir", lambda: tmp_path)
+    monkeypatch.setattr(dataset, "_jobs", {})
+    features.set_enabled("dataset_collection", True)
+    features.set_enabled("camera", True)
+    p = FakePrinter(status=2)
+    run(dataset.capture_before_print(p, p.info))
+    (folder,) = [d for d in tmp_path.glob("*/*") if d.is_dir()]
+    lines = [json.loads(x) for x in (folder / "pictures.jsonl").read_text().splitlines()]
+    assert [x["label"] for x in lines] == ["before"]
+    assert dataset._jobs["p1"]["n"] == 1
+
+
+def test_before_print_picture_skipped_when_feature_off_or_no_folder(tmp_path, monkeypatch):
+    import features
+    monkeypatch.setattr(dataset, "dataset_dir", lambda: tmp_path)
+    monkeypatch.setattr(dataset, "_jobs", {})
+    p = FakePrinter(status=2)
+
+    features.set_enabled("dataset_collection", False)
+    features.set_enabled("camera", True)
+    run(dataset.capture_before_print(p, p.info))
+    assert dataset._jobs == {}
+
+    features.set_enabled("dataset_collection", True)
+    monkeypatch.setattr(dataset, "dataset_dir", lambda: None)
+    run(dataset.capture_before_print(p, p.info))
+    assert dataset._jobs == {}
+
+
 def test_folder_is_chosen_by_the_user_and_must_be_a_full_path(monkeypatch):
     import pytest
     import config

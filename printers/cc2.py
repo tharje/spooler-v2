@@ -552,6 +552,11 @@ class CC2Connection(PrinterConnection):
         raw = {"error_code": self._cc2_state.get("error_code"), "sub_status": ms.get("sub_status")}
         if ms.get("exception_status"):
             raw["exception_status"] = ms["exception_status"]
+            # exception.exception_code (the timestamped dict form) has not been
+            # observed on real hardware in LAN mode -- the firmware's own strings
+            # suggest it's for reporting to Elegoo's cloud (Matrix), not the local
+            # MQTT status a LAN client reads. Kept here in case that ever changes;
+            # when absent this is just an empty dict and costs nothing.
             times = (self._cc2_state.get("exception") or {}).get("exception_code") or {}
             raw["exception_times"] = {str(c): (times.get(str(c)) or {}).get("time") for c in codes if str(c) in times}
         return {
@@ -817,6 +822,8 @@ class CC2Connection(PrinterConnection):
         self.status = {
             "PrintInfo": {
                 "Status":         status_code,
+                # Verified 2026-10-22 against a real CC2 (Tharje): the printer
+                # does push current_layer/total_layer in print_status.
                 "CurrentLayer":   ps.get("current_layer", 0),
                 "TotalLayer":     ps.get("total_layer", 0),
                 "CurrentTicks":   progress,

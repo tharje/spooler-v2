@@ -38,11 +38,11 @@ PAUSE = {"since": (S, NULL), "until": (S, NULL), "duration_s": (N, NULL), "categ
          "category_label": (S, NULL), "initiated_by": (S, NULL), "initiated_by_label": (S, NULL)}
 LIST = {"total": int, "limit": int, "offset": int, "items": list}
 INDEX = {"name": S, "version": int, "scope": S, "endpoints": list}
-STATS = {"prints": int, "results": dict, "success_rate": (N, NULL), "hours": N, "grams": N, "avg_print_s": (N, NULL),
-         "by_material": dict, "by_printer": dict, "failure_reasons": dict, "bucket": S, "series": list,
-         "from": (S, NULL), "to": (S, NULL)}
+STATS = {"prints": int, "results": dict, "success_rate": (N, NULL), "hours": N, "grams": N, "layers": int,
+         "avg_print_s": (N, NULL), "by_material": dict, "by_printer": dict, "failure_reasons": dict, "bucket": S,
+         "series": list, "from": (S, NULL), "to": (S, NULL)}
 RESULTS = {"complete": int, "cancelled": int, "error": int}
-BY_PRINTER = {"prints": int, "hours": N, "grams": N}
+BY_PRINTER = {"prints": int, "hours": N, "grams": N, "layers": int}
 SERIES = {"key": S, "prints": int, "grams": N, "hours": N}
 PRINTERS = {"items": list}
 PRINTER = {"id": S, "name": S, "type": S, "connected": B, "state": (S, NULL)}

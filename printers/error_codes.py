@@ -84,7 +84,9 @@ CC2_ERROR_CODES = {
 # NOT yet seen arriving over SDCP: CC1's WebSocket status isn't known to carry
 # these codes, so nothing looks them up until a real capture shows where they
 # come from (see printers/cc1.py _protocol_reason_hint). 101-104, 304 and
-# 701-703 mean the same on CC2.
+# 701-703 mean the same on CC2; 302/303 (X/Y homing) and 401/402
+# (accelerometer, split per axis) are CC1-only -- CC2_ERROR_CODES above has
+# no X/Y homing codes and only one combined 401 for the accelerometer.
 CC1_ERROR_CODES = {
     101: {"category": "thermal", "message": "The heated bed didn't heat up as expected."},
     102: {"category": "thermal", "message": "Anomaly in reading the heated bed NTC.",
@@ -92,8 +94,23 @@ CC1_ERROR_CODES = {
     103: {"category": "thermal", "message": "The printhead didn't heat up as expected."},
     104: {"category": "thermal", "message": "Anomaly in reading the printhead NTC.",
           "action": "Check the printhead NTC and its wiring."},
+    # 302/303/304: not seen before 2026-10-21 -- found by reading the actual
+    # ErrorCode:N strings in app_control.cpp/app_calibration.cpp, not just
+    # the screen text they're paired with (see spooler-cc1-research.md §3a).
+    302: {"category": "motion",  "message": "X-axis returning to home failed (abnormal motor or limit switch).",
+          "action": "Check the X-axis motor, limit switch and wiring."},
+    303: {"category": "motion",  "message": "Y-axis returning to home failed (abnormal motor or limit switch).",
+          "action": "Check the Y-axis motor, limit switch and wiring."},
     304: {"category": "motion",  "message": "Z-axis returning to home failed (abnormal motor).",
           "action": "Check the Z-axis motor and its wiring."},
+    # 401/402 are the same fault (accelerometer/input-shaper chip error) on
+    # the X and Y axis respectively -- the firmware shows identical text for
+    # both, only the code differs.
+    401: {"category": "sensor",  "message": "Accelerometer chip error (X axis)."},
+    402: {"category": "sensor",  "message": "Accelerometer chip error (Y axis)."},
+    # 502 covers two distinct checks with different screen text ("Abnormal
+    # leveling sensor" vs "Leveling sensor data collection error."); shown
+    # here as one general message since lookup() can only return one.
     502: {"category": "leveling", "message": "Abnormal leveling sensor.",
           "action": "Check the leveling sensor and its wiring."},
     701: {"category": "fan",     "message": "Abnormal mainboard fan.",
@@ -125,3 +142,11 @@ def lookup(error_code, printer_type: str = "cc2") -> dict | None:
         return table.get(int(error_code))
     except (TypeError, ValueError):
         return None
+
+
+def reference_table(printer_type: str = "cc2") -> list:
+    """Every known code for this printer type, sorted -- the service page's
+    error code reference list. Same entries lookup() uses, just all of them
+    at once instead of one at a time."""
+    table = CC1_ERROR_CODES if printer_type == "cc1" else CC2_ERROR_CODES
+    return [{"code": code, **info} for code, info in sorted(table.items())]

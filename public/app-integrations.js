@@ -161,6 +161,7 @@ const _INTEGRATION_GROUPS = [
 
 // Static markup in index.html; re-attached into the Spoolman group after each render.
 const _catalogueEl = document.querySelector(".integrations-catalogue");
+const _openIntegrationGroups = new Set();   // groups the user has opened, kept across re-renders (e.g. after "Test connection")
 
 function _renderIntegrationsList() {
   const container = document.getElementById("integrations-list");
@@ -220,7 +221,7 @@ function _renderIntegrationsList() {
       </div>` : "";
 
     return `
-      <details class="integration-group notif-group notif-group-events">
+      <details class="integration-group notif-group notif-group-events" data-integration-group="${escAttr(group.title)}" ${_openIntegrationGroups.has(group.title) ? "open" : ""}>
         <summary>
           <span class="notif-group-text"><strong>${escHtml(group.title)}</strong></span>
           <svg class="notif-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
@@ -228,6 +229,12 @@ function _renderIntegrationsList() {
         <div class="integration-group-body notif-group-body">${group.help ? `<p class="report-desc">${escHtml(group.help)}</p>` : ""}${fieldsHtml}${testHtml}</div>
       </details>`;
   }).join("");
+
+  container.querySelectorAll("details[data-integration-group]").forEach(d => {
+    d.addEventListener("toggle", () => {
+      d.open ? _openIntegrationGroups.add(d.dataset.integrationGroup) : _openIntegrationGroups.delete(d.dataset.integrationGroup);
+    });
+  });
 
   const spoolmanBody = container.querySelector(".integration-group .integration-group-body");
   if (_catalogueEl && spoolmanBody && container.querySelector(".integration-group summary strong")?.textContent === "Spoolman") {
@@ -323,6 +330,8 @@ function _applyFeatures(list) {
   if (statsBtn) statsBtn.style.display = featureEnabled("statistics") ? "" : "none";
   const serviceBtn = document.getElementById("btn-service");
   if (serviceBtn) serviceBtn.style.display = featureEnabled("service_log") ? "" : "none";
+  const queueBtn = document.getElementById("btn-queue");
+  if (queueBtn) queueBtn.style.display = featureEnabled("job_queue") ? "" : "none";
   const spoolsBtn = document.getElementById("btn-spools");
   if (spoolsBtn) spoolsBtn.style.display = featureEnabled("spoolman") ? "" : "none";
 
@@ -347,6 +356,7 @@ const _FEATURE_GROUPS = [
   { title: "Monitoring",    keys: ["camera", "print_snapshot", "spaghetti_detection", "dataset_collection"] },
   { title: "Notifications", keys: ["notifications"] },
   { title: "Data",          keys: ["backup", "statistics", "service_log"] },
+  { title: "Printing",      keys: ["job_queue"] },
   { title: "Services",      keys: ["spoolman", "update_check"] },
 ];
 

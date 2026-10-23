@@ -10,6 +10,8 @@ import pytest
 import backup
 import config
 import features
+import gcode
+import job_queue
 import persistence
 import push
 import service
@@ -46,4 +48,7 @@ def isolated_data_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "LOCK_CONFIG", False)
     monkeypatch.setattr(config, "_on_change", [])
     monkeypatch.setattr(config, "_last_test_results", {})
+    monkeypatch.setattr(gcode, "GCODE_META_FILE", tmp_path / "gcode_meta.json")
+    monkeypatch.setattr(job_queue, "QUEUE_DIR", tmp_path / "queue")
+    monkeypatch.setattr(job_queue, "QUEUE_FILE", tmp_path / "queue" / "queue.json")
     yield tmp_path

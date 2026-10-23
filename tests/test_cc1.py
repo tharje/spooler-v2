@@ -88,7 +88,9 @@ async def test_accepted_command_stays_silent(printer, monkeypatch):
 
 def test_cc1_error_catalog_matches_screen_codes():
     from printers.error_codes import CC1_ERROR_CODES, lookup
-    assert set(CC1_ERROR_CODES) == {101, 102, 103, 104, 304, 502, 701, 702, 703}
+    # Confirmed 2026-10-21 by reading every ErrorCode:N string in the
+    # official CC1 firmware source -- this is the complete set.
+    assert set(CC1_ERROR_CODES) == {101, 102, 103, 104, 302, 303, 304, 401, 402, 502, 701, 702, 703}
     assert lookup(502, "cc1")["category"] == "leveling"
     assert lookup(502, "cc2") is None      # 502 isn't a CC2 code
     assert lookup(704, "cc1") is None

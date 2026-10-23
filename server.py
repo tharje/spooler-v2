@@ -60,6 +60,7 @@ from auth import AUTH_ENABLED, BCRYPT_AVAILABLE, session_cleanup_loop
 import diagnostics
 import spaghetti
 import dataset
+import job_queue
 import update_check
 import uploads
 from backup import check_startup_backup, daily_backup_loop
@@ -176,6 +177,7 @@ async def main() -> None:
     asyncio.create_task(_ledger_sender())
     asyncio.create_task(spaghetti.watch_loop())
     asyncio.create_task(dataset.collect_loop())
+    asyncio.create_task(job_queue.assign_loop())
     asyncio.create_task(update_check.check_loop())
     asyncio.create_task(_service_daily())
 

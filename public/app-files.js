@@ -173,6 +173,20 @@ function renderFileList(files, error) {
           }, 600);
         }
       });
+      if (typeof featureEnabled === "function" && featureEnabled("job_queue")) {
+        const queueBtn = document.createElement("button");
+        queueBtn.className = "btn btn-secondary btn-sm";
+        queueBtn.textContent = "Queue next";
+        queueBtn.title = "Add to the print queue instead of starting it now";
+        queueBtn.addEventListener("click", () => {
+          _queueCall("POST", "/api/queue/from-printer",
+            { printer_id: _currentFilePrinterId, filename: filePath })
+            .then(() => { toast(`Queued: ${fileName}`); if (typeof loadQueue === "function") loadQueue(); })
+            .catch(e => toast(e.message, true));
+        });
+        actions.appendChild(queueBtn);
+      }
+
       actions.appendChild(delBtn);
       metaRow.appendChild(actions);
     }

@@ -99,6 +99,16 @@ def _seconds(e: dict) -> int:
         return 0
 
 
+def _layers(e: dict) -> int:
+    """Layers actually printed, not the plan: the full count for a completed
+    print, whatever layer it had reached for one that was cut short. 0 for
+    entries from before layer tracking existed, or a protocol that never
+    reports a layer count at all (same convention as the print-history view)."""
+    if not e.get("total_layers"):
+        return 0
+    return e["total_layers"] if end_state_of(e) == "complete" else int(e.get("current_layer") or 0)
+
+
 def _material_grams(e: dict) -> dict:
     """Grams per material for one entry: per-spool figures when the print used
     several spools (those carry their own material only if known; otherwise the
@@ -116,24 +126,27 @@ def compute_stats(history: list, from_ts=None, to_ts=None, printer_id=None) -> d
     by_printer: dict = {}
     reasons: dict = {}
     total_g = total_s = 0.0
+    total_layers = 0
     done_s = done_n = 0
 
     for e in entries:
         st = end_state_of(e)
         result[st] += 1
-        g, s = _grams(e), _seconds(e)
+        g, s, layers = _grams(e), _seconds(e), _layers(e)
         total_g += g
         total_s += s
+        total_layers += layers
         if st == "complete":
             done_s += s
             done_n += 1
         for mat, grams in _material_grams(e).items():
             by_material[mat] = by_material.get(mat, 0.0) + grams
         name = e.get("printer_name") or "Unknown"
-        p = by_printer.setdefault(name, {"prints": 0, "hours": 0.0, "grams": 0.0})
+        p = by_printer.setdefault(name, {"prints": 0, "hours": 0.0, "grams": 0.0, "layers": 0})
         p["prints"] += 1
         p["hours"] += s / 3600
         p["grams"] += g
+        p["layers"] += layers
         if st != "complete":
             reason = e.get("error_message") or e.get("stop_reason") or ("error" if st == "error" else "cancelled")
             if st == "error" and e.get("error_code"):
@@ -170,9 +183,11 @@ def compute_stats(history: list, from_ts=None, to_ts=None, printer_id=None) -> d
         "success_rate": round(100 * result["complete"] / n, 1) if n else None,
         "hours": round(total_s / 3600, 2),
         "grams": round(total_g, 1),
+        "layers": total_layers,
         "avg_print_s": round(done_s / done_n) if done_n else None,   # completed prints only
         "by_material": {k: round(v, 1) for k, v in sorted(by_material.items(), key=lambda kv: -kv[1])},
-        "by_printer": {k: {"prints": v["prints"], "hours": round(v["hours"], 2), "grams": round(v["grams"], 1)}
+        "by_printer": {k: {"prints": v["prints"], "hours": round(v["hours"], 2), "grams": round(v["grams"], 1),
+                           "layers": v["layers"]}
                        for k, v in sorted(by_printer.items(), key=lambda kv: -kv[1]["prints"])},
         "failure_reasons": dict(sorted(reasons.items(), key=lambda kv: -kv[1])),
         "bucket": kind,

@@ -90,6 +90,7 @@ def printer(monkeypatch):
     async def fake_broadcast(msg):
         sent.append(msg)
     monkeypatch.setattr(base.state, "broadcast_to_browsers", fake_broadcast)
+    monkeypatch.setattr(base, "PRINT_PICTURE_DELAY_S", 0)
     p.broadcasts = sent
     return p
 
@@ -103,6 +104,41 @@ async def test_picture_saved_and_history_flagged(printer, monkeypatch):
     assert persistence.snapshot_path(i).read_bytes() == JPEG
     assert persistence.load_history()[0]["snapshot"] is True
     assert {"type": "history_snapshot", "id": i} in printer.broadcasts
+
+
+@pytest.mark.asyncio
+async def test_light_turned_on_for_a_dark_picture_then_back_off(printer, monkeypatch):
+    monkeypatch.setattr(base, "grab_jpeg", lambda url: JPEG)
+    printer.supports_light = True
+    printer.auto_light = False          # must work even when the user never asked for light management
+    printer.status = {"LightStatus": {"SecondLight": False}}
+    calls = []
+    async def set_light(on):
+        calls.append(on)
+        printer.status = {"LightStatus": {"SecondLight": on}}
+        return True
+    printer.set_light = set_light
+    i = _id()
+    persistence.append_history({"id": i})
+    await printer._save_print_picture(i)
+    assert calls == [True, False]
+    assert persistence.snapshot_path(i).read_bytes() == JPEG
+
+
+@pytest.mark.asyncio
+async def test_light_already_on_is_left_alone(printer, monkeypatch):
+    monkeypatch.setattr(base, "grab_jpeg", lambda url: JPEG)
+    printer.supports_light = True
+    printer.status = {"LightStatus": {"SecondLight": True}}
+    calls = []
+    async def set_light(on):
+        calls.append(on)
+        return True
+    printer.set_light = set_light
+    i = _id()
+    persistence.append_history({"id": i})
+    await printer._save_print_picture(i)
+    assert calls == []      # already on: nothing to turn on, nothing of ours to turn back off
 
 
 @pytest.mark.asyncio
@@ -155,3 +191,34 @@ async def test_one_grab_is_shared_between_picture_and_notification(printer, monk
     a = await printer._camera_picture()
     b = await printer._camera_picture()
     assert a == b == JPEG and len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_camera_picture_force_skips_the_cache(printer, monkeypatch):
+    frames = [JPEG, b"a different frame"]
+    monkeypatch.setattr(base, "grab_jpeg", lambda url: frames.pop(0))
+    a = await printer._camera_picture()
+    b = await printer._camera_picture(force=True)
+    assert a == JPEG and b == b"a different frame"
+
+
+@pytest.mark.asyncio
+async def test_save_print_picture_waits_then_grabs_a_fresh_frame_ignoring_the_cache(printer, monkeypatch):
+    monkeypatch.setattr(base, "PRINT_PICTURE_DELAY_S", 0.01)
+    slept = []
+    real_sleep = asyncio.sleep
+    async def fake_sleep(s):
+        slept.append(s)
+        await real_sleep(0)
+    monkeypatch.setattr(base.asyncio, "sleep", fake_sleep)
+
+    frames = [b"too early, shows the toolhead", b"after the delay, shows the model"]
+    monkeypatch.setattr(base, "grab_jpeg", lambda url: frames.pop(0))
+    i = _id()
+    persistence.append_history({"id": i})
+
+    await printer._camera_picture()      # simulates the notification's early grab, now cached
+    await printer._save_print_picture(i)
+
+    assert slept == [0.01]
+    assert persistence.snapshot_path(i).read_bytes() == b"after the delay, shows the model"

@@ -59,6 +59,12 @@ FEATURES: dict = {
         key="file_upload", name="File upload", default=True,
         description="Upload G-code from the browser to a printer (CC1, Moonraker, PrusaLink).",
     ),
+    "job_queue": Feature(
+        key="job_queue", name="Print queue", default=False, requires=("file_upload",),
+        requires_auth=True,
+        description="Queue up g-code files with requirements (printer type/material); a free, matching printer "
+                    "picks up a job, but it is never uploaded or started without you confirming the plate is clear.",
+    ),
     "report_problem": Feature(
         key="report_problem", name="Report problem", default=True,
         description="Footer button that builds a redacted diagnostics report and opens a prefilled GitHub issue.",

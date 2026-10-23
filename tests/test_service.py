@@ -29,6 +29,30 @@ def test_logbook_entry_records_hours_and_is_newest_first():
     assert log[0]["hours"] == 10
 
 
+def test_error_history_and_reference_table_in_overview():
+    persistence.HISTORY_FILE.write_text(json.dumps([
+        {"id": "h1", "printer_id": "p1", "printer_name": "CC2", "timestamp": "2026-01-01T10:00:00",
+         "end_state": "error", "error_code": 704, "error_message": "Leveling failed. Please try again.",
+         "filename": "a.gcode"},
+        {"id": "h2", "printer_id": "p1", "printer_name": "CC2", "timestamp": "2026-01-02T10:00:00",
+         "end_state": "complete"},
+    ]))
+    d = service.overview({"p1": {"name": "CC2", "type": "cc2"}})
+    assert [e["error_code"] for e in d["errors"]] == [704]
+    assert d["errors"][0]["error_message"] == "Leveling failed. Please try again."
+    ref = d["error_code_reference"]["cc2"]
+    assert any(c["code"] == 704 for c in ref)
+    assert all("message" in c and "category" in c for c in ref)
+
+
+def test_overview_accepts_plain_string_names_too():
+    hist(1)
+    d = service.overview({"p1": "CC1"})
+    assert d["printers"][0]["name"] == "CC1"
+    assert d["printers"][0]["type"] is None
+    assert d["error_code_reference"] == {}
+
+
 def test_bad_input_is_refused():
     for args in [("", "nozzle"), ("p1", "magic")]:
         with pytest.raises(service.ServiceError):
