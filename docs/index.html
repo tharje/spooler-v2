@@ -121,7 +121,7 @@
 
   <section id="install">
     <h2>Install</h2>
-    <p>You need <a href="https://docs.docker.com/get-docker/">Docker</a> on a computer or server on the same network as your printers.</p>
+    <p>You need <a href="https://docs.docker.com/get-docker/">Docker</a> on a computer or server on the same network as your printers. A 64-bit OS (amd64 or arm64), about 1 GB RAM and 2 GB free disk is enough; Spooler itself idles around 40 MB.</p>
 <pre>curl -fsSL https://raw.githubusercontent.com/tharje/spooler-v2/main/docker-compose.yml -o docker-compose.yml
 docker compose up -d</pre>
     <p>Open <code>http://&lt;server-ip&gt;:8080</code> and create your account. Spooler finds the printers on the network by itself. To update later: <code>docker compose pull &amp;&amp; docker compose up -d</code>. A Python install without Docker is described in the <a href="https://github.com/tharje/spooler-v2#option-b--python-no-docker">README</a>.</p>
