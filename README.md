@@ -80,6 +80,8 @@ docker compose up -d
 
 Open **`http://<server-ip>:8080`**.
 
+**Hardware:** a 64-bit OS (amd64 or arm64), about 1 GB RAM (2 GB is comfortable) and 2 GB free disk. Idle with one printer, Spooler uses about 40 MB RAM and Spoolman about 105 MB (measured on x86; both well under 1 % of one CPU core). A Raspberry Pi 4 or 5 with a 64-bit OS should work, but it has not been tested on one yet. Camera streaming and picture collection add load while printing.
+
 Both Spooler and Spoolman start automatically. Data is stored in Docker volumes (`spooler_data`, `spoolman_data`) and survives restarts and rebuilds.
 
 **Useful commands:**
