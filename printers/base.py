@@ -154,6 +154,10 @@ def classify_display_state(connected: bool, status_code, busy_between_prints: bo
 
 
 class PrinterConnection:
+    # True where the printer's filament figure is an estimate for the whole file
+    # rather than a counter: a stopped print then keeps only what was seen while
+    # it ran, not the closing figure.
+    estimated_filament: bool = False
     # Subclasses that implement upload_file() set this True; the UI disables
     # the upload button for printers where it stays False.
     supports_upload: bool = False
@@ -360,7 +364,7 @@ class PrinterConnection:
     def _update_filament_density(self) -> None:
         self.filament_density = get_spool_density(self.id)
 
-    def _on_tray_change(self, new_spool_id: int | None) -> None:
+    def _on_tray_change(self, new_spool_id: int | None, from_idle: bool = False) -> None:
         """The spool feeding the extruder changed. Everything extruded so far
         belongs to the outgoing spool; the rest goes to the new one. Between
         prints this does nothing (the next print reads the active tray when it
@@ -368,7 +372,7 @@ class PrinterConnection:
         if self._acct is None:
             return
         self._observe_extrusion()
-        self._acct.switch_spool(new_spool_id)
+        self._acct.switch_spool(new_spool_id, from_idle=from_idle)
         self._save_accounting(force=True)
 
     # ── Per-print filament accounting (T22) ────────────────────────────────────
@@ -961,7 +965,10 @@ class PrinterConnection:
             # The accounting knows the true total even if the printer's counter
             # was reset during the print; the history should agree with it.
             acct = self._acct or PrintAccounting(current_spool=self._tray_spool())
-            acct.observe(filament_mm)
+            # CC2's closing figure for a stopped print can be the estimate for the
+            # whole file (129.8 g was booked for a print stopped after two minutes).
+            if completed or not self.estimated_filament:
+                acct.observe(filament_mm)
             filament_mm = acct.total_mm()
             # Heating and feeding by hand (loading filament, clearing a clog) looks like a
             # short "print" with some filament, but no file and no print time: not a print.
