@@ -266,7 +266,10 @@ async def handle_browser_message(ws, raw: str) -> None:
         files = msg.get("files", [])
         if (isinstance(files, list) and len(files) <= 50
                 and all(isinstance(f, str) and f for f in files)):
-            await printer.send_cmd(CMD_DELETE_FILES, {"FileList": files})
+            if printer.printer_type == "cc2":
+                await printer.delete_files(files)
+            else:
+                await printer.send_cmd(CMD_DELETE_FILES, {"FileList": files})
         return
 
     if action == "delete_file":
@@ -276,7 +279,7 @@ async def handle_browser_message(ws, raw: str) -> None:
             await ws.send(json.dumps({"type": "error", "message": "Invalid filename"}))
             return
         if printer.printer_type == "cc2":
-            await printer.send_cmd(1047, {"filename": filename, "storage_media": "local"})
+            await printer.delete_files([filename])
         elif printer.printer_type == "prusa":
             await printer.delete_file_prusa(filename)
         elif printer.printer_type == "moonraker":
