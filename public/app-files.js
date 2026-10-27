@@ -241,6 +241,10 @@ function _applyFileInfo(msg) {
     if (msg.layers != null)
       document.getElementById("print-opts-stat-layers-val").textContent = msg.layers;
   }
+
+  // Colours per tool arrive here when the file list did not carry them
+  if (Array.isArray(msg.color_map) && msg.color_map.length)
+    _buildCanvasMapping(msg.printer_id || _currentFilePrinterId, msg.color_map);
 }
 
 function openPrintOpts(filePath, fileName, meta = {}) {
@@ -300,7 +304,125 @@ function openPrintOpts(filePath, fileName, meta = {}) {
     thumbImg.src = `/api/thumbnail/${encodeURIComponent(_currentFilePrinterId)}/${encodeURIComponent(bare)}`;
   }
 
+  if (isCC2) _buildCanvasMapping(_currentFilePrinterId, meta.color_map);
+  else document.getElementById("print-opts-canvas").style.display = "none";
+
   document.getElementById("modal-print-opts").classList.add("open");
+}
+
+// ─── Canvas filament mapping (tool in the G-code -> Canvas slot) ─────────────
+let _canvasMapTools = [];
+
+function _hexRgb(h) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(h || "");
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return [n >> 16 & 255, n >> 8 & 255, n & 255];
+}
+
+function _colorDist(a, b) {
+  const x = _hexRgb(a), y = _hexRgb(b);
+  if (!x || !y) return 1e6;
+  return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
+}
+
+function _canvasTrays(printerId) {
+  const ci = printers[printerId]?.status?.canvas_info;
+  const out = [];
+  for (const c of ci?.canvas_list || []) {
+    if (c.connected === 0) continue;
+    for (const t of c.tray_list || []) {
+      if (t.status === 0) continue; // empty slot
+      out.push({ canvas_id: c.canvas_id ?? 0, tray_id: t.tray_id, type: t.filament_type || "",
+                 color: t.filament_color || "", label: [t.brand, t.filament_name].filter(Boolean).join(" ") });
+    }
+  }
+  return out;
+}
+
+function _buildCanvasMapping(printerId, colorMap) {
+  const box = document.getElementById("print-opts-canvas");
+  const rows = document.getElementById("print-opts-canvas-rows");
+  _canvasMapTools = [];
+  rows.innerHTML = "";
+  const trays = _canvasTrays(printerId);
+  let tools = (Array.isArray(colorMap) ? colorMap : [])
+    .filter(e => e && Number.isInteger(e.t)).sort((a, b) => a.t - b.t);
+  // The printer gave no colours for this file (or they have not arrived yet): still offer one
+  // choice, left on Auto so nothing changes unless you pick a slot.
+  const noColours = !tools.length;
+  if (noColours) tools = [{ t: 0, color: "", name: "" }];
+  if (!trays.length) { box.style.display = "none"; return; }
+
+  // Pre-fill: closest colour among slots with the same material, each slot used once if possible.
+  const used = new Set();
+  tools.forEach(tool => {
+    const ranked = trays
+      .map(tr => ({ tr, d: _colorDist(tool.color, tr.color) + (tool.name && tr.type && tool.name !== tr.type ? 1000 : 0) }))
+      .sort((a, b) => a.d - b.d);
+    const pick = noColours ? null : (ranked.find(r => !used.has(r.tr.tray_id)) || ranked[0]).tr;
+    if (pick) used.add(pick.tray_id);
+    const row = document.createElement("div");
+    row.className = "print-canvas-row";
+    row.dataset.value = pick ? `${pick.canvas_id}:${pick.tray_id}` : "auto";
+    const chip = (value, inner, title, warn) =>
+      `<button type="button" class="print-canvas-chip${value === row.dataset.value ? " selected" : ""}${warn ? " warn" : ""}" ` +
+      `data-v="${escAttr(value)}" title="${escAttr(title)}">${inner}</button>`;
+    const chips = trays.map(tr => {
+      const warn = !!(tool.name && tr.type && tool.name !== tr.type);
+      return chip(`${tr.canvas_id}:${tr.tray_id}`,
+        `<span class="print-canvas-swatch" style="background:${escAttr(tr.color || "#888")}">${tr.tray_id + 1}</span>` +
+        `<span class="print-canvas-chip-type">${escHtml(tr.type || "?")}</span>` + (warn ? `<span class="print-canvas-warn-mark">!</span>` : ""),
+        `Slot ${tr.tray_id + 1} · ${tr.type || "?"}${tr.label ? " · " + tr.label : ""}`, warn);
+    }).join("") + chip("auto", `<span class="print-canvas-swatch print-canvas-swatch-auto">A</span><span class="print-canvas-chip-type">Auto</span>`,
+      "Auto (printer decides)", false);
+    row.innerHTML =
+      `<div class="print-canvas-head"><span class="print-canvas-tool">${noColours ? "Filament" : "T" + (tool.t + 1)}</span>` +
+      `<span class="print-canvas-dot" style="background:${escAttr(tool.color || "#888")}"></span>` +
+      `<span class="print-canvas-name">${escHtml(tool.name || "")}</span></div>` +
+      `<div class="print-canvas-chips">${chips}</div>`;
+    row.addEventListener("click", e => {
+      const btn = e.target.closest(".print-canvas-chip");
+      if (!btn || !row.contains(btn)) return;
+      row.dataset.value = btn.dataset.v;
+      row.querySelectorAll(".print-canvas-chip").forEach(c => c.classList.toggle("selected", c === btn));
+      _canvasMapWarn();
+    });
+    rows.appendChild(row);
+    _canvasMapTools.push({ t: tool.t, name: tool.name || "", row });
+  });
+  box.style.display = "";
+  _canvasMapWarn();
+}
+
+// null unless every tool has a slot: the printer prints from slot 1 on a partial map.
+function _canvasMapCurrent() {
+  const out = [];
+  for (const m of _canvasMapTools) {
+    const v = m.row.dataset.value;
+    if (!v || v === "auto") return null;
+    const [cid, tid] = v.split(":").map(Number);
+    out.push({ t: m.t, canvas_id: cid, tray_id: tid });
+  }
+  return out;
+}
+
+function _canvasMapWarn() {
+  const warn = document.getElementById("print-opts-canvas-warn");
+  const trays = _canvasTrays(_currentFilePrinterId);
+  const cur = _canvasMapCurrent() || [];
+  const msgs = [];
+  const seen = new Set();
+  cur.forEach((c, i) => {
+    const tr = trays.find(x => x.canvas_id === c.canvas_id && x.tray_id === c.tray_id);
+    const name = _canvasMapTools[i].name;
+    if (seen.has(c.tray_id)) msgs.push(`Slot ${c.tray_id + 1} is used for more than one colour.`);
+    seen.add(c.tray_id);
+    if (tr && name && tr.type && name !== tr.type)
+      msgs.push(`T${c.t + 1} wants ${name}, slot ${c.tray_id + 1} holds ${tr.type}.`);
+  });
+  warn.textContent = msgs.join(" ");
+  warn.style.display = msgs.length ? "" : "none";
 }
 
 function closePrintOpts() {
@@ -334,6 +456,10 @@ document.getElementById("btn-print-opts-send").addEventListener("click", () => {
     leveling:     document.getElementById("print-opt-leveling").checked,
     smooth_plate: document.getElementById("print-plate-smooth").dataset.selected === "1",
   };
+  if (_canvasMapTools.length && document.getElementById("print-opts-canvas").style.display !== "none") {
+    const map = _canvasMapCurrent();
+    if (map) opts.slot_map = map;
+  }
   send({
     action:     "start_print",
     printer_id: _currentFilePrinterId,
