@@ -1935,3 +1935,7 @@ main {
 .spool-reel-weight small { color: var(--text-muted); }
 .spool-reel-shelf { font-size: 11px; color: var(--text-muted); }
 .spool-reel-actions { display: flex; justify-content: flex-end; margin-top: 6px; }
+.spools-filters input[type="search"], .spools-filters select {
+  background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 7px 10px; font: inherit; font-size: 13px; color-scheme: dark; }
+.spools-filters input[type="search"]:focus, .spools-filters select:focus { outline: none; border-color: var(--accent); }
