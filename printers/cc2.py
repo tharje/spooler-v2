@@ -509,6 +509,7 @@ class CC2Connection(PrinterConnection):
             "print_time":   meta.get("print_time"),
             "layers":       meta.get("layer"),
             "filament_g":   meta.get("total_filament_used"),
+            "color_map":    meta.get("color_map"),
         })
 
     def _sync_spoolman_locations(self) -> None:

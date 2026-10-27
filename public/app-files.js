@@ -241,6 +241,10 @@ function _applyFileInfo(msg) {
     if (msg.layers != null)
       document.getElementById("print-opts-stat-layers-val").textContent = msg.layers;
   }
+
+  // Colours per tool arrive here when the file list did not carry them
+  if (Array.isArray(msg.color_map) && msg.color_map.length)
+    _buildCanvasMapping(msg.printer_id || _currentFilePrinterId, msg.color_map);
 }
 
 function openPrintOpts(filePath, fileName, meta = {}) {
