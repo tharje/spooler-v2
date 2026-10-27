@@ -1890,3 +1890,13 @@ main {
 .update-notice a:hover { text-decoration: underline; }
 .update-skip { background: none; border: none; color: var(--text-muted); font-size: 11px; cursor: pointer; padding: 0 4px; }
 .update-skip:hover { color: var(--text); }
+
+/* Canvas filament mapping in the print dialog */
+.print-canvas-rows { display: flex; flex-direction: column; gap: 6px; }
+.print-canvas-row { display: flex; align-items: center; gap: 8px; }
+.print-canvas-tool { font-weight: 600; min-width: 26px; }
+.print-canvas-dot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(128,128,128,.5); flex: none; }
+.print-canvas-name { min-width: 38px; opacity: .8; font-size: 12px; }
+.print-canvas-arrow { opacity: .6; }
+.print-canvas-select { flex: 1; min-width: 0; padding: 6px; border-radius: 6px; background: var(--bg-input, transparent); color: inherit; border: 1px solid rgba(128,128,128,.4); }
+.print-canvas-warn { margin: 8px 0 0; font-size: 12px; color: #e0a030; }

@@ -300,7 +300,101 @@ function openPrintOpts(filePath, fileName, meta = {}) {
     thumbImg.src = `/api/thumbnail/${encodeURIComponent(_currentFilePrinterId)}/${encodeURIComponent(bare)}`;
   }
 
+  if (isCC2) _buildCanvasMapping(_currentFilePrinterId, meta.color_map);
+  else document.getElementById("print-opts-canvas").style.display = "none";
+
   document.getElementById("modal-print-opts").classList.add("open");
+}
+
+// ─── Canvas filament mapping (tool in the G-code -> Canvas slot) ─────────────
+let _canvasMapTools = [];
+
+function _hexRgb(h) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(h || "");
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return [n >> 16 & 255, n >> 8 & 255, n & 255];
+}
+
+function _colorDist(a, b) {
+  const x = _hexRgb(a), y = _hexRgb(b);
+  if (!x || !y) return 1e6;
+  return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
+}
+
+function _canvasTrays(printerId) {
+  const ci = printers[printerId]?.status?.canvas_info;
+  const out = [];
+  for (const c of ci?.canvas_list || []) {
+    if (c.connected === 0) continue;
+    for (const t of c.tray_list || []) {
+      if (t.status === 0) continue; // empty slot
+      out.push({ canvas_id: c.canvas_id ?? 0, tray_id: t.tray_id, type: t.filament_type || "",
+                 color: t.filament_color || "", label: [t.brand, t.filament_name].filter(Boolean).join(" ") });
+    }
+  }
+  return out;
+}
+
+function _buildCanvasMapping(printerId, colorMap) {
+  const box = document.getElementById("print-opts-canvas");
+  const rows = document.getElementById("print-opts-canvas-rows");
+  _canvasMapTools = [];
+  rows.innerHTML = "";
+  const trays = _canvasTrays(printerId);
+  const tools = (Array.isArray(colorMap) ? colorMap : [])
+    .filter(e => e && Number.isInteger(e.t)).sort((a, b) => a.t - b.t);
+  if (!trays.length || !tools.length) { box.style.display = "none"; return; }
+
+  // Pre-fill: closest colour among slots with the same material, each slot used once if possible.
+  const used = new Set();
+  tools.forEach(tool => {
+    const ranked = trays
+      .map(tr => ({ tr, d: _colorDist(tool.color, tr.color) + (tool.name && tr.type && tool.name !== tr.type ? 1000 : 0) }))
+      .sort((a, b) => a.d - b.d);
+    const pick = (ranked.find(r => !used.has(r.tr.tray_id)) || ranked[0]).tr;
+    used.add(pick.tray_id);
+    const row = document.createElement("div");
+    row.className = "print-canvas-row";
+    const opts = trays.map(tr => `<option value="${tr.canvas_id}:${tr.tray_id}"${tr === pick ? " selected" : ""}>` +
+      `Slot ${tr.tray_id + 1} · ${escHtml(tr.type || "?")}${tr.label ? " · " + escHtml(tr.label) : ""}</option>`).join("");
+    row.innerHTML =
+      `<span class="print-canvas-tool">T${tool.t + 1}</span>` +
+      `<span class="print-canvas-dot" style="background:${escAttr(tool.color || "#888")}"></span>` +
+      `<span class="print-canvas-name">${escHtml(tool.name || "")}</span>` +
+      `<span class="print-canvas-arrow">→</span>` +
+      `<select class="print-canvas-select">${opts}</select>`;
+    row.querySelector("select").addEventListener("change", _canvasMapWarn);
+    rows.appendChild(row);
+    _canvasMapTools.push({ t: tool.t, name: tool.name || "", row });
+  });
+  box.style.display = "";
+  _canvasMapWarn();
+}
+
+function _canvasMapCurrent() {
+  return _canvasMapTools.map(m => {
+    const [cid, tid] = m.row.querySelector("select").value.split(":").map(Number);
+    return { t: m.t, canvas_id: cid, tray_id: tid };
+  });
+}
+
+function _canvasMapWarn() {
+  const warn = document.getElementById("print-opts-canvas-warn");
+  const trays = _canvasTrays(_currentFilePrinterId);
+  const cur = _canvasMapCurrent();
+  const msgs = [];
+  const seen = new Set();
+  cur.forEach((c, i) => {
+    const tr = trays.find(x => x.canvas_id === c.canvas_id && x.tray_id === c.tray_id);
+    const name = _canvasMapTools[i].name;
+    if (seen.has(c.tray_id)) msgs.push(`Slot ${c.tray_id + 1} is used for more than one colour.`);
+    seen.add(c.tray_id);
+    if (tr && name && tr.type && name !== tr.type)
+      msgs.push(`T${c.t + 1} wants ${name}, slot ${c.tray_id + 1} holds ${tr.type}.`);
+  });
+  warn.textContent = msgs.join(" ");
+  warn.style.display = msgs.length ? "" : "none";
 }
 
 function closePrintOpts() {
@@ -334,6 +428,8 @@ document.getElementById("btn-print-opts-send").addEventListener("click", () => {
     leveling:     document.getElementById("print-opt-leveling").checked,
     smooth_plate: document.getElementById("print-plate-smooth").dataset.selected === "1",
   };
+  if (_canvasMapTools.length && document.getElementById("print-opts-canvas").style.display !== "none")
+    opts.slot_map = _canvasMapCurrent();
   send({
     action:     "start_print",
     printer_id: _currentFilePrinterId,

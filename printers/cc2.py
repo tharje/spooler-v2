@@ -603,17 +603,47 @@ class CC2Connection(PrinterConnection):
             raise UploadError("File uploaded, but the printer didn't accept the start command.")
         return True
 
+    def _clean_slot_map(self, raw) -> list[dict]:
+        """Keep only tool -> Canvas tray pairs that point at a tray that exists.
+        The printer silently prints from tray 0 on a partial or out-of-range map
+        (docs: elegoo-homeassistant CC2_PROTOCOL.md), so anything doubtful is
+        dropped and the printer chooses as before."""
+        if not isinstance(raw, list) or not raw or len(raw) > 16:
+            return []
+        known = set()
+        for c in (self._cc2_state.get("canvas_info") or {}).get("canvas_list") or []:
+            if isinstance(c, dict) and c.get("connected", 1):
+                for t in c.get("tray_list") or []:
+                    if isinstance(t, dict) and isinstance(t.get("tray_id"), int):
+                        known.add((c.get("canvas_id", 0), t["tray_id"]))
+        out, seen = [], set()
+        for e in raw:
+            if not isinstance(e, dict):
+                return []
+            t, cid, tid = e.get("t"), e.get("canvas_id", 0), e.get("tray_id")
+            if not all(isinstance(v, int) and not isinstance(v, bool) for v in (t, cid, tid)):
+                return []
+            if t < 0 or t in seen or (cid, tid) not in known:
+                return []
+            seen.add(t)
+            out.append({"t": t, "canvas_id": cid, "tray_id": tid})
+        return out
+
     async def start_print_file(self, filename: str, print_opts: dict | None = None) -> bool:
         self._current_filename = filename
         opts = print_opts or {}
+        config = {
+            "delay_video":   bool(opts.get("timelapse")),
+            "bedlevel_force": bool(opts.get("leveling")),
+            "print_layout":  "B" if opts.get("smooth_plate") else "A",
+        }
+        slot_map = self._clean_slot_map(opts.get("slot_map"))
+        if slot_map:
+            config["slot_map"] = slot_map
         return await self.send_cmd(1020, {
             "filename":      filename,
             "storage_media": "local",
-            "config": {
-                "delay_video":   bool(opts.get("timelapse")),
-                "bedlevel_force": bool(opts.get("leveling")),
-                "print_layout":  "B" if opts.get("smooth_plate") else "A",
-            },
+            "config":        config,
         })
 
     def _apply_cc2_status(self) -> None:
