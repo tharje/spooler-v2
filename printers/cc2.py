@@ -485,7 +485,9 @@ class CC2Connection(PrinterConnection):
         loop = asyncio.get_running_loop()
         self._pending_thumb_fut = loop.create_future()
         self._pending_meta_fut  = loop.create_future()
-        await self.send_cmd(1045, {"storage_media": "local", "filename": filename})
+        # The printer firmware reads the name from "file_name" for the thumbnail request and
+        # answers "file name is empty" otherwise; "filename" is what the detail request (1046) uses.
+        await self.send_cmd(1045, {"storage_media": "local", "file_name": filename, "filename": filename})
         await self.send_cmd(1046, {"storage_media": "local", "filename": filename})
         try:
             results = await asyncio.wait_for(
