@@ -550,3 +550,17 @@ async def test_print_that_ends_from_a_busy_status_is_still_recorded(make_printer
     assert e["mm"] == 700
     assert persistence.load_history()[0]["filament_mm"] == 700
     assert printaccount.load_active("pid1") is None
+
+
+def test_filament_counted_before_a_slot_is_active_goes_to_the_first_spool():
+    a = PrintAccounting(current_spool=None)         # print starts while the printer reports no active slot (-1)
+    a.observe(4600.0); a.switch_spool(5, from_idle=True)
+    a.observe(4700.0)
+    assert a.finish() == {5: 4700.0}                # not {None: 4600, 5: 100}
+    b = PrintAccounting(current_spool=None)
+    b.observe(300.0); b.switch_spool(5)             # an unlinked slot that was really feeding stays unknown
+    b.observe(400.0)
+    assert b.finish() == {None: 300.0, 5: 100.0}
+    c = PrintAccounting(current_spool=3)
+    c.observe(100.0); c.switch_spool(None); c.observe(150.0); c.switch_spool(5, from_idle=True)
+    assert c.finish() == {3: 100.0, None: 50.0}     # only the gap at the very start is reassigned

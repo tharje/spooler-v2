@@ -360,7 +360,7 @@ class PrinterConnection:
     def _update_filament_density(self) -> None:
         self.filament_density = get_spool_density(self.id)
 
-    def _on_tray_change(self, new_spool_id: int | None) -> None:
+    def _on_tray_change(self, new_spool_id: int | None, from_idle: bool = False) -> None:
         """The spool feeding the extruder changed. Everything extruded so far
         belongs to the outgoing spool; the rest goes to the new one. Between
         prints this does nothing (the next print reads the active tray when it
@@ -368,7 +368,7 @@ class PrinterConnection:
         if self._acct is None:
             return
         self._observe_extrusion()
-        self._acct.switch_spool(new_spool_id)
+        self._acct.switch_spool(new_spool_id, from_idle=from_idle)
         self._save_accounting(force=True)
 
     # ── Per-print filament accounting (T22) ────────────────────────────────────
