@@ -364,15 +364,30 @@ function _buildCanvasMapping(printerId, colorMap) {
     if (pick) used.add(pick.tray_id);
     const row = document.createElement("div");
     row.className = "print-canvas-row";
-    const opts = `<option value="auto"${pick ? "" : " selected"}>Auto (printer decides)</option>` + trays.map(tr => `<option value="${tr.canvas_id}:${tr.tray_id}"${tr === pick ? " selected" : ""}>` +
-      `Slot ${tr.tray_id + 1} · ${escHtml(tr.type || "?")}${tr.label ? " · " + escHtml(tr.label) : ""}</option>`).join("");
+    row.dataset.value = pick ? `${pick.canvas_id}:${pick.tray_id}` : "auto";
+    const chip = (value, inner, title, warn) =>
+      `<button type="button" class="print-canvas-chip${value === row.dataset.value ? " selected" : ""}${warn ? " warn" : ""}" ` +
+      `data-v="${escAttr(value)}" title="${escAttr(title)}">${inner}</button>`;
+    const chips = trays.map(tr => {
+      const warn = !!(tool.name && tr.type && tool.name !== tr.type);
+      return chip(`${tr.canvas_id}:${tr.tray_id}`,
+        `<span class="print-canvas-swatch" style="background:${escAttr(tr.color || "#888")}">${tr.tray_id + 1}</span>` +
+        `<span class="print-canvas-chip-type">${escHtml(tr.type || "?")}</span>` + (warn ? `<span class="print-canvas-warn-mark">!</span>` : ""),
+        `Slot ${tr.tray_id + 1} · ${tr.type || "?"}${tr.label ? " · " + tr.label : ""}`, warn);
+    }).join("") + chip("auto", `<span class="print-canvas-swatch print-canvas-swatch-auto">A</span><span class="print-canvas-chip-type">Auto</span>`,
+      "Auto (printer decides)", false);
     row.innerHTML =
-      `<span class="print-canvas-tool">${noColours ? "Filament" : "T" + (tool.t + 1)}</span>` +
+      `<div class="print-canvas-head"><span class="print-canvas-tool">${noColours ? "Filament" : "T" + (tool.t + 1)}</span>` +
       `<span class="print-canvas-dot" style="background:${escAttr(tool.color || "#888")}"></span>` +
-      `<span class="print-canvas-name">${escHtml(tool.name || "")}</span>` +
-      `<span class="print-canvas-arrow">→</span>` +
-      `<select class="print-canvas-select">${opts}</select>`;
-    row.querySelector("select").addEventListener("change", _canvasMapWarn);
+      `<span class="print-canvas-name">${escHtml(tool.name || "")}</span></div>` +
+      `<div class="print-canvas-chips">${chips}</div>`;
+    row.addEventListener("click", e => {
+      const btn = e.target.closest(".print-canvas-chip");
+      if (!btn || !row.contains(btn)) return;
+      row.dataset.value = btn.dataset.v;
+      row.querySelectorAll(".print-canvas-chip").forEach(c => c.classList.toggle("selected", c === btn));
+      _canvasMapWarn();
+    });
     rows.appendChild(row);
     _canvasMapTools.push({ t: tool.t, name: tool.name || "", row });
   });
@@ -384,8 +399,8 @@ function _buildCanvasMapping(printerId, colorMap) {
 function _canvasMapCurrent() {
   const out = [];
   for (const m of _canvasMapTools) {
-    const v = m.row.querySelector("select").value;
-    if (v === "auto") return null;
+    const v = m.row.dataset.value;
+    if (!v || v === "auto") return null;
     const [cid, tid] = v.split(":").map(Number);
     out.push({ t: m.t, canvas_id: cid, tray_id: tid });
   }

@@ -1892,11 +1892,20 @@ main {
 .update-skip:hover { color: var(--text); }
 
 /* Canvas filament mapping in the print dialog */
-.print-canvas-rows { display: flex; flex-direction: column; gap: 6px; }
-.print-canvas-row { display: flex; align-items: center; gap: 8px; }
-.print-canvas-tool { font-weight: 600; min-width: 26px; }
+.print-canvas-rows { display: flex; flex-direction: column; gap: 12px; }
+.print-canvas-row { display: flex; flex-direction: column; gap: 6px; }
+.print-canvas-head { display: flex; align-items: center; gap: 8px; }
+.print-canvas-tool { font-weight: 600; }
 .print-canvas-dot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(128,128,128,.5); flex: none; }
-.print-canvas-name { min-width: 38px; opacity: .8; font-size: 12px; }
-.print-canvas-arrow { opacity: .6; }
-.print-canvas-select { flex: 1; min-width: 0; padding: 6px; border-radius: 6px; background: var(--bg-input, transparent); color: inherit; border: 1px solid rgba(128,128,128,.4); }
+.print-canvas-name { opacity: .8; font-size: 12px; }
+.print-canvas-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.print-canvas-chip { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 52px; padding: 6px 4px;
+  background: transparent; color: inherit; border: 2px solid transparent; border-radius: 10px; cursor: pointer; opacity: .65; font: inherit; }
+.print-canvas-chip.selected { opacity: 1; border-color: var(--accent, #ff6b2c); }
+.print-canvas-swatch { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 13px; color: #fff; text-shadow: 0 0 3px #000, 0 0 2px #000; border: 1px solid rgba(128,128,128,.5); }
+.print-canvas-swatch-auto { background: transparent; border-style: dashed; text-shadow: none; opacity: .8; }
+.print-canvas-chip-type { font-size: 10px; opacity: .75; }
+.print-canvas-warn-mark { position: absolute; top: -2px; right: 2px; width: 14px; height: 14px; border-radius: 50%; background: #e0a030; color: #000;
+  font-size: 10px; font-weight: 700; line-height: 14px; text-align: center; }
 .print-canvas-warn { margin: 8px 0 0; font-size: 12px; color: #e0a030; }
