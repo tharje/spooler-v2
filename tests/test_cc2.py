@@ -460,3 +460,25 @@ def test_standalone_fault_ignored_during_print_flow_states(printer, quiet_emit):
         printer._check_standalone_fault(display_state)
     assert printer.standalone_fault is None
     assert quiet_emit == []
+
+
+def test_delete_sends_the_names_as_a_file_path_list(printer, monkeypatch):
+    sent = []
+
+    async def fake_send(cmd, data=None):
+        sent.append((cmd, data))
+        return True
+    monkeypatch.setattr(printer, "send_cmd", fake_send)
+    assert _run(printer.delete_files(["a.gcode", "b c.gcode"])) is True
+    assert sent == [(1047, {"storage_media": "local", "file_path": ["a.gcode", "b c.gcode"]})]
+
+
+def test_delete_with_no_usable_name_sends_nothing(printer, monkeypatch):
+    sent = []
+
+    async def fake_send(cmd, data=None):
+        sent.append(cmd)
+        return True
+    monkeypatch.setattr(printer, "send_cmd", fake_send)
+    assert _run(printer.delete_files(["", None, 5])) is False
+    assert sent == []
