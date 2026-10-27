@@ -1,4 +1,4 @@
-# Spooler + Spoolman  (production — uses pre-built image)
+# Spooler + Spoolman  (production — uses the pre-built image from ghcr.io)
 #
 # Quick start (no git clone needed):
 #   curl -fsSL https://raw.githubusercontent.com/tharje/spooler-v2/main/docker-compose.yml -o docker-compose.yml
@@ -20,9 +20,9 @@ services:
     restart: unless-stopped
 
   spooler:
-    build: .
-    # To use pre-built image instead:
-    #   replace the build line above with:  image: ghcr.io/tharje/spooler-v2:latest
+    image: ghcr.io/tharje/spooler-v2:latest
+    # To build from a local clone instead, use docker-compose.dev.yml
+    # (docker compose -f docker-compose.dev.yml up --build).
     network_mode: host
     env_file:
       - path: .env
