@@ -460,3 +460,65 @@ def test_standalone_fault_ignored_during_print_flow_states(printer, quiet_emit):
         printer._check_standalone_fault(display_state)
     assert printer.standalone_fault is None
     assert quiet_emit == []
+
+
+def test_delete_sends_the_names_as_a_file_path_list(printer, monkeypatch):
+    sent = []
+
+    async def fake_send(cmd, data=None):
+        sent.append((cmd, data))
+        return True
+    monkeypatch.setattr(printer, "send_cmd", fake_send)
+    assert _run(printer.delete_files(["a.gcode", "b c.gcode"])) is True
+    assert sent == [(1047, {"storage_media": "local", "file_path": ["a.gcode", "b c.gcode"]})]
+
+
+def test_delete_of_one_file_also_sends_the_old_filename_field(printer, monkeypatch):
+    sent = []
+
+    async def fake_send(cmd, data=None):
+        sent.append((cmd, data))
+        return True
+    monkeypatch.setattr(printer, "send_cmd", fake_send)
+    assert _run(printer.delete_files(["a.gcode"])) is True
+    assert sent == [(1047, {"storage_media": "local", "file_path": ["a.gcode"], "filename": "a.gcode"})]
+
+
+def test_delete_with_no_usable_name_sends_nothing(printer, monkeypatch):
+    sent = []
+
+    async def fake_send(cmd, data=None):
+        sent.append(cmd)
+        return True
+    monkeypatch.setattr(printer, "send_cmd", fake_send)
+    assert _run(printer.delete_files(["", None, 5])) is False
+    assert sent == []
+
+
+def _start_with(printer, monkeypatch, slot_map):
+    sent = []
+
+    async def fake_send(cmd, data=None):
+        sent.append((cmd, data))
+        return True
+    monkeypatch.setattr(printer, "send_cmd", fake_send)
+    printer._cc2_state["canvas_info"] = {"canvas_list": [
+        {"canvas_id": 0, "connected": 1, "tray_list": [{"tray_id": 0}, {"tray_id": 1}, {"tray_id": 2}, {"tray_id": 3}]}]}
+    _run(printer.start_print_file("a.gcode", print_opts={"slot_map": slot_map}))
+    return sent[0][1]["config"]
+
+
+def test_start_print_sends_a_valid_slot_map(printer, monkeypatch):
+    cfg = _start_with(printer, monkeypatch, [{"t": 0, "canvas_id": 0, "tray_id": 2}, {"t": 1, "canvas_id": 0, "tray_id": 0}])
+    assert cfg["slot_map"] == [{"t": 0, "canvas_id": 0, "tray_id": 2}, {"t": 1, "canvas_id": 0, "tray_id": 0}]
+
+
+@pytest.mark.parametrize("bad", [
+    [{"t": 0, "canvas_id": 0, "tray_id": 9}],                      # tray does not exist
+    [{"t": 0, "canvas_id": 0, "tray_id": "1"}],                    # wrong type
+    [{"t": 0, "canvas_id": 0, "tray_id": 1}, {"t": 0, "canvas_id": 0, "tray_id": 2}],  # duplicate tool
+    [{"t": -1, "canvas_id": 0, "tray_id": 1}],
+    "nonsense", [], [1, 2], [{"t": True, "canvas_id": 0, "tray_id": 1}],
+])
+def test_start_print_drops_a_doubtful_slot_map(printer, monkeypatch, bad):
+    assert "slot_map" not in _start_with(printer, monkeypatch, bad)

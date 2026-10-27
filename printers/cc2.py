@@ -359,6 +359,19 @@ class CC2Connection(PrinterConnection):
                     await self._broadcast_state()
                 return
 
+            # Delete-file answer (method 1047): the printer says no with a non-zero code when it
+            # does not accept the request, and the file then simply stays in the list. Say so.
+            if _method == 1047 and isinstance(inner, dict):
+                code = inner.get("error_code")
+                print(f"[Printer {self.name}] delete file (1047) answer: error_code={code}")
+                if code:
+                    await state.broadcast_to_browsers({
+                        "type": "error", "printer_id": self.id,
+                        "message": f"The printer refused to delete the file (error {code}). "
+                                   "You can delete it on the printer's touchscreen.",
+                    })
+                return
+
             # Thumbnail response (method 1045)
             if _method == 1045 and isinstance(inner, dict):
                 if self._pending_thumb_fut and not self._pending_thumb_fut.done():
@@ -485,7 +498,9 @@ class CC2Connection(PrinterConnection):
         loop = asyncio.get_running_loop()
         self._pending_thumb_fut = loop.create_future()
         self._pending_meta_fut  = loop.create_future()
-        await self.send_cmd(1045, {"storage_media": "local", "filename": filename})
+        # The printer firmware reads the name from "file_name" for the thumbnail request and
+        # answers "file name is empty" otherwise; "filename" is what the detail request (1046) uses.
+        await self.send_cmd(1045, {"storage_media": "local", "file_name": filename, "filename": filename})
         await self.send_cmd(1046, {"storage_media": "local", "filename": filename})
         try:
             results = await asyncio.wait_for(
@@ -509,6 +524,7 @@ class CC2Connection(PrinterConnection):
             "print_time":   meta.get("print_time"),
             "layers":       meta.get("layer"),
             "filament_g":   meta.get("total_filament_used"),
+            "color_map":    meta.get("color_map"),
         })
 
     def _sync_spoolman_locations(self) -> None:
@@ -603,17 +619,66 @@ class CC2Connection(PrinterConnection):
             raise UploadError("File uploaded, but the printer didn't accept the start command.")
         return True
 
+    def _clean_slot_map(self, raw) -> list[dict]:
+        """Keep only tool -> Canvas tray pairs that point at a tray that exists.
+        The printer silently prints from tray 0 on a partial or out-of-range map
+        (docs: elegoo-homeassistant CC2_PROTOCOL.md), so anything doubtful is
+        dropped and the printer chooses as before."""
+        if not isinstance(raw, list) or not raw or len(raw) > 16:
+            return []
+        known = set()
+        for c in (self._cc2_state.get("canvas_info") or {}).get("canvas_list") or []:
+            if isinstance(c, dict) and c.get("connected", 1):
+                for t in c.get("tray_list") or []:
+                    if isinstance(t, dict) and isinstance(t.get("tray_id"), int):
+                        known.add((c.get("canvas_id", 0), t["tray_id"]))
+        out, seen = [], set()
+        for e in raw:
+            if not isinstance(e, dict):
+                return []
+            t, cid, tid = e.get("t"), e.get("canvas_id", 0), e.get("tray_id")
+            if not all(isinstance(v, int) and not isinstance(v, bool) for v in (t, cid, tid)):
+                return []
+            if t < 0 or t in seen or (cid, tid) not in known:
+                return []
+            seen.add(t)
+            out.append({"t": t, "canvas_id": cid, "tray_id": tid})
+        return out
+
+    async def delete_files(self, names: list[str]) -> bool:
+        """Delete files from the printer's local storage (method 1047).
+
+        The firmware (elegoo_printer, APIPrinter::handle_del_file) reads the names from a
+        list called "file_path" and answers error 1003 when that list is missing or empty --
+        a single "filename" string, as the Elegoo docs show, is not read at all.
+        Found by reading the program on firmware 02.01.01.07 (ota_version) and confirmed there
+        on a real printer; other firmware versions have not been checked.
+        """
+        names = [n for n in names if isinstance(n, str) and n]
+        if not names:
+            return False
+        data = {"storage_media": "local", "file_path": names}
+        if len(names) == 1:
+            # Older firmware is documented to take a single "filename"; a firmware that reads
+            # "file_path" ignores it, and one that reads "filename" ignores the list.
+            data["filename"] = names[0]
+        return await self.send_cmd(1047, data)
+
     async def start_print_file(self, filename: str, print_opts: dict | None = None) -> bool:
         self._current_filename = filename
         opts = print_opts or {}
+        config = {
+            "delay_video":   bool(opts.get("timelapse")),
+            "bedlevel_force": bool(opts.get("leveling")),
+            "print_layout":  "B" if opts.get("smooth_plate") else "A",
+        }
+        slot_map = self._clean_slot_map(opts.get("slot_map"))
+        if slot_map:
+            config["slot_map"] = slot_map
         return await self.send_cmd(1020, {
             "filename":      filename,
             "storage_media": "local",
-            "config": {
-                "delay_video":   bool(opts.get("timelapse")),
-                "bedlevel_force": bool(opts.get("leveling")),
-                "print_layout":  "B" if opts.get("smooth_plate") else "A",
-            },
+            "config":        config,
         })
 
     def _apply_cc2_status(self) -> None:
