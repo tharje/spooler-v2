@@ -73,6 +73,12 @@ FEATURES: dict = {
         key="statistics", name="Statistics", default=True,
         description="Stats & history page: statistics, every past print with its picture and details, reference numbers, and CSV export.",
     ),
+    "advanced_control": Feature(
+        key="advanced_control", name="Advanced control", default=False,
+        risky=True, requires_auth=True,
+        description="Set temperatures and fan speeds, move and home the axes from a panel on each printer card. "
+                    "You control the printer directly: changes happen immediately. Only for printers that support it.",
+    ),
     "print_snapshot": Feature(
         key="print_snapshot", name="Print pictures", default=True,
         description="Take a camera picture when a print ends and keep it with the print in the history.",

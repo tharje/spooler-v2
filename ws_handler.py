@@ -97,6 +97,16 @@ async def _dispatch_printer_action(action, printer, msg) -> str | None:
         return None
     if action == "set_speed":
         return await printer_actions.set_speed(printer, msg.get("speed"))
+    if action == "set_temperature":
+        return await printer_actions.set_temperature(printer, msg.get("heater"), msg.get("target"))
+    if action == "set_fan":
+        return await printer_actions.set_fan(printer, msg.get("fan"), msg.get("percent"))
+    if action == "move_axis":
+        return await printer_actions.move_axis(printer, msg.get("axis"), msg.get("distance"))
+    if action == "home":
+        return await printer_actions.home(printer, msg.get("axes", "XYZ"))
+    if action == "heaters_off":
+        return await printer_actions.heaters_off(printer)
     return None
 
 

@@ -164,6 +164,23 @@ class PrinterConnection:
     # Subclasses that can switch the chamber light from Spooler set this True
     # and implement set_light(); the auto-light option is only offered then.
     supports_light: bool = False
+    # Advanced control (T12). Empty until the protocol commands are verified on
+    # a real printer; see control.py for how they are checked.
+    capabilities: frozenset = frozenset()   # temp_nozzle, temp_bed, temp_chamber, fan_part, fan_aux, fan_chamber, move, home
+    limits: dict = {}                       # {"nozzle": {"max": 300, "assumed": True}, ...}
+    controls_verified: bool = False
+
+    async def set_temperature(self, heater: str, target: float) -> bool:
+        return False
+
+    async def set_fan(self, fan: str, percent: int) -> bool:
+        return False
+
+    async def move_axis(self, axis: str, distance_mm: float) -> bool:
+        return False
+
+    async def home(self, axes: str = "XYZ") -> bool:
+        return False
     upload_unsupported_reason: str = "File upload is not supported for this printer type."
 
     def __init__(
@@ -322,6 +339,9 @@ class PrinterConnection:
             "supports_upload": self.supports_upload,
             "supports_light":  self.supports_light,
             "auto_light":      self.auto_light and self.supports_light,
+            "capabilities":    sorted(self.capabilities),
+            "limits":          self.limits,
+            "controls_verified": self.controls_verified,
             "upload_unsupported_reason": None if self.supports_upload else self.upload_unsupported_reason,
             "spaghetti":       spaghetti.status_for(self.id),
             "dataset":         dataset.status_for(self.id),

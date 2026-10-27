@@ -8,6 +8,9 @@ router on top of this; nothing here knows about WebSockets.
 
 import asyncio
 
+import control
+import features
+
 from printers.protocol import (
     CMD_CAMERA, CMD_DELETE_FILES, CMD_LIGHT,
     CMD_PAUSE, CMD_RESUME, CMD_STATUS, CMD_STOP,
@@ -148,3 +151,41 @@ def get_file_info(printer, filename) -> None:
     filename = (filename or "").strip()
     if filename and hasattr(printer, "fetch_file_info"):
         asyncio.create_task(printer.fetch_file_info(filename))
+
+
+# ── Advanced control (T12) ────────────────────────────────────────────────────
+
+async def _advanced(printer, action: str, params: dict, run) -> str | None:
+    err = control.validate_command(printer, action, params, features.is_enabled("advanced_control"))
+    if err is None:
+        ok = await run()
+        err = None if ok else "Not supported by this printer yet"
+    control.log_command("web", printer, action, params, err or "ok")
+    return err
+
+
+async def set_temperature(printer, heater, target) -> str | None:
+    return await _advanced(printer, "set_temperature", {"heater": heater, "target": target},
+                           lambda: printer.set_temperature(heater, float(target)))
+
+
+async def set_fan(printer, fan, percent) -> str | None:
+    return await _advanced(printer, "set_fan", {"fan": fan, "percent": percent},
+                           lambda: printer.set_fan(fan, int(percent)))
+
+
+async def move_axis(printer, axis, distance) -> str | None:
+    return await _advanced(printer, "move_axis", {"axis": axis, "distance": distance},
+                           lambda: printer.move_axis(axis, float(distance)))
+
+
+async def home(printer, axes="XYZ") -> str | None:
+    return await _advanced(printer, "home", {"axes": axes}, lambda: printer.home(axes))
+
+
+async def heaters_off(printer) -> str | None:
+    async def run():
+        results = [await printer.set_temperature(h, 0.0)
+                   for h, cap in control.HEATERS.items() if cap in printer.capabilities]
+        return bool(results) and all(results)
+    return await _advanced(printer, "heaters_off", {}, run)
