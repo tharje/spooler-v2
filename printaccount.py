@@ -65,10 +65,18 @@ class PrintAccounting:
         # else: a small dip -- keep the higher value
         return reset
 
-    def switch_spool(self, new_spool) -> None:
+    def switch_spool(self, new_spool, from_idle: bool = False) -> None:
         """The feeding spool changed: everything extruded since the last switch
-        belongs to the outgoing spool."""
+        belongs to the outgoing spool.
+
+        from_idle: the printer reported no active slot until now (e.g. -1 right
+        after a print starts). What was counted in that gap has no spool of its
+        own, so it goes to the first spool that takes over instead of being
+        thrown away as "unknown"."""
         if new_spool == self.current_spool:
+            return
+        if from_idle and new_spool is not None and self.current_spool is None and not self.per_spool:
+            self.current_spool = new_spool
             return
         self._attribute_to_current()
         self.current_spool = new_spool

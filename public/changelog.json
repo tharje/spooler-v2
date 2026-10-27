@@ -1,5 +1,15 @@
 [
   {
+    "version": "2.3.4",
+    "date": "2026-10-27",
+    "changes": [
+      "Spools: reels of the same brand, material and colour are now stacked as one row (total grams, number of reels, which printers they sit in); tap a stack to see each reel. Search, a material filter and a Low/empty filter appear when you have more than one spool, and stacks that are empty or low come first.",
+      "Centauri Carbon 2: filament used right after a print starts was sometimes dropped (\"No spool is linked to the slot that was feeding\") because the printer reports no active Canvas slot for a moment. It now goes to the first spool that takes over.",
+      "Centauri Carbon 2: a print that was stopped early could be booked as the estimate for the whole file (131.6 g for a print stopped after two minutes). A stopped print now only counts what was seen while it ran. Worked out from the code and logs, not yet reproduced on a printer.",
+      "New screenshots and a short demo GIF in the README."
+    ]
+  },
+  {
     "version": "2.3.3",
     "date": "2026-10-27",
     "changes": [

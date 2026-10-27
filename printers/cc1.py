@@ -243,12 +243,13 @@ class CC1Connection(PrinterConnection):
         self.status["canvas_info"] = ci
         active_tray = ci.get("active_tray_id", -1)
         if active_tray != self._prev_active_tray_id:
+            from_idle = self._prev_active_tray_id < 0
             self._prev_active_tray_id = active_tray
             spool_id = (state.tray_map.get(self.id) or {}).get(str(active_tray)) if active_tray >= 0 else None
             loop = asyncio.get_running_loop()
             if active_tray >= 0:
                 loop.run_in_executor(None, spoolman_assign, self.id, spool_id)
-            self._on_tray_change(spool_id)
+            self._on_tray_change(spool_id, from_idle=from_idle)
             print(f"[Printer {self.name}] Active tray changed → {active_tray}, spool {spool_id}")
 
     async def _handle_message(self, raw: str) -> None:

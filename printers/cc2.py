@@ -117,6 +117,8 @@ UNANSWERED_LIMIT = 6
 
 
 class CC2Connection(PrinterConnection):
+    estimated_filament = True
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, printer_type="cc2", **kwargs)
         self._mqtt_client      = None
@@ -913,11 +915,12 @@ class CC2Connection(PrinterConnection):
             self.status["canvas_info"] = ci
             active_tray = ci.get("active_tray_id", -1)
             if active_tray != self._prev_active_tray_id:
+                from_idle = self._prev_active_tray_id < 0
                 self._prev_active_tray_id = active_tray
                 spool_id = (state.tray_map.get(self.id) or {}).get(str(active_tray)) if active_tray >= 0 else None
                 loop = asyncio.get_running_loop()
                 if active_tray >= 0:
                     loop.run_in_executor(None, spoolman_assign, self.id, spool_id)
                 loop.run_in_executor(None, self._update_filament_density)
-                self._on_tray_change(spool_id)
+                self._on_tray_change(spool_id, from_idle=from_idle)
                 print(f"[Printer {self.name}] Active tray changed → {active_tray}, spool {spool_id}")
