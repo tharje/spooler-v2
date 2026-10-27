@@ -1939,3 +1939,7 @@ main {
   background: var(--surface2); color: var(--text); border: 1px solid var(--border);
   border-radius: var(--radius-sm); padding: 7px 10px; font: inherit; font-size: 13px; color-scheme: dark; }
 .spools-filters input[type="search"]:focus, .spools-filters select:focus { outline: none; border-color: var(--accent); }
+#spools-list { align-items: start; gap: 10px; }
+#spools-list .spools-summary, #spools-list .spools-none { grid-column: 1 / -1; margin: 0; }
+#spools-list .spool-group { margin-bottom: 0; }
+.spools-filters { padding: 12px 16px 0; margin-bottom: 0; }
