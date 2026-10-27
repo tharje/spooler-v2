@@ -9,7 +9,7 @@ from features import FeatureError, is_enabled, on_change, requires_feature, set_
 
 
 # Features that must be switched on deliberately (they open Spooler to other programs).
-DEFAULT_OFF = {"external_api", "spaghetti_detection", "dataset_collection", "update_check", "job_queue"}
+DEFAULT_OFF = {"external_api", "spaghetti_detection", "dataset_collection", "update_check", "job_queue", "advanced_control"}
 
 
 def test_all_registered_features_default_on_except_the_opt_in_ones():

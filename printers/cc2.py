@@ -118,6 +118,11 @@ UNANSWERED_LIMIT = 6
 
 class CC2Connection(PrinterConnection):
     estimated_filament = True
+    # Shown in the advanced-control panel; the commands themselves (1028, 1030,
+    # 1026, 1027) are not wired up until verified on a real printer. Limits are
+    # assumed, not taken from Elegoo.
+    capabilities = frozenset({"temp_nozzle", "temp_bed", "fan_part", "fan_aux", "fan_chamber", "move", "home", "level"})
+    limits = {"nozzle": {"max": 300, "assumed": True}, "bed": {"max": 100, "assumed": True}}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, printer_type="cc2", **kwargs)
