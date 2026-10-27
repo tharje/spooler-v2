@@ -90,6 +90,13 @@ def validate_command(printer, action: str, params: dict, enabled: bool = True) -
             return "Invalid axes"
         return None
 
+    if action == "auto_level":
+        if "level" not in caps:
+            return "This printer cannot level from here"
+        if display_state(printer) in BUSY_STATES:
+            return "The printer cannot level while printing"
+        return None
+
     if action == "heaters_off":
         return None   # always allowed (when connected)
 

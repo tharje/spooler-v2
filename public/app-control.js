@@ -89,6 +89,9 @@ function ctlPreset(i) {
 function ctlSetFan(fan, pct) { _ctlSend("set_fan", { fan, percent: +pct }); }
 function ctlMove(axis, sign) { _ctlSend("move_axis", { axis, distance: sign * _ctlStep }); }
 function ctlHome(axes) { _ctlSend("home", { axes }); }
+function ctlLevel() {
+  if (confirm("Start auto leveling? The printer will heat up and probe the bed.")) _ctlSend("auto_level", {});
+}
 function ctlAllOff() { _ctlSend("heaters_off", {}); }
 function ctlStep(v) {
   _ctlStep = v;
@@ -133,7 +136,7 @@ function _controlHtml(p) {
              oninput="this.nextElementSibling.textContent=this.value+'%'" onchange="ctlSetFan('${f}',this.value)">
       <output>0%</output></div>`;
   const jog = (a, s, txt, cls = "") => `<button class="ctl-jog ${cls}" onclick="ctlMove('${a}',${s})" aria-label="${a}${s > 0 ? "+" : "−"}">${txt}</button>`;
-  const motion = (has("move") || has("home")) ? `
+  const motion = (has("move") || has("home") || has("level")) ? `
     <section class="ctl-section">
       <h4>Motion</h4>
       <p id="ctl-motion-note" class="ctl-note hidden">Axes are locked while the printer is printing or paused.</p>
@@ -148,7 +151,10 @@ function _controlHtml(p) {
           <div class="ctl-steps" role="group" aria-label="Step size">
             ${[0.1, 1, 10].map(v => `<button class="ctl-step${v === _ctlStep ? " active" : ""}" data-step="${v}" onclick="ctlStep(${v})">${v} mm</button>`).join("")}
           </div>
-          <button class="btn btn-sm btn-secondary" onclick="ctlHome('XYZ')">Home all</button>
+          <div class="ctl-btnrow">
+            <button class="btn btn-sm btn-secondary" onclick="ctlHome('XYZ')">Home all</button>
+            ${has("level") ? `<button class="btn btn-sm btn-secondary" onclick="ctlLevel()">Auto leveling</button>` : ""}
+          </div>
         </div>
       </div>
     </section>` : "";

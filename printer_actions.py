@@ -183,6 +183,10 @@ async def home(printer, axes="XYZ") -> str | None:
     return await _advanced(printer, "home", {"axes": axes}, lambda: printer.home(axes))
 
 
+async def auto_level(printer) -> str | None:
+    return await _advanced(printer, "auto_level", {}, printer.auto_level)
+
+
 async def heaters_off(printer) -> str | None:
     async def run():
         results = [await printer.set_temperature(h, 0.0)

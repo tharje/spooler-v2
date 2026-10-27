@@ -181,6 +181,9 @@ class PrinterConnection:
 
     async def home(self, axes: str = "XYZ") -> bool:
         return False
+
+    async def auto_level(self) -> bool:
+        return False
     upload_unsupported_reason: str = "File upload is not supported for this printer type."
 
     def __init__(

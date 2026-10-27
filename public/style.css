@@ -1991,3 +1991,4 @@ main {
   .ctl-heater { grid-template-columns: 1fr; gap: 6px; }
   .ctl-fan { grid-template-columns: 90px 1fr 40px; }
 }
+.ctl-btnrow { display: flex; gap: 8px; flex-wrap: wrap; }

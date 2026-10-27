@@ -75,3 +75,13 @@ async def test_unverified_protocol_reports_not_supported(cc2, monkeypatch, tmp_p
     monkeypatch.setattr(features, "is_enabled", lambda k: True)
     assert await pa.set_temperature(cc2, "nozzle", 200) == "Not supported by this printer yet"
     assert "Not supported" in (tmp_path / "log.json").read_text()
+
+
+def test_auto_level_needs_capability_and_idle_printer(cc2):
+    assert v(cc2, "auto_level") is None
+    cc2.status = {"PrintInfo": {"Status": 13}}
+    assert "printing" in v(cc2, "auto_level")
+    from printers.base import PrinterConnection
+    p = PrinterConnection("a", "10.0.0.1", "A")
+    p.connected = True
+    assert v(p, "auto_level") is not None
