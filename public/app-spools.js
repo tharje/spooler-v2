@@ -12,56 +12,161 @@ async function fetchSpools() {
   } catch (_) { /* Spoolman not running */ }
 }
 
+// Spools of the same brand, material and colour are shown as one stack; the
+// stack opens to the individual reels. View state lives only in the page.
+const _spoolView = { q: "", material: "", low: false, open: new Set() };
+
+function _spoolGroupKey(s) {
+  const f = s.filament || {};
+  return [f.vendor?.name || "", f.material || "", f.name || "", spoolColorHex(s).toLowerCase()].join("|");
+}
+
+function _spoolGroups(list) {
+  const map = new Map();
+  for (const s of list) {
+    const k = _spoolGroupKey(s);
+    if (!map.has(k)) map.set(k, { key: k, spools: [] });
+    map.get(k).spools.push(s);
+  }
+  const groups = [...map.values()];
+  groups.forEach(g => g.spools.sort((x, y) => spoolRemaining(x) - spoolRemaining(y)));
+  // Stacks that need attention come first.
+  groups.sort((x, y) => _groupLowRank(x) - _groupLowRank(y) || _groupLabel(x).localeCompare(_groupLabel(y)));
+  return groups;
+}
+
+function _groupLabel(g) {
+  const f = g.spools[0].filament || {};
+  return `${f.vendor?.name || "Unknown brand"} ${f.name || ""}`.trim();
+}
+
+function _groupTotals(g) {
+  const remaining = g.spools.reduce((n, s) => n + spoolRemaining(s), 0);
+  const total = g.spools.reduce((n, s) => n + spoolTotal(s), 0);
+  return { remaining, total, pct: total > 0 ? Math.round(remaining / total * 100) : 0 };
+}
+
+// 0 = every reel empty, 1 = running low, 2 = fine
+function _groupLowRank(g) {
+  const { remaining, total, pct } = _groupTotals(g);
+  if (remaining === 0) return 0;
+  return total > 0 && pct < 10 ? 1 : 2;
+}
+
+function _spoolMatchesFilter(s) {
+  const f = s.filament || {};
+  if (_spoolView.material && (f.material || "") !== _spoolView.material) return false;
+  if (_spoolView.low && !(spoolRemaining(s) === 0 || spoolPct(s) < 10)) return false;
+  const q = _spoolView.q.trim().toLowerCase();
+  if (q) {
+    const hay = `${f.vendor?.name || ""} ${f.material || ""} ${f.name || ""} ${s.location || ""}`.toLowerCase();
+    if (!q.split(/\s+/).every(w => hay.includes(w))) return false;
+  }
+  return true;
+}
+
+function _renderSpoolFilters() {
+  const box = document.getElementById("spools-filters");
+  if (!box) return;
+  const materials = [...new Set(spools.map(s => s.filament?.material).filter(Boolean))].sort();
+  const lowCount = spools.filter(s => spoolRemaining(s) === 0 || spoolPct(s) < 10).length;
+  box.hidden = spools.length < 2;
+  const active = document.activeElement?.id;
+  box.innerHTML = `
+    <input id="spools-search" type="search" placeholder="Search brand, colour, printer…" value="${escAttr(_spoolView.q)}" />
+    <select id="spools-material" aria-label="Material">
+      <option value="">All materials</option>
+      ${materials.map(m => `<option value="${escAttr(m)}"${m === _spoolView.material ? " selected" : ""}>${escHtml(m)}</option>`).join("")}
+    </select>
+    <button id="spools-low" class="btn btn-sm ${_spoolView.low ? "btn-primary" : "btn-secondary"}"${lowCount ? "" : " disabled"}>
+      Low / empty${lowCount ? ` (${lowCount})` : ""}
+    </button>`;
+  document.getElementById("spools-search").addEventListener("input", e => {
+    _spoolView.q = e.target.value;
+    renderSpoolPanel();
+  });
+  document.getElementById("spools-material").addEventListener("change", e => {
+    _spoolView.material = e.target.value;
+    renderSpoolPanel();
+  });
+  document.getElementById("spools-low").addEventListener("click", () => {
+    _spoolView.low = !_spoolView.low;
+    renderSpoolPanel();
+  });
+  if (active === "spools-search") {
+    const el = document.getElementById("spools-search");
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }
+}
+
+function _spoolReelRow(s) {
+  const pct = spoolPct(s), remaining = spoolRemaining(s);
+  const isEmpty = remaining === 0, isLow = !isEmpty && pct < 10;
+  const assignedTo = spoolAssignedTo(s);
+  const printerName = assignedTo ? (printerByLocation(assignedTo)?.name || assignedTo) : null;
+  return `<div class="spool-reel${isEmpty ? " spool-empty" : isLow ? " spool-low" : ""}">
+    <div class="spool-reel-main">
+      <span class="spool-reel-id">#${escHtml(s.id)}</span>
+      <span class="spool-reel-weight">${remaining}g <small>/ ${spoolTotal(s)}g</small></span>
+      ${isEmpty ? '<span class="spool-tag empty">Empty</span>' : isLow ? '<span class="spool-tag low">Low</span>' : ""}
+      ${printerName ? `<span class="spool-printer-badge">${escHtml(printerName)}</span>` : '<span class="spool-reel-shelf">In stock</span>'}
+    </div>
+    <div class="spool-bar-wrap"><div class="spool-bar-fill" style="width:${pct}%${isEmpty ? ";background:var(--red)" : isLow ? ";background:var(--yellow)" : ""}"></div></div>
+    <div class="spool-reel-actions">
+      <button class="btn btn-sm btn-secondary" onclick="deleteSpool('${escAttr(s.id)}')">Remove</button>
+    </div>
+  </div>`;
+}
+
 function renderSpoolPanel() {
   const list  = document.getElementById("spools-list");
   const empty = document.getElementById("spools-empty");
+  _renderSpoolFilters();
   if (!spools.length) {
     list.innerHTML = "";
     empty.style.display = "";
     return;
   }
   empty.style.display = "none";
-  list.innerHTML = spools.map(s => {
-    const pct        = spoolPct(s);
-    const remaining  = spoolRemaining(s);
-    const total      = spoolTotal(s);
-    const color      = spoolColorHex(s);
-    const material   = s.filament?.material || "?";
-    const vendor     = s.filament?.vendor?.name || "";
-    const colorName  = s.filament?.name || "";
-    const assignedTo = spoolAssignedTo(s);
-    const printerName = assignedTo ? (printerByLocation(assignedTo)?.name || assignedTo) : null;
-    const isEmpty    = remaining === 0;
-    const isLow      = !isEmpty && total > 0 && pct < 10;
-    const barColor   = isEmpty ? "var(--red)" : isLow ? "var(--yellow)" : null;
-
-    return `<div class="spool-card${isEmpty ? " spool-empty" : isLow ? " spool-low" : ""}">
-      <div class="spool-card-swatch" style="background:${escAttr(color)}"></div>
-      <div class="spool-card-body">
-        <div class="spool-card-top">
-          <div class="spool-card-vendor">${escHtml(vendor || "Unknown brand")}</div>
-          <span class="spool-material-badge">${escHtml(material)}</span>
-        </div>
-        <div class="spool-card-colorname">${escHtml(colorName || "—")}</div>
-        <div class="spool-weight-row">
-          <span>${remaining}g / ${total}g</span>
-          <span class="spool-weight-pct">${pct}%${isEmpty ? ' <span class="spool-tag empty">Empty</span>' : isLow ? ' <span class="spool-tag low">Low</span>' : ""}</span>
-        </div>
-        <div class="spool-bar-wrap">
-          <div class="spool-bar-fill" style="width:${pct}%${barColor ? ";background:" + barColor : ""}"></div>
-        </div>
-        <div class="spool-card-footer">
-          ${printerName ? `<span class="spool-printer-badge">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
-            </svg>
-            ${escHtml(printerName)}
-          </span>` : "<span></span>"}
-          <button class="btn btn-sm btn-secondary" onclick="deleteSpool('${escAttr(s.id)}')">Remove</button>
-        </div>
-      </div>
+  const groups = _spoolGroups(spools.filter(_spoolMatchesFilter));
+  if (!groups.length) {
+    list.innerHTML = '<p class="spools-none">No spools match.</p>';
+    return;
+  }
+  const summary = `<div class="spools-summary">${spools.length} ${spools.length === 1 ? "spool" : "spools"} · ${groups.length} ${groups.length === 1 ? "type" : "types"}</div>`;
+  list.innerHTML = summary + groups.map(g => {
+    const first = g.spools[0], f = first.filament || {};
+    const { remaining, total, pct } = _groupTotals(g);
+    const rank = _groupLowRank(g);
+    const open = _spoolView.open.has(g.key);
+    const n = g.spools.length;
+    const locs = [...new Set(g.spools.map(spoolAssignedTo).filter(Boolean).map(l => printerByLocation(l)?.name || l))];
+    return `<div class="spool-group${rank === 0 ? " spool-empty" : rank === 1 ? " spool-low" : ""}${open ? " open" : ""}" data-key="${escAttr(g.key)}">
+      <button class="spool-group-head" aria-expanded="${open}">
+        <span class="spool-group-swatch" style="background:${escAttr(spoolColorHex(first))}"></span>
+        <span class="spool-group-info">
+          <span class="spool-group-title">${escHtml(f.vendor?.name || "Unknown brand")} <b>${escHtml(f.name || "—")}</b></span>
+          <span class="spool-group-sub">
+            <span class="spool-material-badge">${escHtml(f.material || "?")}</span>
+            <span>${n} ${n === 1 ? "reel" : "reels"}</span>
+            ${locs.map(l => `<span class="spool-printer-badge">${escHtml(l)}</span>`).join("")}
+          </span>
+        </span>
+        <span class="spool-group-weight">${remaining}g
+          ${rank === 0 ? '<span class="spool-tag empty">Empty</span>' : rank === 1 ? '<span class="spool-tag low">Low</span>' : `<small>${pct}%</small>`}
+        </span>
+        <span class="spool-group-chev" aria-hidden="true">›</span>
+      </button>
+      <div class="spool-bar-wrap spool-group-bar"><div class="spool-bar-fill" style="width:${pct}%${rank === 0 ? ";background:var(--red)" : rank === 1 ? ";background:var(--yellow)" : ""}"></div></div>
+      ${open ? `<div class="spool-group-reels">${g.spools.map(_spoolReelRow).join("")}</div>` : ""}
     </div>`;
   }).join("");
+  list.querySelectorAll(".spool-group-head").forEach(btn => btn.addEventListener("click", () => {
+    const key = btn.closest(".spool-group").dataset.key;
+    if (_spoolView.open.has(key)) _spoolView.open.delete(key); else _spoolView.open.add(key);
+    renderSpoolPanel();
+  }));
 }
 
 function openSpoolPicker(printerId) {
