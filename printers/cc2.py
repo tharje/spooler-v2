@@ -628,7 +628,12 @@ class CC2Connection(PrinterConnection):
         names = [n for n in names if isinstance(n, str) and n]
         if not names:
             return False
-        return await self.send_cmd(1047, {"storage_media": "local", "file_path": names})
+        data = {"storage_media": "local", "file_path": names}
+        if len(names) == 1:
+            # Older firmware is documented to take a single "filename"; a firmware that reads
+            # "file_path" ignores it, and one that reads "filename" ignores the list.
+            data["filename"] = names[0]
+        return await self.send_cmd(1047, data)
 
     async def start_print_file(self, filename: str, print_opts: dict | None = None) -> bool:
         self._current_filename = filename

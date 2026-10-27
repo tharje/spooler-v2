@@ -473,6 +473,17 @@ def test_delete_sends_the_names_as_a_file_path_list(printer, monkeypatch):
     assert sent == [(1047, {"storage_media": "local", "file_path": ["a.gcode", "b c.gcode"]})]
 
 
+def test_delete_of_one_file_also_sends_the_old_filename_field(printer, monkeypatch):
+    sent = []
+
+    async def fake_send(cmd, data=None):
+        sent.append((cmd, data))
+        return True
+    monkeypatch.setattr(printer, "send_cmd", fake_send)
+    assert _run(printer.delete_files(["a.gcode"])) is True
+    assert sent == [(1047, {"storage_media": "local", "file_path": ["a.gcode"], "filename": "a.gcode"})]
+
+
 def test_delete_with_no_usable_name_sends_nothing(printer, monkeypatch):
     sent = []
 
