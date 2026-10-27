@@ -346,9 +346,13 @@ function _buildCanvasMapping(printerId, colorMap) {
   _canvasMapTools = [];
   rows.innerHTML = "";
   const trays = _canvasTrays(printerId);
-  const tools = (Array.isArray(colorMap) ? colorMap : [])
+  let tools = (Array.isArray(colorMap) ? colorMap : [])
     .filter(e => e && Number.isInteger(e.t)).sort((a, b) => a.t - b.t);
-  if (!trays.length || !tools.length) { box.style.display = "none"; return; }
+  // The printer gave no colours for this file (or they have not arrived yet): still offer one
+  // choice, left on Auto so nothing changes unless you pick a slot.
+  const noColours = !tools.length;
+  if (noColours) tools = [{ t: 0, color: "", name: "" }];
+  if (!trays.length) { box.style.display = "none"; return; }
 
   // Pre-fill: closest colour among slots with the same material, each slot used once if possible.
   const used = new Set();
@@ -356,14 +360,14 @@ function _buildCanvasMapping(printerId, colorMap) {
     const ranked = trays
       .map(tr => ({ tr, d: _colorDist(tool.color, tr.color) + (tool.name && tr.type && tool.name !== tr.type ? 1000 : 0) }))
       .sort((a, b) => a.d - b.d);
-    const pick = (ranked.find(r => !used.has(r.tr.tray_id)) || ranked[0]).tr;
-    used.add(pick.tray_id);
+    const pick = noColours ? null : (ranked.find(r => !used.has(r.tr.tray_id)) || ranked[0]).tr;
+    if (pick) used.add(pick.tray_id);
     const row = document.createElement("div");
     row.className = "print-canvas-row";
-    const opts = trays.map(tr => `<option value="${tr.canvas_id}:${tr.tray_id}"${tr === pick ? " selected" : ""}>` +
+    const opts = `<option value="auto"${pick ? "" : " selected"}>Auto (printer decides)</option>` + trays.map(tr => `<option value="${tr.canvas_id}:${tr.tray_id}"${tr === pick ? " selected" : ""}>` +
       `Slot ${tr.tray_id + 1} · ${escHtml(tr.type || "?")}${tr.label ? " · " + escHtml(tr.label) : ""}</option>`).join("");
     row.innerHTML =
-      `<span class="print-canvas-tool">T${tool.t + 1}</span>` +
+      `<span class="print-canvas-tool">${noColours ? "Filament" : "T" + (tool.t + 1)}</span>` +
       `<span class="print-canvas-dot" style="background:${escAttr(tool.color || "#888")}"></span>` +
       `<span class="print-canvas-name">${escHtml(tool.name || "")}</span>` +
       `<span class="print-canvas-arrow">→</span>` +
@@ -376,17 +380,22 @@ function _buildCanvasMapping(printerId, colorMap) {
   _canvasMapWarn();
 }
 
+// null unless every tool has a slot: the printer prints from slot 1 on a partial map.
 function _canvasMapCurrent() {
-  return _canvasMapTools.map(m => {
-    const [cid, tid] = m.row.querySelector("select").value.split(":").map(Number);
-    return { t: m.t, canvas_id: cid, tray_id: tid };
-  });
+  const out = [];
+  for (const m of _canvasMapTools) {
+    const v = m.row.querySelector("select").value;
+    if (v === "auto") return null;
+    const [cid, tid] = v.split(":").map(Number);
+    out.push({ t: m.t, canvas_id: cid, tray_id: tid });
+  }
+  return out;
 }
 
 function _canvasMapWarn() {
   const warn = document.getElementById("print-opts-canvas-warn");
   const trays = _canvasTrays(_currentFilePrinterId);
-  const cur = _canvasMapCurrent();
+  const cur = _canvasMapCurrent() || [];
   const msgs = [];
   const seen = new Set();
   cur.forEach((c, i) => {
@@ -432,8 +441,10 @@ document.getElementById("btn-print-opts-send").addEventListener("click", () => {
     leveling:     document.getElementById("print-opt-leveling").checked,
     smooth_plate: document.getElementById("print-plate-smooth").dataset.selected === "1",
   };
-  if (_canvasMapTools.length && document.getElementById("print-opts-canvas").style.display !== "none")
-    opts.slot_map = _canvasMapCurrent();
+  if (_canvasMapTools.length && document.getElementById("print-opts-canvas").style.display !== "none") {
+    const map = _canvasMapCurrent();
+    if (map) opts.slot_map = map;
+  }
   send({
     action:     "start_print",
     printer_id: _currentFilePrinterId,
