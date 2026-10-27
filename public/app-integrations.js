@@ -356,7 +356,7 @@ const _FEATURE_GROUPS = [
   { title: "Monitoring",    keys: ["camera", "print_snapshot", "spaghetti_detection", "dataset_collection"] },
   { title: "Notifications", keys: ["notifications"] },
   { title: "Data",          keys: ["backup", "statistics", "service_log"] },
-  { title: "Printing",      keys: ["job_queue"] },
+  { title: "Printing",      keys: ["job_queue", "advanced_control"] },
   { title: "Services",      keys: ["spoolman", "update_check"] },
 ];
 
