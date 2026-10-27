@@ -359,6 +359,19 @@ class CC2Connection(PrinterConnection):
                     await self._broadcast_state()
                 return
 
+            # Delete-file answer (method 1047): the printer says no with a non-zero code when it
+            # does not accept the request, and the file then simply stays in the list. Say so.
+            if _method == 1047 and isinstance(inner, dict):
+                code = inner.get("error_code")
+                print(f"[Printer {self.name}] delete file (1047) answer: error_code={code}")
+                if code:
+                    await state.broadcast_to_browsers({
+                        "type": "error", "printer_id": self.id,
+                        "message": f"The printer refused to delete the file (error {code}). "
+                                   "You can delete it on the printer's touchscreen.",
+                    })
+                return
+
             # Thumbnail response (method 1045)
             if _method == 1045 and isinstance(inner, dict):
                 if self._pending_thumb_fut and not self._pending_thumb_fut.done():
@@ -602,6 +615,20 @@ class CC2Connection(PrinterConnection):
         if start_after and not await self.start_print_file(remote_name):
             raise UploadError("File uploaded, but the printer didn't accept the start command.")
         return True
+
+    async def delete_files(self, names: list[str]) -> bool:
+        """Delete files from the printer's local storage (method 1047).
+
+        The firmware (elegoo_printer, APIPrinter::handle_del_file) reads the names from a
+        list called "file_path" and answers error 1003 when that list is missing or empty --
+        a single "filename" string, as the Elegoo docs show, is not read at all.
+        Found by reading the program on firmware 02.01.01.07 (ota_version) and confirmed there
+        on a real printer; other firmware versions have not been checked.
+        """
+        names = [n for n in names if isinstance(n, str) and n]
+        if not names:
+            return False
+        return await self.send_cmd(1047, {"storage_media": "local", "file_path": names})
 
     async def start_print_file(self, filename: str, print_opts: dict | None = None) -> bool:
         self._current_filename = filename
