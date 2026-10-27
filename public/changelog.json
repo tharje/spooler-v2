@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.3.3",
+    "date": "2026-10-27",
+    "changes": [
+      "Centauri Carbon 2: the print dialog now lets you choose which Canvas slot each colour in the file uses, with coloured slot buttons pre-filled with the closest match (same material first), a warning if the material does not fit, and an Auto option. The choice is sent to the printer like a slicer does. Offered for every file on the printer; \"upload and start\" and the print queue still start without it. Not yet verified with a real multi-colour print.",
+      "Centauri Carbon 2: the model picture now shows in the print dialog (the thumbnail request sent the file name under the wrong field).",
+      "Centauri Carbon 2: deleting a file from the printer's file list works again. It was ignored and answered with error 1003. Worked out and confirmed on firmware 02.01.01.07 only, so it may not work on other firmware versions; if the printer refuses, Spooler now shows a message with the error code."
+    ]
+  },
+  {
     "version": "2.3.2",
     "date": "2026-10-22",
     "changes": [
