@@ -117,6 +117,8 @@ UNANSWERED_LIMIT = 6
 
 
 class CC2Connection(PrinterConnection):
+    estimated_filament = True
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, printer_type="cc2", **kwargs)
         self._mqtt_client      = None

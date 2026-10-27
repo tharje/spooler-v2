@@ -564,3 +564,15 @@ def test_filament_counted_before_a_slot_is_active_goes_to_the_first_spool():
     c = PrintAccounting(current_spool=3)
     c.observe(100.0); c.switch_spool(None); c.observe(150.0); c.switch_spool(5, from_idle=True)
     assert c.finish() == {3: 100.0, None: 50.0}     # only the gap at the very start is reassigned
+
+
+@pytest.mark.asyncio
+async def test_a_stopped_print_does_not_take_the_printers_closing_estimate(make_printer):
+    p = make_printer()
+    p.estimated_filament = True                                        # as on the CC2
+    status(p, 0, tray=1); await p._check_print_transition()
+    status(p, 13, 0, tray=1); await p._check_print_transition()
+    status(p, 13, 600, tray=1); await p._check_print_transition()
+    status(p, 14, 42000, tray=1); await p._check_print_transition()    # stopped; closing figure = whole-file estimate
+    assert persistence.load_history()[0]["filament_mm"] == 600
+    assert sum(e["mm"] for e in ledger.all_entries()) == 600
