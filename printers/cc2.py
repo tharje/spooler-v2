@@ -77,6 +77,8 @@ _MS_PREPARING = {3: 10, 4: 10, 5: 20, 6: 10, 7: 10, 8: 10, 10: 10, 13: 10}
 _MS_KNOWN_IDLE_OR_HANDLED = {0, 1, 2, 9, 11, 12}
 _logged_ms_status: set = set()
 _logged_sub_status: set = set()
+# gcode_move.speed_mode -> speed factor (firmware table behind method 1031)
+_SPEED_MODE_FACTOR = {0: 0.5, 1: 1.0, 2: 1.3, 3: 1.6}
 # sub_status values that mean material is (or is about to be) laid down.
 _EXTRUDING_SUBS = {2075, 2401, 2402, 2077, 2501, 2502, 2503, 2504, 2505}
 
@@ -893,8 +895,13 @@ class CC2Connection(PrinterConnection):
         led    = s.get("led", {})
         led_on = 1 if (led.get("status", 0) or 0) > 0 else 0
 
+        # CC2 reports the speed as gcode_move.speed_mode (0-3), not speed_factor
         sf = gm.get("speed_factor")
-        speed_factor = sf if sf is not None else 1.0
+        mode = gm.get("speed_mode")
+        if isinstance(mode, int) and mode in _SPEED_MODE_FACTOR:
+            speed_factor = _SPEED_MODE_FACTOR[mode]
+        else:
+            speed_factor = sf if sf is not None else 1.0
 
         self.status = {
             "PrintInfo": {
