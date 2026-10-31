@@ -522,3 +522,19 @@ def test_start_print_sends_a_valid_slot_map(printer, monkeypatch):
 ])
 def test_start_print_drops_a_doubtful_slot_map(printer, monkeypatch, bad):
     assert "slot_map" not in _start_with(printer, monkeypatch, bad)
+
+
+@pytest.mark.parametrize("leveling", [True, False])
+def test_start_print_leveling_sets_both_firmware_flags(printer, monkeypatch, leveling):
+    # Sliced files carry their own BED_MESH_CALIBRATE, which the firmware only
+    # runs when printer_check is set; bedlevel_force alone is ignored for them.
+    sent = []
+
+    async def fake_send(cmd, data=None):
+        sent.append((cmd, data))
+        return True
+    monkeypatch.setattr(printer, "send_cmd", fake_send)
+    _run(printer.start_print_file("a.gcode", print_opts={"leveling": leveling}))
+    cfg = sent[0][1]["config"]
+    assert cfg["bedlevel_force"] is leveling
+    assert cfg["printer_check"] is leveling

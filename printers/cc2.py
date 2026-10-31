@@ -669,9 +669,14 @@ class CC2Connection(PrinterConnection):
     async def start_print_file(self, filename: str, print_opts: dict | None = None) -> bool:
         self._current_filename = filename
         opts = print_opts or {}
+        leveling = bool(opts.get("leveling"))
         config = {
             "delay_video":   bool(opts.get("timelapse")),
-            "bedlevel_force": bool(opts.get("leveling")),
+            # The firmware only reads bedlevel_force for files without their
+            # own BED_MESH_CALIBRATE; for sliced files with one, printer_check
+            # decides whether that command runs (EXECUTE_CALIBRATE_FROM_SLICER).
+            "bedlevel_force": leveling,
+            "printer_check":  leveling,
             "print_layout":  "B" if opts.get("smooth_plate") else "A",
         }
         slot_map = self._clean_slot_map(opts.get("slot_map"))
