@@ -533,6 +533,7 @@ main {
 }
 .speed-label { color: var(--text-muted); white-space: nowrap; min-width: 90px; }
 .speed-slider { flex: 1; accent-color: var(--accent); cursor: pointer; height: 4px; }
+.speed-modes { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* Status Badge */
 .status-badge {

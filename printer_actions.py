@@ -22,6 +22,9 @@ ERR_BAD_FILENAME = "Invalid filename"
 
 MAX_DELETE_FILES = 50
 SPEED_MIN, SPEED_MAX = 10, 200
+# CC2 method 1031 takes a speed mode, not a percentage. The firmware indexes a
+# table (50/100/130/160 %) with it without a bounds check, so only these go out.
+CC2_SPEED_MODES = {50: 0, 100: 1, 130: 2, 160: 3}
 
 # One pending light-refresh task per printer — cancelled when a new light command arrives
 _light_refresh_tasks: dict = {}
@@ -98,7 +101,10 @@ async def set_speed(printer, speed) -> str | None:
     if not isinstance(speed, (int, float)) or not SPEED_MIN <= int(speed) <= SPEED_MAX:
         return None
     if printer.printer_type == "cc2":
-        await printer.send_cmd(1031, {"speed": int(speed)})
+        mode = CC2_SPEED_MODES.get(int(speed))
+        if mode is None:
+            return "Speed must be 50, 100, 130 or 160 % on this printer"
+        await printer.send_cmd(1031, {"mode": mode})
     else:
         await printer.send_cmd(CMD_LIGHT, {"PrintSpeedPct": int(speed)})
     return None

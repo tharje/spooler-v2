@@ -70,10 +70,18 @@ async def test_speed_outside_range_is_ignored(speed):
     assert p.sent == []
 
 
-async def test_speed_uses_the_cc2_method_on_cc2():
+@pytest.mark.parametrize("speed,mode", [(50, 0), (100, 1), (130, 2), (160, 3)])
+async def test_speed_sends_a_mode_on_cc2(speed, mode):
     p = FakePrinter("cc2")
-    await pa.set_speed(p, 120)
-    assert p.sent == [(1031, {"speed": 120})]
+    assert await pa.set_speed(p, speed) is None
+    assert p.sent == [(1031, {"mode": mode})]
+
+
+@pytest.mark.parametrize("speed", [120, 75, 200])
+async def test_cc2_speed_between_modes_is_refused(speed):
+    p = FakePrinter("cc2")
+    assert await pa.set_speed(p, speed) is not None
+    assert p.sent == []
 
 
 @pytest.mark.parametrize("name,err", [("", pa.ERR_NO_FILENAME), ("  ", pa.ERR_NO_FILENAME),
