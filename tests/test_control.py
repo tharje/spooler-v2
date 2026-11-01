@@ -77,6 +77,20 @@ async def test_unverified_protocol_reports_not_supported(cc2, monkeypatch, tmp_p
     assert "Not supported" in (tmp_path / "log.json").read_text()
 
 
+async def test_cc2_heaters_off_is_one_command_for_both_heaters(cc2, monkeypatch, tmp_path):
+    import features
+    monkeypatch.setattr(control, "CONTROL_LOG", tmp_path / "log.json")
+    monkeypatch.setattr(features, "is_enabled", lambda k: True)
+    sent = []
+
+    async def fake_send(cmd, data=None):
+        sent.append((cmd, data))
+        return True
+    monkeypatch.setattr(cc2, "send_cmd", fake_send)
+    assert await pa.heaters_off(cc2) is None
+    assert sent == [(1028, {"extruder": 0, "heater_bed": 0})]
+
+
 def test_auto_level_needs_capability_and_idle_printer(cc2):
     assert v(cc2, "auto_level") is None
     cc2.status = {"PrintInfo": {"Status": 13}}

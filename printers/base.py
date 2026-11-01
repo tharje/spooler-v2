@@ -184,6 +184,11 @@ class PrinterConnection:
 
     async def auto_level(self) -> bool:
         return False
+
+    async def heaters_off(self, heaters: list) -> bool:
+        # Printers that can switch everything off in one command override this
+        results = [await self.set_temperature(h, 0.0) for h in heaters]
+        return bool(results) and all(results)
     upload_unsupported_reason: str = "File upload is not supported for this printer type."
 
     def __init__(
