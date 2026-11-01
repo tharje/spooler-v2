@@ -148,8 +148,42 @@ async def test_unverified_protocol_reports_not_supported(cc2, monkeypatch, tmp_p
     import features
     monkeypatch.setattr(control, "CONTROL_LOG", tmp_path / "log.json")
     monkeypatch.setattr(features, "is_enabled", lambda k: True)
-    assert await pa.set_temperature(cc2, "nozzle", 200) == "Not supported by this printer yet"
+    assert await pa.set_fan(cc2, "part", 50) == "Not supported by this printer yet"
     assert "Not supported" in (tmp_path / "log.json").read_text()
+
+
+@pytest.mark.parametrize("heater,target,expected", [
+    ("nozzle", 210, {"extruder": 210}),
+    ("bed", 60.4, {"heater_bed": 60}),
+    ("nozzle", 0, {"extruder": 0}),
+])
+async def test_cc2_set_temperature_sends_method_1028(cc2, monkeypatch, tmp_path, heater, target, expected):
+    import features
+    monkeypatch.setattr(control, "CONTROL_LOG", tmp_path / "log.json")
+    monkeypatch.setattr(features, "is_enabled", lambda k: True)
+    sent = []
+
+    async def fake_send(cmd, data=None):
+        sent.append((cmd, data))
+        return True
+    monkeypatch.setattr(cc2, "send_cmd", fake_send)
+    assert await pa.set_temperature(cc2, heater, target) is None
+    assert sent == [(1028, expected)]
+
+
+async def test_cc2_temperature_above_limit_is_not_sent(cc2, monkeypatch, tmp_path):
+    import features
+    monkeypatch.setattr(control, "CONTROL_LOG", tmp_path / "log.json")
+    monkeypatch.setattr(features, "is_enabled", lambda k: True)
+    sent = []
+
+    async def fake_send(cmd, data=None):
+        sent.append((cmd, data))
+        return True
+    monkeypatch.setattr(cc2, "send_cmd", fake_send)
+    assert await pa.set_temperature(cc2, "nozzle", 301) is not None
+    assert await pa.set_temperature(cc2, "bed", 101) is not None
+    assert sent == []
 
 
 async def test_cc2_heaters_off_is_one_command_for_both_heaters(cc2, monkeypatch, tmp_path):

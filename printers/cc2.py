@@ -705,6 +705,14 @@ class CC2Connection(PrinterConnection):
         if self._cc2_state.get("extruder", {}).get("target") == _SAFE_HOME_TEMP:
             await self.send_cmd(1028, {"extruder": 0})
 
+    async def set_temperature(self, heater: str, target: float) -> bool:
+        # Method 1028: "extruder" -> M104, "heater_bed" -> M140, whole degrees.
+        # The firmware does not range-check; control.validate_command does.
+        key = {"nozzle": "extruder", "bed": "heater_bed"}.get(heater)
+        if key is None:
+            return False
+        return await self.send_cmd(1028, {key: int(round(target))})
+
     async def heaters_off(self, heaters: list) -> bool:
         # Method 1028 reads "extruder" (M104) and "heater_bed" (M140) independently,
         # so one request switches both off.
