@@ -233,7 +233,7 @@ class CC2Connection(PrinterConnection):
         if cmd == CMD_LIGHT and data:
             light_on = data.get("LightStatus", {}).get("SecondLight", False)
             payload["params"] = {"brightness": 255 if light_on else 0, "power": 1 if light_on else 0}
-        elif method in (1020, 1028, 1031, 1044, 1045, 1046, 1047) and data:
+        elif method in (1020, 1026, 1028, 1031, 1044, 1045, 1046, 1047) and data:
             payload["params"] = data
         try:
             await self._mqtt_client.publish(topic, json.dumps(payload))
@@ -672,6 +672,11 @@ class CC2Connection(PrinterConnection):
             # "file_path" ignores it, and one that reads "filename" ignores the list.
             data["filename"] = names[0]
         return await self.send_cmd(1047, data)
+
+    async def home(self, axes: str = "XYZ") -> bool:
+        # Method 1026 always runs a plain G28 (all axes) and only when the
+        # printer is idle; control.validate_command refuses partial homing.
+        return await self.send_cmd(1026, {"homed_axes": "xyz"})
 
     async def heaters_off(self, heaters: list) -> bool:
         # Method 1028 reads "extruder" (M104) and "heater_bed" (M140) independently,

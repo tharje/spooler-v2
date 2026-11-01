@@ -61,6 +61,27 @@ def test_home_rejects_unknown_axes(cc2):
     assert v(cc2, "home", axes="XQ") is not None
 
 
+def test_cc2_can_only_home_all_axes(cc2):
+    # Method 1026 always runs a full G28
+    assert v(cc2, "home", axes="ZYX") is None
+    assert v(cc2, "home", axes="XY") == "This printer can only home all axes at once"
+    assert v(cc2, "home", axes="Z") is not None
+
+
+async def test_cc2_home_sends_method_1026(cc2, monkeypatch, tmp_path):
+    import features
+    monkeypatch.setattr(control, "CONTROL_LOG", tmp_path / "log.json")
+    monkeypatch.setattr(features, "is_enabled", lambda k: True)
+    sent = []
+
+    async def fake_send(cmd, data=None):
+        sent.append((cmd, data))
+        return True
+    monkeypatch.setattr(cc2, "send_cmd", fake_send)
+    assert await pa.home(cc2, "XYZ") is None
+    assert sent == [(1026, {"homed_axes": "xyz"})]
+
+
 def test_printer_without_capabilities_refuses_everything():
     from printers.base import PrinterConnection
     p = PrinterConnection("a", "10.0.0.1", "A")

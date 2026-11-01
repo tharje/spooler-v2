@@ -88,6 +88,8 @@ def validate_command(printer, action: str, params: dict, enabled: bool = True) -
         axes = params.get("axes", "XYZ")
         if not isinstance(axes, str) or not axes or any(a not in AXES for a in axes):
             return "Invalid axes"
+        if set(axes) != set(AXES) and "home_axes" not in caps:
+            return "This printer can only home all axes at once"
         return None
 
     if action == "auto_level":

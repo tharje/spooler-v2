@@ -143,16 +143,16 @@ function _controlHtml(p) {
       <div id="ctl-motion" class="ctl-motion">
         <div class="ctl-pad">
           <span></span>${jog("Y", 1, "Y+")}<span></span>
-          ${jog("X", -1, "X−")}<button class="ctl-jog ctl-home" onclick="ctlHome('XY')" aria-label="Home XY">⌂</button>${jog("X", 1, "X+")}
+          ${jog("X", -1, "X−")}${has("home_axes") ? `<button class="ctl-jog ctl-home" onclick="ctlHome('XY')" aria-label="Home XY">⌂</button>` : "<span></span>"}${jog("X", 1, "X+")}
           <span></span>${jog("Y", -1, "Y−")}<span></span>
         </div>
-        <div class="ctl-zcol">${jog("Z", 1, "Z+")}<button class="ctl-jog ctl-home" onclick="ctlHome('Z')" aria-label="Home Z">⌂</button>${jog("Z", -1, "Z−")}</div>
+        <div class="ctl-zcol">${jog("Z", 1, "Z+")}${has("home_axes") ? `<button class="ctl-jog ctl-home" onclick="ctlHome('Z')" aria-label="Home Z">⌂</button>` : "<span></span>"}${jog("Z", -1, "Z−")}</div>
         <div class="ctl-side">
           <div class="ctl-steps" role="group" aria-label="Step size">
             ${[0.1, 1, 10].map(v => `<button class="ctl-step${v === _ctlStep ? " active" : ""}" data-step="${v}" onclick="ctlStep(${v})">${v} mm</button>`).join("")}
           </div>
           <div class="ctl-btnrow">
-            <button class="btn btn-sm btn-secondary" onclick="ctlHome('XYZ')">Home all</button>
+            ${has("home") ? `<button class="btn btn-sm btn-secondary" onclick="ctlHome('XYZ')">Home all</button>` : ""}
             ${has("level") ? `<button class="btn btn-sm btn-secondary" onclick="ctlLevel()">Auto leveling</button>` : ""}
           </div>
         </div>
