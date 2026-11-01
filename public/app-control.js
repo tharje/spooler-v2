@@ -167,9 +167,9 @@ function _controlHtml(p) {
     ${p.controls_verified ? "" : `<div class="ctl-preview">Preview: these commands are not yet verified on a real printer, so they are not sent. Buttons will answer “Not supported by this printer yet”.</div>`}
     ${heaters.length ? `<section class="ctl-section"><h4>Temperature</h4>
       <div class="ctl-presets">${CTL_PRESETS.map((pr, i) => `<button class="ctl-chip" onclick="ctlPreset(${i})">${pr.name} <small>${pr.nozzle}/${pr.bed}</small></button>`).join("")}</div>
-      ${heaters.map(heaterRow).join("")}</section>` : ""}
+      ${heaters.map(heaterRow).join("")}
+      <button class="btn btn-danger ctl-alloff" onclick="ctlAllOff()">Turn off all heating</button></section>` : ""}
     ${fans.length ? `<section class="ctl-section"><h4>Fans</h4>${fans.map(fanRow).join("")}</section>` : ""}
     ${motion}
-    <button class="btn btn-danger ctl-alloff" onclick="ctlAllOff()">Turn off all heating</button>
   </div>`;
 }

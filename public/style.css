@@ -1986,7 +1986,7 @@ main {
 .ctl-step { background: var(--surface); color: var(--text-dim-strong); border: 0; border-right: 1px solid var(--border); padding: 7px 12px; font-size: 12.5px; cursor: pointer; }
 .ctl-step:last-child { border-right: 0; }
 .ctl-step.active { background: var(--accent); color: #fff; }
-.ctl-alloff { width: 100%; justify-content: center; padding: 11px; }
+.ctl-alloff { width: 100%; justify-content: center; padding: 11px; margin-top: 12px; }
 @media (max-width: 520px) {
   .ctl-box { padding: 18px; }
   .ctl-heater { grid-template-columns: 1fr; gap: 6px; }
