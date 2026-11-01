@@ -148,8 +148,26 @@ async def test_unverified_protocol_reports_not_supported(cc2, monkeypatch, tmp_p
     import features
     monkeypatch.setattr(control, "CONTROL_LOG", tmp_path / "log.json")
     monkeypatch.setattr(features, "is_enabled", lambda k: True)
-    assert await pa.move_axis(cc2, "X", 1) == "Not supported by this printer yet"
+    assert await pa.auto_level(cc2) == "Not supported by this printer yet"
     assert "Not supported" in (tmp_path / "log.json").read_text()
+
+
+@pytest.mark.parametrize("axis,dist,expected", [
+    ("X", 0.1, {"axes": "x", "distance": 0.1}),
+    ("Z", -10, {"axes": "z", "distance": -10}),
+])
+async def test_cc2_move_sends_method_1027(cc2, monkeypatch, tmp_path, axis, dist, expected):
+    import features
+    monkeypatch.setattr(control, "CONTROL_LOG", tmp_path / "log.json")
+    monkeypatch.setattr(features, "is_enabled", lambda k: True)
+    sent = []
+
+    async def fake_send(cmd, data=None):
+        sent.append((cmd, data))
+        return True
+    monkeypatch.setattr(cc2, "send_cmd", fake_send)
+    assert await pa.move_axis(cc2, axis, dist) is None
+    assert sent == [(1027, expected)]
 
 
 @pytest.mark.parametrize("heater,target,expected", [
