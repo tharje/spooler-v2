@@ -545,3 +545,10 @@ def test_start_print_leveling_sets_both_firmware_flags(printer, monkeypatch, lev
     cfg = sent[0][1]["config"]
     assert cfg["bedlevel_force"] is leveling
     assert cfg["printer_check"] is leveling
+
+
+def test_fan_speeds_are_reported_as_percent():
+    from printers.cc2 import _fan_percents
+    assert _fan_percents({"fan": {"speed": 255}, "aux_fan": {"speed": 0.5}, "box_fan": {"speed": 0}}) == \
+        {"part": 100, "aux": 50, "chamber": 0}
+    assert _fan_percents({"fan": {"speed": 128}, "box_fan": {}}) == {"part": 50}

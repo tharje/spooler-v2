@@ -14,6 +14,7 @@ const CTL_PRESETS = [
   { name: "PETG", nozzle: 240, bed: 80 },
   { name: "ABS",  nozzle: 260, bed: 100 },
 ];
+const CTL_FAN_STEPS = [0, 25, 50, 75, 100];
 
 const _ICON_WRENCH = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>`;
 
@@ -56,6 +57,7 @@ function openControl(id) {
   }
   m.innerHTML = _controlHtml(p);
   m.classList.add("open");
+  _ctlFanRefresh(p);
   clearInterval(_ctlTimer);
   _ctlTimer = setInterval(_controlRefresh, 1000);
 }
@@ -98,6 +100,24 @@ function ctlStep(v) {
   document.querySelectorAll("#modal-control .ctl-step").forEach(b => b.classList.toggle("active", +b.dataset.step === v));
 }
 
+// Highlight the step nearest the speed the printer reports, and show the
+// exact value next to the buttons.
+function _ctlFanRefresh(p) {
+  const speeds = (p.status || {}).FanSpeed || {};
+  document.querySelectorAll("#modal-control .ctl-fan-step").forEach(b => {
+    const cur = speeds[b.dataset.fan];
+    const near = cur == null ? null
+      : CTL_FAN_STEPS.reduce((a, v) => Math.abs(v - cur) < Math.abs(a - cur) ? v : a);
+    const on = near === +b.dataset.pct;
+    b.classList.toggle("btn-primary", on);
+    b.classList.toggle("btn-secondary", !on);
+  });
+  for (const [f, cur] of Object.entries(speeds)) {
+    const o = document.getElementById("ctl-fan-" + f);
+    if (o) o.textContent = cur + "%";
+  }
+}
+
 function _controlRefresh() {
   const p = printers[_ctlPrinterId];
   if (!p) return;
@@ -107,6 +127,7 @@ function _controlRefresh() {
     if (c) c.textContent = Math.round(t[h].cur);
     if (g) g.textContent = t[h].tgt ? Math.round(t[h].tgt) + "°" : "off";
   }
+  _ctlFanRefresh(p);
   const busy = ["printing", "pausing", "paused", "preparing", "stopping"].includes(p.state);
   document.getElementById("ctl-motion")?.classList.toggle("ctl-disabled", busy);
   document.getElementById("ctl-motion-note")?.classList.toggle("hidden", !busy);
@@ -131,10 +152,14 @@ function _controlHtml(p) {
   };
   const fans = [["part", "Part cooling", "fan_part"], ["aux", "Auxiliary", "fan_aux"], ["chamber", "Chamber", "fan_chamber"]]
     .filter(([, , c]) => has(c));
+  // Fixed steps, not a slider: "Off" must always send, even when the panel
+  // does not know the fan's real speed, and scrolling must not start a fan.
   const fanRow = ([f, label]) => `<div class="ctl-fan"><span>${label}</span>
-      <input type="range" min="0" max="100" step="5" value="0" aria-label="${label} speed"
-             oninput="this.nextElementSibling.textContent=this.value+'%'" onchange="ctlSetFan('${f}',this.value)">
-      <output>0%</output></div>`;
+      <div class="ctl-fan-steps" role="group" aria-label="${label} speed">
+        ${CTL_FAN_STEPS.map(v => `<button class="btn btn-sm btn-secondary ctl-fan-step" data-fan="${f}" data-pct="${v}"
+            onclick="ctlSetFan('${f}',${v})">${v ? v + "%" : "Off"}</button>`).join("")}
+      </div>
+      <output id="ctl-fan-${f}"></output></div>`;
   const jog = (a, s, txt, cls = "") => `<button class="ctl-jog ${cls}" onclick="ctlMove('${a}',${s})" aria-label="${a}${s > 0 ? "+" : "−"}">${txt}</button>`;
   const motion = (has("move") || has("home") || has("level")) ? `
     <section class="ctl-section">

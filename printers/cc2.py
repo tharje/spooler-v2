@@ -82,6 +82,20 @@ _SPEED_MODE_FACTOR = {0: 0.5, 1: 1.0, 2: 1.3, 3: 1.6}
 # Nozzle target G28 sets before homing (safe_home_temp in the firmware log)
 _SAFE_HOME_TEMP = 140
 _HOMING_SUBS = {2801, 1045, 1066}
+# Spooler fan name → key under the status "fans" object
+_FAN_KEYS = {"part": "fan", "aux": "aux_fan", "chamber": "box_fan"}
+
+
+def _fan_percents(fans: dict) -> dict:
+    # fans.<name>.speed: PWM 0–255 is what method 1030 takes; values up to 1
+    # are read as a 0–1 fraction (Klipper style) until the scale is confirmed.
+    out = {}
+    for name, key in _FAN_KEYS.items():
+        speed = (fans.get(key) or {}).get("speed")
+        if isinstance(speed, (int, float)) and not isinstance(speed, bool):
+            pct = speed * 100 if speed <= 1 else speed * 100 / 255
+            out[name] = round(max(0, min(100, pct)))
+    return out
 # sub_status values that mean material is (or is about to be) laid down.
 _EXTRUDING_SUBS = {2075, 2401, 2402, 2077, 2501, 2502, 2503, 2504, 2505}
 
@@ -723,7 +737,7 @@ class CC2Connection(PrinterConnection):
     async def set_fan(self, fan: str, percent: int) -> bool:
         # Method 1030 takes PWM 0-255 per fan: "fan" (part cooling), "aux_fan",
         # "box_fan" (chamber; idle only, see limits).
-        key = {"part": "fan", "aux": "aux_fan", "chamber": "box_fan"}.get(fan)
+        key = _FAN_KEYS.get(fan)
         if key is None:
             return False
         return await self.send_cmd(1030, {key: round(max(0, min(100, percent)) * 255 / 100)})
@@ -984,6 +998,7 @@ class CC2Connection(PrinterConnection):
             "TempOfBox":        ztemp.get("temperature", 0),
             "LightStatus":      {"SecondLight": led_on},
             "SpeedFactor":      round(speed_factor * 100),
+            "FanSpeed":         _fan_percents(s.get("fans", {})),
         }
 
         # Expose canvas tray info so the browser can render filament slots
