@@ -78,6 +78,13 @@ def test_apply_cc2_status_maps_homing_and_leveling_sub_statuses(printer, sub_sta
     assert printer.status["PrintInfo"]["Status"] == expected_code
 
 
+@pytest.mark.parametrize("mode,pct", [(0, 50), (1, 100), (2, 130), (3, 160)])
+def test_apply_cc2_status_reads_speed_from_speed_mode(printer, mode, pct):
+    printer._cc2_state["gcode_move"] = {"speed_mode": mode}
+    printer._apply_cc2_status()
+    assert printer.status["SpeedFactor"] == pct
+
+
 @pytest.mark.asyncio
 async def test_error_code_captured_from_api_response_poll_path(printer):
     # Simulates the 5s status poller's method 1003 response, which goes
