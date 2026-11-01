@@ -148,7 +148,7 @@ async def test_unverified_protocol_reports_not_supported(cc2, monkeypatch, tmp_p
     import features
     monkeypatch.setattr(control, "CONTROL_LOG", tmp_path / "log.json")
     monkeypatch.setattr(features, "is_enabled", lambda k: True)
-    assert await pa.set_fan(cc2, "part", 50) == "Not supported by this printer yet"
+    assert await pa.move_axis(cc2, "X", 1) == "Not supported by this printer yet"
     assert "Not supported" in (tmp_path / "log.json").read_text()
 
 
@@ -169,6 +169,31 @@ async def test_cc2_set_temperature_sends_method_1028(cc2, monkeypatch, tmp_path,
     monkeypatch.setattr(cc2, "send_cmd", fake_send)
     assert await pa.set_temperature(cc2, heater, target) is None
     assert sent == [(1028, expected)]
+
+
+@pytest.mark.parametrize("fan,pct,expected", [
+    ("part", 100, {"fan": 255}),
+    ("aux", 50, {"aux_fan": 128}),
+    ("chamber", 0, {"box_fan": 0}),
+])
+async def test_cc2_set_fan_sends_pwm_with_method_1030(cc2, monkeypatch, tmp_path, fan, pct, expected):
+    import features
+    monkeypatch.setattr(control, "CONTROL_LOG", tmp_path / "log.json")
+    monkeypatch.setattr(features, "is_enabled", lambda k: True)
+    sent = []
+
+    async def fake_send(cmd, data=None):
+        sent.append((cmd, data))
+        return True
+    monkeypatch.setattr(cc2, "send_cmd", fake_send)
+    assert await pa.set_fan(cc2, fan, pct) is None
+    assert sent == [(1030, expected)]
+
+
+def test_cc2_chamber_fan_is_locked_while_printing(cc2):
+    cc2.status = {"PrintInfo": {"Status": 13}}
+    assert v(cc2, "set_fan", fan="chamber", percent=50) == "This fan cannot be changed while printing"
+    assert v(cc2, "set_fan", fan="part", percent=50) is None
 
 
 async def test_cc2_temperature_above_limit_is_not_sent(cc2, monkeypatch, tmp_path):

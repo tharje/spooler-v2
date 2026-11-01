@@ -127,7 +127,9 @@ class CC2Connection(PrinterConnection):
     # 1026, 1027) are not wired up until verified on a real printer. Limits are
     # assumed, not taken from Elegoo.
     capabilities = frozenset({"temp_nozzle", "temp_bed", "fan_part", "fan_aux", "fan_chamber", "move", "home", "level"})
-    limits = {"nozzle": {"max": 300, "assumed": True}, "bed": {"max": 100, "assumed": True}}
+    limits = {"nozzle": {"max": 300, "assumed": True}, "bed": {"max": 100, "assumed": True},
+              # Firmware refuses box_fan (error 1009) while printing
+              "fan_chamber": {"idle_only": True}}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, printer_type="cc2", **kwargs)
@@ -236,7 +238,7 @@ class CC2Connection(PrinterConnection):
         if cmd == CMD_LIGHT and data:
             light_on = data.get("LightStatus", {}).get("SecondLight", False)
             payload["params"] = {"brightness": 255 if light_on else 0, "power": 1 if light_on else 0}
-        elif method in (1020, 1026, 1028, 1031, 1044, 1045, 1046, 1047) and data:
+        elif method in (1020, 1026, 1028, 1030, 1031, 1044, 1045, 1046, 1047) and data:
             payload["params"] = data
         try:
             await self._mqtt_client.publish(topic, json.dumps(payload))
@@ -712,6 +714,14 @@ class CC2Connection(PrinterConnection):
         if key is None:
             return False
         return await self.send_cmd(1028, {key: int(round(target))})
+
+    async def set_fan(self, fan: str, percent: int) -> bool:
+        # Method 1030 takes PWM 0-255 per fan: "fan" (part cooling), "aux_fan",
+        # "box_fan" (chamber; idle only, see limits).
+        key = {"part": "fan", "aux": "aux_fan", "chamber": "box_fan"}.get(fan)
+        if key is None:
+            return False
+        return await self.send_cmd(1030, {key: round(max(0, min(100, percent)) * 255 / 100)})
 
     async def heaters_off(self, heaters: list) -> bool:
         # Method 1028 reads "extruder" (M104) and "heater_bed" (M140) independently,

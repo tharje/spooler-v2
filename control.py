@@ -65,6 +65,8 @@ def validate_command(printer, action: str, params: dict, enabled: bool = True) -
         pct = _num(params.get("percent"))
         if pct is None or not 0 <= pct <= 100:
             return "Fan speed must be between 0 and 100 %"
+        if (limits.get(f"fan_{fan}") or {}).get("idle_only") and display_state(printer) in BUSY_STATES:
+            return "This fan cannot be changed while printing"
         return None
 
     if action == "move_axis":
