@@ -81,6 +81,7 @@ _logged_sub_status: set = set()
 _SPEED_MODE_FACTOR = {0: 0.5, 1: 1.0, 2: 1.3, 3: 1.6}
 # Nozzle target G28 sets before homing (safe_home_temp in the firmware log)
 _SAFE_HOME_TEMP = 140
+_HOMING_SUBS = {2801, 1045, 1066}
 # sub_status values that mean material is (or is about to be) laid down.
 _EXTRUDING_SUBS = {2075, 2401, 2402, 2077, 2501, 2502, 2503, 2504, 2505}
 
@@ -689,13 +690,15 @@ class CC2Connection(PrinterConnection):
         # there. Switch it off again once homing is done -- but only if the
         # target is still the one homing set, so a preheat or print started
         # meanwhile is left alone.
-        # A 2802 (homing done) left over from an earlier homing must not count.
+        # Homing shows as 2801 (homing), 1045 (heating nozzle), 1066 (heated);
+        # the closing 2802 is too brief to be polled reliably, so homing is
+        # done once those have been seen and the printer has moved on.
         deadline = time.monotonic() + timeout_s
         started = False
         while time.monotonic() < deadline:
             await asyncio.sleep(poll_s)
             sub = self._cc2_state.get("machine_status", {}).get("sub_status")
-            if sub != 2802:
+            if sub in _HOMING_SUBS:
                 started = True
             elif started:
                 break
