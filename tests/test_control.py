@@ -79,7 +79,37 @@ async def test_cc2_home_sends_method_1026(cc2, monkeypatch, tmp_path):
         return True
     monkeypatch.setattr(cc2, "send_cmd", fake_send)
     assert await pa.home(cc2, "XYZ") is None
-    assert sent == [(1026, {"homed_axes": "xyz"})]
+    assert sent[0] == (1026, {"homed_axes": "xyz"})
+
+
+async def _run_home_cleanup(cc2, monkeypatch, steps, target):
+    """Feed sub_status values to the post-homing watcher; return what it sent."""
+    sent = []
+
+    async def fake_send(cmd, data=None):
+        sent.append((cmd, data))
+        return True
+    monkeypatch.setattr(cc2, "send_cmd", fake_send)
+    it = iter(steps)
+
+    async def fake_sleep(_):
+        sub = next(it, steps[-1])
+        cc2._cc2_state["machine_status"] = {"sub_status": sub}
+        cc2._cc2_state["extruder"] = {"target": target}
+    monkeypatch.setattr("printers.cc2.asyncio.sleep", fake_sleep)
+    await cc2._nozzle_off_after_homing(timeout_s=60)
+    return sent
+
+
+async def test_nozzle_is_switched_off_after_homing(cc2, monkeypatch):
+    # Stale 2802 from an earlier homing first, then this homing runs and ends
+    sent = await _run_home_cleanup(cc2, monkeypatch, [2802, 2801, 1045, 2802], 140)
+    assert sent == [(1028, {"extruder": 0})]
+
+
+async def test_nozzle_heat_set_meanwhile_is_left_alone(cc2, monkeypatch):
+    sent = await _run_home_cleanup(cc2, monkeypatch, [2801, 2802], 210)
+    assert sent == []
 
 
 def test_printer_without_capabilities_refuses_everything():

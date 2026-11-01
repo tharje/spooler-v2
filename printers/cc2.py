@@ -79,6 +79,8 @@ _logged_ms_status: set = set()
 _logged_sub_status: set = set()
 # gcode_move.speed_mode -> speed factor (firmware table behind method 1031)
 _SPEED_MODE_FACTOR = {0: 0.5, 1: 1.0, 2: 1.3, 3: 1.6}
+# Nozzle target G28 sets before homing (safe_home_temp in the firmware log)
+_SAFE_HOME_TEMP = 140
 # sub_status values that mean material is (or is about to be) laid down.
 _EXTRUDING_SUBS = {2075, 2401, 2402, 2077, 2501, 2502, 2503, 2504, 2505}
 
@@ -676,7 +678,29 @@ class CC2Connection(PrinterConnection):
     async def home(self, axes: str = "XYZ") -> bool:
         # Method 1026 always runs a plain G28 (all axes) and only when the
         # printer is idle; control.validate_command refuses partial homing.
-        return await self.send_cmd(1026, {"homed_axes": "xyz"})
+        nozzle_was_off = not (self._cc2_state.get("extruder", {}).get("target") or 0)
+        ok = await self.send_cmd(1026, {"homed_axes": "xyz"})
+        if ok and nozzle_was_off:
+            asyncio.create_task(self._nozzle_off_after_homing())
+        return ok
+
+    async def _nozzle_off_after_homing(self, poll_s: float = 2.0, timeout_s: float = 300.0) -> None:
+        # G28 heats the nozzle to its safe homing temperature and leaves it
+        # there. Switch it off again once homing is done -- but only if the
+        # target is still the one homing set, so a preheat or print started
+        # meanwhile is left alone.
+        # A 2802 (homing done) left over from an earlier homing must not count.
+        deadline = time.monotonic() + timeout_s
+        started = False
+        while time.monotonic() < deadline:
+            await asyncio.sleep(poll_s)
+            sub = self._cc2_state.get("machine_status", {}).get("sub_status")
+            if sub != 2802:
+                started = True
+            elif started:
+                break
+        if self._cc2_state.get("extruder", {}).get("target") == _SAFE_HOME_TEMP:
+            await self.send_cmd(1028, {"extruder": 0})
 
     async def heaters_off(self, heaters: list) -> bool:
         # Method 1028 reads "extruder" (M104) and "heater_bed" (M140) independently,
