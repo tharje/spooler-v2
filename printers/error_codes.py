@@ -17,6 +17,9 @@ Sources:
             itself names one.
   [sdk]     Elegoo's elegoo-link SDK (the library ElegooSlicer uses), which
             maps 109 to "filament runout".
+  [bin]     the CC2's own elegoo_printer binary (firmware 02.01.01.07, read
+            with objdump and Ghidra) together with the printer's logs from a
+            real failure. Read only; nothing on the printer was changed.
 
 Fields: category (frontend groups/labels by this), message (short, factual),
 action (optional recommended handling, only when a source names one).
@@ -42,7 +45,27 @@ CC2_ERROR_CODES = {
     # ── Leveling ─────────────────────────────────────────────────────────────
     # Verified 2026-10-02 against a real CC2's touchscreen (Tharje); the
     # constant is BED_MESH_FAIL in [fw].
-    704: {"category": "leveling", "message": "Leveling failed. Please try again."},                                    # [screen] [fw]
+    #
+    # 704 is a catch-all [bin]: BedMeshCalibrate::cmd_BED_MESH_CALIBRATE wraps
+    # the probing in try/catch and on any exception calls
+    # ProbeManager::notify_failed() and respond_ecode("", 704, level 1). The real
+    # cause is the error logged just before it in /opt/usr/logs/elegoo.log.
+    # Seen on a real CC2 (2026-11-09): the load cell under the bed drifted
+    # (tare std up to 17,500 counts against static_std 1000, baseline jump of
+    # about 1.2 M counts = ~48 kg at counts_per_gram 25). The firmware tares
+    # before every tap (LoadCellEndstop::pause_and_tare) and arms a window of
+    # tare ± safety_limit (1200 g = 30,000 counts, _set_endstop_range); the
+    # drift left that window before the nozzle touched (803
+    # LOAD_CELL_ERROR_SAFETY_LIMIT), tap analysis failed, and after 20 retries
+    # "Probe samples exceed samples_tolerance" ended in 704. The same file
+    # leveled fine 20 minutes later. Likely causes, not yet confirmed: something
+    # touching the bed or its frame (e.g. a PETG string from the nozzle wipe),
+    # a poor contact in the load-cell cable that flexes as the bed moves in Z,
+    # or thermal drift right after heating the bed from cold.
+    704: {"category": "leveling", "message": "Leveling failed. Please try again.",
+          "action": "The bed's force sensor gave unstable readings. Check that nothing touches the bed "
+                    "or its frame (e.g. filament strings from the nozzle wipe at the back), check the "
+                    "sensor cable under the bed, and let the bed warm up a few minutes before retrying."},  # [screen] [fw] [bin]
     # ── Hardware connections / covers ────────────────────────────────────────
     707: {"category": "hardware", "message": "Toolhead front cover (fan cover) has come off."},                        # [fw]
     801: {"category": "connection", "message": "Lost communication with the extruder/toolhead board."},               # [fw]

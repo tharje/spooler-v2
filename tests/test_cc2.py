@@ -433,8 +433,10 @@ def test_standalone_fault_noticed_while_idle(printer, quiet_emit):
     printer._check_standalone_fault("idle")
     assert printer.standalone_fault["code"] == "704"
     assert printer.standalone_fault["message"] == "Leveling failed. Please try again."
+    from printers.error_codes import lookup
     assert quiet_emit == [("printer_fault", "Test CC2 — Printer fault",
-                            "Leveling failed. Please try again. (code 704)", {"category": "leveling", "code": "704"})]
+                            "Leveling failed. Please try again. (code 704) " + lookup(704)["action"],
+                            {"category": "leveling", "code": "704"})]
 
 
 def test_standalone_fault_does_not_renotify_the_same_code(printer, quiet_emit):
