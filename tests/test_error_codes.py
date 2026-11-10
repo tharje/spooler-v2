@@ -35,16 +35,34 @@ def test_api_result_codes_are_not_printer_faults():
 
 
 def test_cc1_lookup_uses_the_cc1_table_not_cc2():
-    # 302 (X-axis homing) exists for CC1 but not CC2 -- picking the wrong
-    # table would silently return None instead of the real entry.
-    assert lookup(302, "cc1")["category"] == "motion"
-    assert lookup(302, "cc2") is None
+    # 402 (Y-axis accelerometer) exists for CC1 but not CC2 -- CC2 has a single
+    # combined 401. Picking the wrong table would silently return None instead
+    # of the real entry. (302/303 used to be the example here, but the .13
+    # firmware shows CC2 carries X/Y homing codes too, so they're in both now.)
+    assert lookup(402, "cc1")["category"] == "sensor"
+    assert lookup(402, "cc2") is None
+    # 302 X-axis homing is now known for CC2 as well (from the .13 screen).
+    assert lookup(302, "cc2")["category"] == "motion"
 
 
 def test_cc1_accelerometer_codes_split_by_axis():
     x, y = lookup(401, "cc1"), lookup(402, "cc1")
     assert x["category"] == y["category"] == "sensor"
     assert x["message"] != y["message"]  # same fault, but each names its axis
+
+
+def test_gui_sourced_codes_are_present():
+    # Codes added 2026-11-10 from the .13 touchscreen binary (every code its
+    # error table carries). A representative spread across the new groups.
+    from printers.error_codes import CC2_ERROR_CODES
+    for code in (105, 106, 107, 110, 205, 206, 302, 303, 502, 605, 708, 709,
+                 901, 903, 904, 905, 906, 907, 1102, 1202, 1205, 1209, 1266,
+                 1267, 1301, 1302, 2002, 2004):
+        assert code in CC2_ERROR_CODES, code
+        assert CC2_ERROR_CODES[code]["category"], code
+        assert CC2_ERROR_CODES[code]["message"], code
+    # The catalogue grew well past the old ~30.
+    assert len(CC2_ERROR_CODES) >= 70
 
 
 def test_every_cc1_entry_has_category_and_message():
