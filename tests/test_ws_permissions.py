@@ -128,3 +128,11 @@ def test_roles_with_settings_manage_get_printers_manage_once(tmp_path):
     users.update_role("helper", permissions=["view", "settings.manage"])
     users.ensure_initialised()
     assert "printers.manage" not in users._load()["roles"]["helper"]["permissions"]
+
+
+@pytest.mark.parametrize("action", ["set_temperature", "set_fan", "move_axis", "home", "auto_level", "heaters_off"])
+async def test_advanced_control_needs_its_own_permission(setup, action):
+    assert ws_handler.ACTION_PERMISSIONS[action] == "printer.advanced"
+    assert (await _do("kid", action=action)).denied()          # operator: printer.control only
+    users.update_role("operator", permissions=["view", "printer.control", "printer.advanced"])
+    assert not (await _do("kid", action=action)).denied()

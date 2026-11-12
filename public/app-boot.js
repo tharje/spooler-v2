@@ -111,6 +111,8 @@ if (new URLSearchParams(location.search).get("demo") === "states") {
       if (spoolman_url) document.getElementById("btn-spoolman-ui").href = spoolman_url;
       window.SPOOLER_PERMS = permissions || [];
       document.body.classList.toggle("no-printers-manage", !window.SPOOLER_PERMS.includes("printers.manage"));
+      // Printer cards may have rendered before the permissions arrived (advanced-control button).
+      if (typeof renderPrinter === "function") Object.values(printers).forEach(p => renderPrinter(p));
       window.SPOOLER_USER = user || "";
       if (window.SPOOLER_PERMS.includes("users.manage")) {
         const b = document.getElementById("btn-settings-goto-users");

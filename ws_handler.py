@@ -43,6 +43,10 @@ ACTION_PERMISSIONS = {
     "link_tray": "filament.manage",
     "start_print": "print.start",
     "delete_file": "print.queue", "delete_files": "print.queue",
+    # T12 advanced control
+    "set_temperature": "printer.advanced", "set_fan": "printer.advanced",
+    "move_axis": "printer.advanced", "home": "printer.advanced",
+    "auto_level": "printer.advanced", "heaters_off": "printer.advanced",
 }
 DEFAULT_ACTION_PERMISSION = "printer.control"
 from discovery import discover_cc2_printers, discover_printers

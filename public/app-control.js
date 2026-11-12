@@ -20,6 +20,7 @@ const _ICON_WRENCH = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 
 function controlAvailable(printer) {
   return !!(features.advanced_control && features.advanced_control.enabled)
+    && (window.SPOOLER_PERMS || []).includes("printer.advanced")
     && (printer.capabilities || []).length > 0;
 }
 
