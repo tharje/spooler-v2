@@ -22,6 +22,29 @@ def _ws_can_see(ws, printer_id: str) -> bool:
     if not AUTH_ENABLED or not user:
         return True
     return users.can_see_printer(user, printer_id)
+
+
+def _ws_has(ws, perm: str) -> bool:
+    """Same rule as auth.has_permission: login off or no bound identity → allowed."""
+    user = _ws_user(ws)
+    if not AUTH_ENABLED or not user:
+        return True
+    return users.has_permission(user, perm)
+
+
+# Permission each browser action needs. Anything not listed (including
+# actions added later) needs printer.control, so a new action is never open
+# to a viewer by accident.
+ACTION_PERMISSIONS = {
+    "list_printers": "view", "status": "view", "camera_on": "view",
+    "list_files": "view", "get_file_info": "view",
+    "discover": "settings.manage", "add_printer": "settings.manage",
+    "remove_printer": "settings.manage", "update_printer": "settings.manage",
+    "link_tray": "filament.manage",
+    "start_print": "print.start",
+    "delete_file": "print.queue", "delete_files": "print.queue",
+}
+DEFAULT_ACTION_PERMISSION = "printer.control"
 from discovery import discover_cc2_printers, discover_printers
 from persistence import save_printers, save_tray_map
 from printers import PRINTER_TYPES, make_printer
@@ -137,6 +160,11 @@ async def handle_browser_message(ws, raw: str) -> None:
     printer    = state.printers.get(printer_id)
     loop       = asyncio.get_running_loop()
 
+    need = ACTION_PERMISSIONS.get(action, DEFAULT_ACTION_PERMISSION)
+    if not _ws_has(ws, need):
+        await ws.send(json.dumps({"type": "error", "message": "You don't have permission to do that."}))
+        return
+
     if action == "list_printers":
         for p in state.printers.values():
             if _ws_can_see(ws, p.id):
@@ -238,7 +266,7 @@ async def handle_browser_message(ws, raw: str) -> None:
         pid      = printer_id
         tray_id  = msg.get("tray_id")
         spool_id = msg.get("spool_id")  # int or null
-        if pid is None or tray_id is None:
+        if pid is None or tray_id is None or not _ws_can_see(ws, pid):
             return
         key = str(tray_id)
         if pid not in state.tray_map:
