@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css?v=89" />
+  <link rel="stylesheet" href="style.css?v=90" />
 </head>
 <body>
   <header>
@@ -87,6 +87,12 @@
       <span>Settings</span>
     </button>
     <div class="sidenav-spacer"></div>
+    <div id="signed-in-as" class="sidenav-item sidenav-user" title="Signed in" style="display:none">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+      </svg>
+      <span id="signed-in-as-name"></span>
+    </div>
     <button id="btn-signout-nav" class="sidenav-item sidenav-item-signout" title="Sign out">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
@@ -945,7 +951,7 @@
   <script src="app-service.js?v=92"></script>
   <script src="app-queue.js?v=2"></script>
   <script src="app-users.js?v=1"></script>
-  <script src="app-boot.js?v=85"></script>
+  <script src="app-boot.js?v=86"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});

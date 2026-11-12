@@ -2043,3 +2043,8 @@ main {
     margin-bottom: 8px;
   }
 }
+
+/* "Signed in as" label in the side nav (not a button) */
+.sidenav-user { cursor: default; color: var(--text-muted); opacity: .9; }
+.sidenav-user:hover { background: none; }
+.sidenav-user #signed-in-as-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

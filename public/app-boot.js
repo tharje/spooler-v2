@@ -107,12 +107,18 @@ if (new URLSearchParams(location.search).get("demo") === "states") {
 } else {
   fetch("/api/auth-status")
     .then(r => r.json())
-    .then(({ spoolman_url, permissions }) => {
+    .then(({ spoolman_url, permissions, user }) => {
       if (spoolman_url) document.getElementById("btn-spoolman-ui").href = spoolman_url;
       window.SPOOLER_PERMS = permissions || [];
+      window.SPOOLER_USER = user || "";
       if (window.SPOOLER_PERMS.includes("users.manage")) {
         const b = document.getElementById("btn-settings-goto-users");
         if (b) b.style.display = "";
+      }
+      if (user) {
+        const nameEl = document.getElementById("signed-in-as-name");
+        const wrap = document.getElementById("signed-in-as");
+        if (nameEl && wrap) { nameEl.textContent = user; wrap.style.display = ""; }
       }
     })
     .catch(() => {});
