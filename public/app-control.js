@@ -225,7 +225,7 @@ function _controlHtml(p) {
       <output id="ctl-fan-${f}">${cur}%</output></div>`;
   };
   const jog = (a, s, txt, cls = "") => `<button class="ctl-jog ${cls}" onclick="ctlMove('${a}',${s})" aria-label="${a}${s > 0 ? "+" : "−"}">${txt}</button>`;
-  const motion = (has("move") || has("home") || has("level")) ? `
+  const motion = (has("move") || has("home")) ? `
     <section class="ctl-section">
       <h4>Motion</h4>
       <p id="ctl-motion-note" class="ctl-note hidden">Axes are locked while the printer is printing or paused.</p>
@@ -242,7 +242,6 @@ function _controlHtml(p) {
           </div>
           <div class="ctl-btnrow">
             ${has("home") ? `<button class="btn btn-sm btn-secondary" onclick="ctlHome('XYZ')">Home all</button>` : ""}
-            ${has("level") ? `<button class="btn btn-sm btn-secondary" onclick="ctlLevel()">Auto leveling</button>` : ""}
           </div>
         </div>
       </div>
@@ -260,9 +259,10 @@ function _controlHtml(p) {
       <button class="btn btn-danger ctl-alloff" onclick="ctlAllOff()">Turn off all heating</button></section>` : ""}
     ${fans.length ? `<section class="ctl-section"><h4>Fans</h4>${fans.map(fanRow).join("")}</section>` : ""}
     ${motion}
-    ${(has("pid") || has("shaper")) ? `<section class="ctl-section">
+    ${(has("level") || has("pid") || has("shaper")) ? `<section class="ctl-section">
       <h4>Calibration</h4>
       <div class="ctl-btnrow">
+        ${has("level") ? `<button class="btn btn-sm btn-secondary" onclick="ctlLevel()">Auto leveling</button>` : ""}
         ${has("pid") ? `<span class="ctl-pid"><button class="btn btn-sm btn-secondary" onclick="ctlPid()">PID calibrate nozzle</button>
           <input type="number" id="ctl-pid-target" min="150" max="280" step="5" value="220" aria-label="PID target temperature"> °C</span>` : ""}
         ${has("shaper") ? `<button class="btn btn-sm btn-secondary" onclick="ctlShaper()">Resonance test (input shaper)</button>` : ""}
