@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css?v=89" />
+  <link rel="stylesheet" href="style.css?v=91" />
 </head>
 <body>
   <header>
@@ -87,6 +87,12 @@
       <span>Settings</span>
     </button>
     <div class="sidenav-spacer"></div>
+    <div id="signed-in-as" class="sidenav-item sidenav-user" title="Signed in" style="display:none">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+      </svg>
+      <span id="signed-in-as-name"></span>
+    </div>
     <button id="btn-signout-nav" class="sidenav-item sidenav-item-signout" title="Sign out">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
@@ -645,13 +651,21 @@
           <h3>Notifications</h3>
         </div>
         <div class="notif-list">
-          <details class="notif-group">
+          <details class="notif-group" id="notif-channels-group">
             <summary>
-              <span class="notif-group-text"><strong>Notification channels</strong><small>Browser push, ntfy, Telegram, Discord, webhook</small></span>
+              <span class="notif-group-text"><strong>Shared channels</strong><small>Browser push, ntfy, Telegram, Discord, webhook</small></span>
               <span id="notif-channels-summary" class="notif-group-pill"></span>
               <svg class="notif-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
             </summary>
             <div id="notif-channels"></div>
+          </details>
+          <details class="notif-group" id="notif-mychannels-group" style="display:none">
+            <summary>
+              <span class="notif-group-text"><strong>My channels</strong><small>Your own ntfy, Telegram, Discord or webhook</small></span>
+              <span id="notif-mychannels-summary" class="notif-group-pill"></span>
+              <svg class="notif-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+            </summary>
+            <div id="notif-mychannels"></div>
           </details>
           <div class="feature-group-title">Events</div>
           <details class="notif-group notif-group-events" id="notif-evgroup-progress">
@@ -755,7 +769,7 @@
               <div id="notif-extra-status"></div>
             </div>
           </details>
-          <p class="report-desc">Events are sent to every channel that is switched on above.</p>
+          <p class="report-desc" id="notif-events-note">Events are sent to every channel that is switched on above.</p>
         </div>
         <div class="modal-actions">
           <button id="btn-notif-save" class="btn btn-primary">Save</button>
@@ -937,7 +951,7 @@
   <script src="/config.js"></script>
   <script src="app-core.js?v=90"></script>
   <script src="app-render.js?v=88"></script>
-  <script src="app-settings.js?v=88"></script>
+  <script src="app-settings.js?v=91"></script>
   <script src="app-files.js?v=87"></script>
   <script src="app-integrations.js?v=92"></script>
   <script src="app-stats.js?v=86"></script>
@@ -945,7 +959,7 @@
   <script src="app-service.js?v=92"></script>
   <script src="app-queue.js?v=2"></script>
   <script src="app-users.js?v=1"></script>
-  <script src="app-boot.js?v=85"></script>
+  <script src="app-boot.js?v=87"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});

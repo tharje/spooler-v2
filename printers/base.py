@@ -683,8 +683,7 @@ class PrinterConnection:
         if not is_enabled("notifications"):
             return
         s = load_notif_settings()
-        if not s:
-            return
+        wanted = notifylib.key_wanted
         ns = self._notif_state
         pi = self._decoded_printinfo()
         status      = pi.get("Status", 0)
@@ -705,7 +704,7 @@ class PrinterConnection:
         _print_ended = (is_done or is_idle) and ns.get("in_print", False)
         if is_done or is_idle:
             ns["in_print"] = False
-        if s.get("finished", {}).get("enabled") and _print_ended:
+        if _print_ended and wanted("finished"):
             fname = pi.get("Filename", "")
             if status == 8:
                 self._emit("print_cancelled", f"{self.name} — Print cancelled",
@@ -714,8 +713,8 @@ class PrinterConnection:
                 self._emit("print_complete", f"{self.name} — Print complete",
                            f"{fname} is done." if fname else "Your print is complete.", extra={"filename": fname})
 
-        if s.get("nozzle_idle", {}).get("enabled") and is_idle:
-            thr = s["nozzle_idle"].get("threshold", 50)
+        if is_idle and wanted("nozzle_idle"):
+            thr = s.get("nozzle_idle", {}).get("threshold", 50)
             if nozzle > thr and not ns["nozzle_idle_fired"]:
                 self._emit("nozzle_hot_idle", f"{self.name} — Nozzle hot", f"Nozzle is {round(nozzle)}°C while idle.")
                 ns["nozzle_idle_fired"] = True
@@ -731,8 +730,8 @@ class PrinterConnection:
         if not ns.get("in_print"):
             ns["layer_fired"] = False
             ns["layer_seen"] = None
-        elif s.get("layer", {}).get("enabled") and is_printing:
-            target = s["layer"].get("layer", 1)
+        elif is_printing and wanted("layer"):
+            target = s.get("layer", {}).get("layer", 1)
             if layer >= target and not ns["layer_fired"]:
                 # Spooler started in the middle of a print that is already past the layer: too late to announce it.
                 if ns["layer_seen"] is not None or layer <= target:
@@ -740,8 +739,8 @@ class PrinterConnection:
                 ns["layer_fired"] = True
             ns["layer_seen"] = layer
 
-        if s.get("nozzle_printing", {}).get("enabled") and is_printing:
-            thr = s["nozzle_printing"].get("threshold", 260)
+        if is_printing and wanted("nozzle_printing"):
+            thr = s.get("nozzle_printing", {}).get("threshold", 260)
             if nozzle > thr and not ns["nozzle_hot_fired"]:
                 self._emit("nozzle_overheat", f"{self.name} — Nozzle overheat", f"Nozzle is {round(nozzle)}°C during print.", priority="high")
                 ns["nozzle_hot_fired"] = True
