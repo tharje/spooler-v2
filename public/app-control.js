@@ -111,11 +111,17 @@ function ctlLevel() {
   if (confirm("Start auto leveling? The printer will heat up and probe the bed.")) _ctlSend("auto_level", {});
 }
 function ctlAllOff() { _ctlSend("heaters_off", {}); }
+// PID: the button opens a small chooser for the target; Start runs it.
+function ctlPidOpen(show = true) {
+  const box = document.getElementById("ctl-pid-box");
+  if (box) box.hidden = !show;
+  if (show) document.getElementById("ctl-pid-target")?.focus();
+}
 function ctlPid() {
   const t = Math.round(Number(document.getElementById("ctl-pid-target")?.value || 220));
   if (!Number.isFinite(t) || t < 150 || t > 280) { toast("PID target must be 150–280 °C", true); return; }
-  if (confirm(`Run PID calibration of the nozzle at ${t} °C? It heats the nozzle and takes a few minutes. Don't leave the printer unattended.`))
-    _ctlSend("pid_calibrate", { target: t });
+  _ctlSend("pid_calibrate", { target: t });
+  ctlPidOpen(false);
 }
 function ctlShaper() {
   if (confirm("Run the resonance test (input shaper)? The printer homes and shakes the toolhead and bed for a few minutes. Keep the bed clear."))
@@ -263,10 +269,18 @@ function _controlHtml(p) {
       <h4>Calibration</h4>
       <div class="ctl-btnrow">
         ${has("level") ? `<button class="btn btn-sm btn-secondary" onclick="ctlLevel()">Auto leveling</button>` : ""}
-        ${has("pid") ? `<span class="ctl-pid"><button class="btn btn-sm btn-secondary" onclick="ctlPid()">PID calibrate nozzle</button>
-          <input type="number" id="ctl-pid-target" min="150" max="280" step="5" value="220" aria-label="PID target temperature"> °C</span>` : ""}
+        ${has("pid") ? `<button class="btn btn-sm btn-secondary" onclick="ctlPidOpen()">PID calibrate nozzle</button>` : ""}
         ${has("shaper") ? `<button class="btn btn-sm btn-secondary" onclick="ctlShaper()">Resonance test (input shaper)</button>` : ""}
       </div>
+      ${has("pid") ? `<div id="ctl-pid-box" class="ctl-pid-box" hidden>
+        <p class="ctl-note">Calibrate at the temperature you print at most (e.g. PLA 210–220 °C, PETG 240–255 °C). The nozzle heats up and the run takes a few minutes; stay with the printer.</p>
+        <div class="ctl-pid">
+          <label>Target <input type="number" id="ctl-pid-target" min="150" max="280" step="5" value="220" aria-label="PID target temperature"
+                 onkeydown="if (event.key === 'Enter') ctlPid()"> °C</label>
+          <button class="btn btn-sm btn-primary" onclick="ctlPid()">Start</button>
+          <button class="btn btn-sm btn-secondary" onclick="ctlPidOpen(false)">Cancel</button>
+        </div>
+      </div>` : ""}
     </section>` : ""}
     <section class="ctl-section">
       <details class="ctl-log" ontoggle="if (this.open) ctlLoadLog()">
