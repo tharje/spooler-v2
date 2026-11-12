@@ -436,7 +436,9 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
         if not self._check_auth():
             return
 
-        if self.path == "/api/features":
+        if self.path == "/api/my-notifications":
+            self._handle_my_notifications_get()
+        elif self.path == "/api/features":
             self._json(describe_all_features())
         elif self.path.split("?")[0] == "/api/diagnostics":
             self._handle_diagnostics()
@@ -659,7 +661,11 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
         elif self.path == "/api/push-unsubscribe":
             self._handle_push_unsubscribe()
         elif self.path == "/api/notification-settings":
-            self._handle_notif_settings()
+            # The shared settings (thresholds, photos, shared channels' events).
+            if self._require("settings.manage"):
+                self._handle_notif_settings()
+        elif self.path == "/api/my-notifications":
+            self._handle_my_notifications_set()
         elif self.path == "/api/push-test":
             self._handle_push_test()
         elif self.path in ("/api/service/tasks", "/api/service/log", "/api/service/hours"):

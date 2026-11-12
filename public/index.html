@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css?v=90" />
+  <link rel="stylesheet" href="style.css?v=91" />
 </head>
 <body>
   <header>
@@ -651,7 +651,7 @@
           <h3>Notifications</h3>
         </div>
         <div class="notif-list">
-          <details class="notif-group">
+          <details class="notif-group" id="notif-channels-group">
             <summary>
               <span class="notif-group-text"><strong>Notification channels</strong><small>Browser push, ntfy, Telegram, Discord, webhook</small></span>
               <span id="notif-channels-summary" class="notif-group-pill"></span>
@@ -761,7 +761,7 @@
               <div id="notif-extra-status"></div>
             </div>
           </details>
-          <p class="report-desc">Events are sent to every channel that is switched on above.</p>
+          <p class="report-desc" id="notif-events-note">Events are sent to every channel that is switched on above.</p>
         </div>
         <div class="modal-actions">
           <button id="btn-notif-save" class="btn btn-primary">Save</button>
@@ -943,7 +943,7 @@
   <script src="/config.js"></script>
   <script src="app-core.js?v=90"></script>
   <script src="app-render.js?v=88"></script>
-  <script src="app-settings.js?v=88"></script>
+  <script src="app-settings.js?v=90"></script>
   <script src="app-files.js?v=87"></script>
   <script src="app-integrations.js?v=92"></script>
   <script src="app-stats.js?v=86"></script>
@@ -951,7 +951,7 @@
   <script src="app-service.js?v=92"></script>
   <script src="app-queue.js?v=2"></script>
   <script src="app-users.js?v=1"></script>
-  <script src="app-boot.js?v=86"></script>
+  <script src="app-boot.js?v=87"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});

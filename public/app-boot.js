@@ -139,13 +139,16 @@ if (new URLSearchParams(location.search).get("demo") === "states") {
 (async () => {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
   try {
-    const resp = await fetch("/api/notification-settings");
+    const resp = await fetch("/api/my-notifications");
     if (!resp.ok) return;
-    const s = await resp.json();
-    if (!s || !Object.values(s).some(v => v?.enabled)) return;
+    const { events } = await resp.json();
+    if (!events || !Object.values(events).some(Boolean)) return;
     const reg = await navigator.serviceWorker.ready;
     const sub = await reg.pushManager.getSubscription();
-    if (!sub) await _subscribePush();
+    if (!sub) { await _subscribePush(); return; }
+    // Re-register the existing one so it belongs to whoever is signed in on this device now.
+    await fetch("/api/push-subscribe", { method: "POST", headers: { "Content-Type": "application/json" },
+                                         body: JSON.stringify(sub.toJSON()) });
   } catch (_) {}
 })();
 

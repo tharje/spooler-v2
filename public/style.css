@@ -2048,3 +2048,7 @@ main {
 .sidenav-user { cursor: default; color: var(--text-muted); opacity: .9; }
 .sidenav-user:hover { background: none; }
 .sidenav-user #signed-in-as-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Notifications page for users without settings.manage: only their own on/off choices */
+#settings-notifications.notif-personal #notif-channels-group,
+#settings-notifications.notif-personal .notif-param { display: none !important; }

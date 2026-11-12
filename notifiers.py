@@ -163,8 +163,10 @@ def _webhook_send(n) -> None:
 # ── Web Push (the pre-existing channel) ──────────────────────────────────────
 
 def _webpush_send(n) -> None:
+    import notify
     import push
-    push.send_push_all(n.title, n.body)
+    key = None if n.event == "test" else notify.EVENT_SETTING.get(n.event)
+    push.send_push_all(n.title, n.body, key=key, printer_id=n.printer_id)
 
 
 # key -> (feature key, config keys that must be set, sender)

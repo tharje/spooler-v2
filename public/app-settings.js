@@ -335,11 +335,30 @@ function _collectExtraNotifEvents() {
   return out;
 }
 
-// Notifications sub-page UI
+// Notifications sub-page UI. Admins (settings.manage) edit the shared setup:
+// channels, thresholds, photos and the events those channels get; their own
+// devices follow it. Everyone else picks just which events reach their own
+// devices (browser push), saved per user.
+const _canManageNotif = () => (window.SPOOLER_PERMS || []).includes("settings.manage");
+
+// Setting key behind each switch on the page.
+const _notifEventKeys = () => ["finished", "layer", "nozzle_idle", "nozzle_printing", "spool_low",
+                               ..._EXTRA_NOTIF_EVENTS.map(ev => ev.key)];
+
 async function _populateNotifForm() {
-  await _reloadChannels(false);
-  const resp = await fetch("/api/notification-settings").catch(() => null);
-  const s = resp?.ok ? await resp.json().catch(() => ({})) : {};
+  const admin = _canManageNotif();
+  _settingsNotifPage?.classList.toggle("notif-personal", !admin);
+  const note = document.getElementById("notif-events-note");
+  if (note) note.textContent = admin
+    ? "Events are sent to every channel that is switched on above, and to your own devices."
+    : "These choices are for your own devices (browser push). Thresholds and shared channels like Telegram are set by an admin. You only hear about printers you have access to.";
+  if (admin) await _reloadChannels(false);
+  const resp = await fetch(admin ? "/api/notification-settings" : "/api/my-notifications").catch(() => null);
+  let s = resp?.ok ? await resp.json().catch(() => ({})) : {};
+  if (!admin) {
+    // Shape the per-user on/off choices like the shared settings so one form fills both.
+    s = Object.fromEntries(Object.entries(s.events || {}).map(([k, on]) => [k, { enabled: on }]));
+  }
   const set = (id, val) => {
     const el = document.getElementById(id);
     if (el) el[typeof val === "boolean" ? "checked" : "value"] = val;
@@ -504,6 +523,7 @@ document.getElementById("btn-notif-save")?.addEventListener("click", async () =>
     spool_low:       { enabled: gb("notif-spool-low-on"),       threshold: gv("notif-spool-low-threshold") },
     ..._collectExtraNotifEvents(),
   };
+  const admin = _canManageNotif();
   // Browser push needs this browser's permission. Other channels (ntfy,
   // Telegram, ...) don't, so a refusal here must not block saving.
   const anyEnabled = Object.values(s).some(v => v.enabled);
@@ -520,12 +540,25 @@ document.getElementById("btn-notif-save")?.addEventListener("click", async () =>
       await _unsubscribePush();
     }
   }
-  if (!await _saveAllChannelFields()) return;
-  const r = await fetch("/api/notification-settings", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(s),
-  });
+  let r;
+  if (admin) {
+    if (!await _saveAllChannelFields()) return;
+    r = await fetch("/api/notification-settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(s),
+    });
+    // An admin's own devices follow the shared setup.
+    if (r.ok) await fetch("/api/my-notifications", { method: "POST", headers: { "Content-Type": "application/json" },
+                                                     body: JSON.stringify({ events: null }) }).catch(() => {});
+  } else {
+    const events = Object.fromEntries(_notifEventKeys().map(k => [k, !!s[k]?.enabled]));
+    r = await fetch("/api/my-notifications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ events }),
+    });
+  }
   if (r.ok) {
     toast("Notification settings saved");
     _backToSettingsMenu();

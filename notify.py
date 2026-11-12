@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 import notifiers
+import push
 from features import is_enabled
 from push import load_notif_settings
 
@@ -70,10 +71,22 @@ def event_settings(event: str) -> dict:
     return (load_notif_settings().get(key) or {}) if key else {}
 
 
+def shared_on(event: str) -> bool:
+    """Switched on in the shared settings, which drive the shared channels
+    (ntfy, Telegram, Discord, webhook) and devices of users without own choices."""
+    return bool(event_settings(event).get("enabled"))
+
+
+def key_wanted(key: str) -> bool:
+    """Some recipient wants this setting key: the shared settings or any user's own choices."""
+    return bool((load_notif_settings().get(key) or {}).get("enabled")) or push.any_user_wants(key)
+
+
 def is_event_on(event: str) -> bool:
     """Cheap pre-check (before a camera picture is taken): master switch on and
-    this event switched on. Doesn't touch the spam guard."""
-    return is_enabled("notifications") and bool(event_settings(event).get("enabled"))
+    someone wants this event. Doesn't touch the spam guard."""
+    key = EVENT_SETTING.get(event)
+    return is_enabled("notifications") and bool(key) and key_wanted(key)
 
 
 def wants_image(event: str) -> bool:
@@ -83,7 +96,7 @@ def wants_image(event: str) -> bool:
 def should_send(n: Notification) -> bool:
     if not is_enabled("notifications"):
         return False
-    if n.event != "test" and not event_settings(n.event).get("enabled"):
+    if n.event != "test" and not is_event_on(n.event):
         return False
     if n.event not in ALWAYS_SEND:
         key = (n.printer_id, n.event)
@@ -112,6 +125,9 @@ def notify(n: Notification) -> bool:
     if not should_send(n):
         return False
     channels = notifiers.active_channels()
+    if n.event != "test" and not shared_on(n.event):
+        # Only some users' own choices want it: just their devices.
+        channels = [c for c in channels if c == "webpush"]
     if not channels:
         return False
     print(f"[Notify] {n.event} ({n.printer_name or n.printer_id}) -> {', '.join(channels)}")
