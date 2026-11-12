@@ -182,7 +182,7 @@ class PrinterConnection:
     async def home(self, axes: str = "XYZ") -> bool:
         return False
 
-    async def auto_level(self) -> bool:
+    async def auto_level(self, bed_temp: int | None = None) -> bool:
         return False
 
     async def disable_steppers(self) -> bool:

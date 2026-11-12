@@ -2085,6 +2085,9 @@ main {
 /* .modal-box input gives every input padding, a border and a background; on a
    range input the padding pushes the thumb in, so 0 % looked like ~5 %. */
 .modal-box input.ctl-fan-slider { padding: 0; border: 0; background: none; width: auto; }
+.ctl-level { display: inline-flex; align-items: center; gap: 8px; }
+.ctl-level-bed { display: inline-flex !important; flex-direction: row !important; align-items: center; gap: 4px !important; font-size: 12.5px !important; }
+.modal-box .ctl-level-bed input { width: 60px; padding: 5px 6px; font-size: 13px; }
 .ctl-fan-num { width: 64px !important; padding: 6px 8px !important; font-size: 13px !important; }
 .ctl-fan output { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-dim-strong); }
 .ctl-motion { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; transition: opacity .15s; }

@@ -108,7 +108,11 @@ function ctlFanOff(fan) { ctlSetFan(fan, 0); }
 function ctlMove(axis, sign) { _ctlSend("move_axis", { axis, distance: sign * _ctlStep }); }
 function ctlHome(axes) { _ctlSend("home", { axes }); }
 function ctlLevel() {
-  if (confirm("Start auto leveling? The printer will heat up and probe the bed.")) _ctlSend("auto_level", {});
+  const el = document.getElementById("ctl-level-bed");
+  const bed = Math.round(Number(el?.value || 60));
+  if (!Number.isFinite(bed) || bed < 40 || bed > 100) { toast("Bed temperature for leveling must be 40–100 °C", true); return; }
+  if (confirm(`Start auto leveling with the bed at ${bed} °C? The printer heats up, cleans the nozzle and probes the bed (several minutes).`))
+    _ctlSend("auto_level", { bed_temp: bed });
 }
 function ctlAllOff() { _ctlSend("heaters_off", {}); }
 function ctlMotorsOff() {
@@ -201,7 +205,8 @@ function _controlHtml(p) {
           </div>
           <div class="ctl-btnrow">
             ${has("home") ? `<button class="btn btn-sm btn-secondary" onclick="ctlHome('XYZ')">Home all</button>` : ""}
-            ${has("level") ? `<button class="btn btn-sm btn-secondary" onclick="ctlLevel()">Auto leveling</button>` : ""}
+            ${has("level") ? `<span class="ctl-level"><button class="btn btn-sm btn-secondary" onclick="ctlLevel()">Auto leveling</button>
+              <label class="ctl-level-bed">Bed <input type="number" id="ctl-level-bed" min="40" max="100" step="5" value="60" aria-label="Bed temperature for leveling"> °C</label></span>` : ""}
             ${has("motors_off") ? `<button class="btn btn-sm btn-secondary" onclick="ctlMotorsOff()">Motors off</button>` : ""}
           </div>
         </div>

@@ -3,6 +3,7 @@ CC2 printer connection via MQTT (Klipper-based firmware).
 """
 
 import asyncio
+import socket
 import json
 import math
 import secrets
@@ -700,12 +701,18 @@ class CC2Connection(PrinterConnection):
         # axes that are not homed and moves outside the axis range.
         return await self.send_cmd(1027, {"axes": axis.lower(), "distance": distance_mm})
 
-    async def auto_level(self) -> bool:
-        # Method 1032 → BED_MESH_CALIBRATE (heats the bed to 60 °C, several
-        # minutes, idle only: error 1009 otherwise). "layout" picks the mesh
-        # profile: "A" = default, "B" = default1 (found in the firmware binary
-        # and Elegoo's print_layout docs; not yet tested on a real printer).
-        return await self.send_cmd(1032, {"layout": "A"})
+    async def auto_level(self, bed_temp: int | None = None) -> bool:
+        # Method 1032 runs "BED_MESH_CALIBRATE PROFILE=default BED_TEMP=60"
+        # (idle only, error 1009 otherwise; "layout" A = mesh "default").
+        # Tested OK on a real CC2 on 2026-11-12. The bed temperature is fixed
+        # there, so another one is sent as the same gcode through Moonraker
+        # (BED_TEMP is a real parameter of the firmware's BED_MESH_CALIBRATE).
+        # The nozzle can't be chosen: the firmware runs its own 200/180/140 °C
+        # wipe-and-probe sequence.
+        if bed_temp is None or bed_temp == 60:
+            return await self.send_cmd(1032, {"layout": "A"})
+        return await self._moonraker_gcode(f"BED_MESH_CALIBRATE PROFILE=default BED_TEMP={int(bed_temp)}",
+                                           long_running=True)
 
     async def home(self, axes: str = "XYZ") -> bool:
         # Method 1026 always runs a plain G28 (all axes) and only when the
@@ -769,7 +776,10 @@ class CC2Connection(PrinterConnection):
         # reports "Not supported by this printer yet".
         return await self._moonraker_gcode("M84")
 
-    async def _moonraker_gcode(self, script: str) -> bool:
+    async def _moonraker_gcode(self, script: str, long_running: bool = False) -> bool:
+        """Run gcode through Moonraker. Moonraker answers only when the gcode
+        has finished, so for a long_running one (levelling takes minutes) a
+        timeout after the request went out means it is running, not failed."""
         loop = asyncio.get_running_loop()
 
         def _post() -> bool:
@@ -782,6 +792,14 @@ class CC2Connection(PrinterConnection):
             except urllib.error.HTTPError as e:
                 print(f"[Printer {self.name}] Moonraker gcode {script!r} -> HTTP {e.code}")
                 return False
+            except (TimeoutError, socket.timeout):
+                if long_running:
+                    return True
+                raise
+            except urllib.error.URLError as e:
+                if long_running and isinstance(e.reason, (TimeoutError, socket.timeout)):
+                    return True
+                raise
 
         try:
             return await loop.run_in_executor(None, _post)

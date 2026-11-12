@@ -17,6 +17,8 @@ MAX_LOG_ENTRIES = 500
 _log_lock = threading.Lock()
 
 HEATERS = {"nozzle": "temp_nozzle", "bed": "temp_bed", "chamber": "temp_chamber"}
+# Lowest bed temperature offered for auto levelling (the printer's own default is 60 °C).
+LEVEL_BED_MIN = 40
 FANS = {"part": "fan_part", "aux": "fan_aux", "chamber": "fan_chamber"}
 AXES = ("X", "Y", "Z")
 MAX_STEP_MM = {"X": 10.0, "Y": 10.0, "Z": 10.0}
@@ -99,6 +101,11 @@ def validate_command(printer, action: str, params: dict, enabled: bool = True) -
             return "This printer cannot level from here"
         if display_state(printer) in BUSY_STATES:
             return "The printer cannot level while printing"
+        if params.get("bed_temp") is not None:
+            bed = _num(params.get("bed_temp"))
+            top = (limits.get("bed") or {}).get("max", 100)
+            if bed is None or not LEVEL_BED_MIN <= bed <= top:
+                return f"Levelling bed temperature must be between {LEVEL_BED_MIN} and {top:g} °C"
         return None
 
     if action == "heaters_off":
