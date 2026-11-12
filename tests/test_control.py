@@ -257,3 +257,35 @@ def test_auto_level_needs_capability_and_idle_printer(cc2):
     p = PrinterConnection("a", "10.0.0.1", "A")
     p.connected = True
     assert v(p, "auto_level") is not None
+
+
+async def test_control_log_records_the_signed_in_user(cc2, monkeypatch, tmp_path):
+    import features
+    import json
+    monkeypatch.setattr(control, "CONTROL_LOG", tmp_path / "log.json")
+    monkeypatch.setattr(features, "is_enabled", lambda k: True)
+
+    async def fake_send(cmd, data=None):
+        return True
+    monkeypatch.setattr(cc2, "send_cmd", fake_send)
+    token = pa.ACTOR.set("kari")
+    try:
+        await pa.heaters_off(cc2)
+    finally:
+        pa.ACTOR.reset(token)
+    (entry,) = json.loads((tmp_path / "log.json").read_text())
+    assert entry["user"] == "kari" and entry["printer_id"] == cc2.id
+
+
+def test_read_log_filters_by_printer_and_is_newest_first(monkeypatch, tmp_path):
+    import json
+    log = tmp_path / "log.json"
+    monkeypatch.setattr(control, "CONTROL_LOG", log)
+    log.write_text(json.dumps([
+        {"time": 1, "printer": "Old CC2", "action": "home"},                  # before ids were stored
+        {"time": 2, "printer": "CC1", "printer_id": "p1", "action": "home"},
+        {"time": 3, "printer": "CC2", "printer_id": "p2", "action": "set_fan"},
+    ]))
+    assert [e["time"] for e in control.read_log()] == [3, 2, 1]
+    assert [e["time"] for e in control.read_log({"p2"}, {"p2": "Old CC2"})] == [3, 1]
+    assert control.read_log(set()) == []

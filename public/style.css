@@ -2112,3 +2112,13 @@ main {
 body.no-printers-manage #btn-add,
 body.no-printers-manage #btn-discover,
 body.no-printers-manage #btn-settings-goto-printers { display: none !important; }
+
+/* Advanced control: command log */
+.ctl-log summary { cursor: pointer; list-style: revert; }
+.ctl-log summary h4 { display: inline; }
+.ctl-log-list { max-height: 220px; overflow-y: auto; margin-top: 8px; font-size: 12.5px; }
+.ctl-log-row { display: grid; grid-template-columns: auto auto 1fr auto; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--border); align-items: baseline; }
+.ctl-log-time, .ctl-log-user { color: var(--text-muted); white-space: nowrap; }
+.ctl-log-what small { color: var(--text-muted); }
+.ctl-log-result.ok { color: var(--green, #3fb950); }
+.ctl-log-result.fail { color: var(--red, #f85149); text-align: right; }

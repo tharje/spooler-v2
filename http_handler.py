@@ -34,6 +34,7 @@ from http_external import ExternalRoutesMixin
 from http_proxy import ProxyMixin
 from http_admin import AdminMixin
 import config
+import control
 import api_tokens
 import spaghetti
 import update_check
@@ -438,6 +439,16 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
 
         if self.path == "/api/my-notifications":
             self._handle_my_notifications_get()
+        elif self.path.split("?")[0] == "/api/control/log":
+            # Advanced-control command log, for one printer (?printer=<id>) or all the user can see.
+            if self._require("printer.advanced"):
+                q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                ids = self._visible_printer_ids()
+                want = (q.get("printer") or [None])[0]
+                if want:
+                    ids = ids & {want}
+                names = {pid: p.name for pid, p in state.printers.items()}
+                self._json(control.read_log(ids, names))
         elif self.path == "/api/my-channels":
             self._handle_my_channels_get()
         elif self.path == "/api/features":

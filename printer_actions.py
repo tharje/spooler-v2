@@ -7,6 +7,7 @@ router on top of this; nothing here knows about WebSockets.
 """
 
 import asyncio
+import contextvars
 
 import control
 import features
@@ -15,6 +16,10 @@ from printers.protocol import (
     CMD_CAMERA, CMD_DELETE_FILES, CMD_LIGHT,
     CMD_PAUSE, CMD_RESUME, CMD_STATUS, CMD_STOP,
 )
+
+# Who sent the action, for the control log. Set by the caller (ws_handler) for
+# the duration of one request; an asyncio task keeps its own copy.
+ACTOR: contextvars.ContextVar[str] = contextvars.ContextVar("printer_action_actor", default="")
 
 ERR_NOT_CONNECTED = "Printer not connected"
 ERR_NO_FILENAME = "No filename specified"
@@ -166,7 +171,7 @@ async def _advanced(printer, action: str, params: dict, run) -> str | None:
     if err is None:
         ok = await run()
         err = None if ok else "Not supported by this printer yet"
-    control.log_command("web", printer, action, params, err or "ok")
+    control.log_command(ACTOR.get() or "web", printer, action, params, err or "ok")
     return err
 
 

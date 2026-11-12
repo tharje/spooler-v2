@@ -145,6 +145,38 @@ function _controlRefresh() {
   document.getElementById("ctl-motion-note")?.classList.toggle("hidden", !busy);
 }
 
+// Who did what on this printer from the advanced panel, newest first.
+const _CTL_ACTION_LABEL = { set_temperature: "Temperature", set_fan: "Fan", move_axis: "Move", home: "Home",
+                            auto_level: "Auto leveling", heaters_off: "All heating off" };
+function _ctlParamText(e) {
+  const p = e.params || {};
+  if (e.action === "set_temperature") return `${p.heater ?? ""} → ${p.target ?? ""} °C`;
+  if (e.action === "set_fan") return `${p.fan ?? ""} → ${p.percent ?? ""} %`;
+  if (e.action === "move_axis") return `${p.axis ?? ""} ${p.distance > 0 ? "+" : ""}${p.distance ?? ""} mm`;
+  if (e.action === "home") return p.axes || "";
+  return "";
+}
+async function ctlLoadLog() {
+  const host = document.getElementById("ctl-log-list");
+  if (!host || !_ctlPrinterId) return;
+  try {
+    const r = await fetch(`/api/control/log?printer=${encodeURIComponent(_ctlPrinterId)}`);
+    if (!r.ok) { host.textContent = r.status === 403 ? "You don't have access to the log." : "Could not load the log."; return; }
+    const entries = await r.json();
+    if (!entries.length) { host.textContent = "Nothing yet."; return; }
+    host.innerHTML = entries.map(e => {
+      const ok = e.result === "ok";
+      const when = new Date(e.time * 1000).toLocaleString([], { dateStyle: "short", timeStyle: "short" });
+      return `<div class="ctl-log-row">
+        <span class="ctl-log-time">${escHtml(when)}</span>
+        <span class="ctl-log-user">${escHtml(e.user || "")}</span>
+        <span class="ctl-log-what">${escHtml(_CTL_ACTION_LABEL[e.action] || e.action)} <small>${escHtml(_ctlParamText(e))}</small></span>
+        <span class="ctl-log-result ${ok ? "ok" : "fail"}">${ok ? "OK" : escHtml(e.result)}</span>
+      </div>`;
+    }).join("");
+  } catch (_) { host.textContent = "Could not load the log."; }
+}
+
 function _controlHtml(p) {
   const caps = p.capabilities || [], lim = p.limits || {}, t = _ctlStatus(p);
   const has = c => caps.includes(c);
@@ -216,5 +248,11 @@ function _controlHtml(p) {
       <button class="btn btn-danger ctl-alloff" onclick="ctlAllOff()">Turn off all heating</button></section>` : ""}
     ${fans.length ? `<section class="ctl-section"><h4>Fans</h4>${fans.map(fanRow).join("")}</section>` : ""}
     ${motion}
+    <section class="ctl-section">
+      <details class="ctl-log" ontoggle="if (this.open) ctlLoadLog()">
+        <summary><h4>Command log</h4></summary>
+        <div id="ctl-log-list" class="ctl-log-list">Loading…</div>
+      </details>
+    </section>
   </div>`;
 }

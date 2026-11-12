@@ -136,3 +136,17 @@ async def test_advanced_control_needs_its_own_permission(setup, action):
     assert (await _do("kid", action=action)).denied()          # operator: printer.control only
     users.update_role("operator", permissions=["view", "printer.control", "printer.advanced"])
     assert not (await _do("kid", action=action)).denied()
+
+
+def test_control_log_endpoint_needs_advanced_and_hides_other_printers(setup, monkeypatch, tmp_path):
+    import control
+    from test_rbac_http import _call, _session
+    log = tmp_path / "log.json"
+    monkeypatch.setattr(control, "CONTROL_LOG", log)
+    log.write_text(json.dumps([{"time": 1, "printer": "A", "printer_id": "a", "action": "home", "result": "ok"},
+                               {"time": 2, "printer": "B", "printer_id": "b", "action": "home", "result": "ok"}]))
+    assert _call("GET", "/api/control/log", _session("kid"))[0] == 403
+    users.update_role("operator", permissions=["view", "printer.advanced"])
+    users.set_user_printers("kid", ["a"])
+    st, d = _call("GET", "/api/control/log", _session("kid"))
+    assert st == 200 and [e["printer_id"] for e in d] == ["a"]

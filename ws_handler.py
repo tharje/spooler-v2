@@ -292,6 +292,7 @@ async def handle_browser_message(ws, raw: str) -> None:
         await ws.send(json.dumps({"type": "error", "message": "Printer not found"}))
         return
 
+    printer_actions.ACTOR.set(_ws_user(ws))
     err = await _dispatch_printer_action(action, printer, msg)
     if err:
         await ws.send(json.dumps({"type": "error", "message": err}))

@@ -108,7 +108,7 @@ def validate_command(printer, action: str, params: dict, enabled: bool = True) -
 
 
 def log_command(user: str, printer, action: str, params: dict, result: str) -> None:
-    entry = {"time": time.time(), "user": user, "printer": printer.name,
+    entry = {"time": time.time(), "user": user, "printer": printer.name, "printer_id": printer.id,
              "action": action, "params": params, "result": result}
     with _log_lock:
         try:
@@ -117,3 +117,17 @@ def log_command(user: str, printer, action: str, params: dict, result: str) -> N
             entries = []
         entries.append(entry)
         _atomic_write(CONTROL_LOG, json.dumps(entries[-MAX_LOG_ENTRIES:], indent=1))
+
+
+def read_log(printer_ids=None, name_of=None, limit: int = 100) -> list:
+    """Newest first. printer_ids limits it to those printers (older entries
+    without an id are matched by name through name_of: {id: name})."""
+    try:
+        entries = json.loads(CONTROL_LOG.read_text())
+    except Exception:
+        return []
+    if printer_ids is not None:
+        names = {(name_of or {}).get(pid) for pid in printer_ids}
+        entries = [e for e in entries if e.get("printer_id") in printer_ids
+                   or ("printer_id" not in e and e.get("printer") in names)]
+    return list(reversed(entries))[:limit]
