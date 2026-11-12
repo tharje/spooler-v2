@@ -79,6 +79,8 @@ _MS_PREPARING = {3: 10, 4: 10, 5: 20, 6: 10, 7: 10, 8: 10, 10: 10, 13: 10}
 # 0 starting, 1 idle, 2 printing (handled by print_status), 9 updating,
 # 11 file transfer, 12 timelapse export: shown as before, no log noise.
 _MS_KNOWN_IDLE_OR_HANDLED = {0, 1, 2, 9, 11, 12}
+# Homing/levelling sub_status codes that linger after the job is over.
+_SUB_LEFTOVER_WHEN_IDLE = {2801, 2802, 2901, 2902}
 _logged_ms_status: set = set()
 _logged_sub_status: set = set()
 # gcode_move.speed_mode -> speed factor (firmware table behind method 1031)
@@ -945,6 +947,12 @@ class CC2Connection(PrinterConnection):
         # The print_status/sub_status logic above only knows about print
         # phases, so anything outside a print used to show as idle.
         ms_status = ms.get("status")
+        # After homing or levelling the printer goes back to status 1 (idle)
+        # but leaves sub_status at 2802/2902 ("done") until something else
+        # happens. Seen live 2026-11-12: idle + 2902 kept the card on
+        # "Leveling". The top-level idle wins over such a leftover.
+        if ms_status == 1 and sub_status in _SUB_LEFTOVER_WHEN_IDLE and state_str not in ("printing", "paused"):
+            status_code = 0
         if ms_status == 14:                      # emergency stop
             status_code = 14
         elif ms_status == 15:                    # recovering after power loss

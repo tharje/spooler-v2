@@ -85,6 +85,21 @@ def test_apply_cc2_status_reads_speed_from_speed_mode(printer, mode, pct):
     assert printer.status["SpeedFactor"] == pct
 
 
+@pytest.mark.parametrize("sub_status", [2801, 2802, 2901, 2902])
+def test_leftover_homing_or_leveling_sub_status_is_idle_when_printer_says_idle(printer, sub_status):
+    # Seen live 2026-11-12 after a failed leveling (704): status 1 (idle) with
+    # sub_status 2902 left behind kept the card stuck on "Leveling".
+    printer._cc2_state["machine_status"] = {"status": 1, "sub_status": sub_status}
+    printer._apply_cc2_status()
+    assert printer.status["PrintInfo"]["Status"] == 0
+
+
+def test_leveling_on_its_own_still_shows_while_running(printer):
+    printer._cc2_state["machine_status"] = {"status": 5, "sub_status": 2901}
+    printer._apply_cc2_status()
+    assert printer.status["PrintInfo"]["Status"] == 20
+
+
 @pytest.mark.asyncio
 async def test_error_code_captured_from_api_response_poll_path(printer):
     # Simulates the 5s status poller's method 1003 response, which goes
