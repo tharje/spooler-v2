@@ -20,8 +20,9 @@ const _settingsBackupPage     = document.getElementById("settings-backup");
 const _settingsFeaturesPage   = document.getElementById("settings-features");
 const _settingsIntegrationsPage = document.getElementById("settings-integrations");
 const _settingsApiPage = document.getElementById("settings-api");
+const _settingsUsersPage = document.getElementById("settings-users");
 
-const _allSettingsPages = () => [_settingsPwPage, _settingsNotifPage, _settingsPrintersPage, _settingsPrinterEditPage, _settingsBackupPage, _settingsFeaturesPage, _settingsIntegrationsPage, _settingsApiPage];
+const _allSettingsPages = () => [_settingsPwPage, _settingsNotifPage, _settingsPrintersPage, _settingsPrinterEditPage, _settingsBackupPage, _settingsFeaturesPage, _settingsIntegrationsPage, _settingsApiPage, _settingsUsersPage];
 
 function _openSettings() {
   _allSettingsPages().forEach(p => p && (p.style.display = "none"));

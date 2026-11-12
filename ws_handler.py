@@ -8,7 +8,19 @@ import json
 import uuid
 
 import state
-from auth import AUTH_ENABLED, _parse_sid, _validate_session
+from auth import AUTH_ENABLED, _parse_sid, _session_user, _validate_session
+import users
+
+
+def _ws_user(ws) -> str:
+    return getattr(ws, "_spooler_user", "")
+
+
+def _ws_can_see(ws, printer_id: str) -> bool:
+    user = _ws_user(ws)
+    if not AUTH_ENABLED or not user:
+        return True
+    return users.can_see_printer(user, printer_id)
 from discovery import discover_cc2_printers, discover_printers
 from persistence import save_printers, save_tray_map
 from printers import PRINTER_TYPES, make_printer
@@ -77,11 +89,13 @@ async def browser_handler(websocket) -> None:
             await websocket.close(1008, "Unauthorized")
             return
 
+    websocket._spooler_user = _session_user(token) if AUTH_ENABLED else ""
     state.browser_clients.add(websocket)
     print(f"[Browser] Client connected ({len(state.browser_clients)} total)")
 
     for p in state.printers.values():
-        await websocket.send(json.dumps({"type": "printer_update", "printer": p.to_dict()}))
+        if _ws_can_see(websocket, p.id):
+            await websocket.send(json.dumps({"type": "printer_update", "printer": p.to_dict()}))
     await websocket.send(json.dumps({"type": "tray_map", "tray_map": state.tray_map}))
 
     try:
@@ -110,7 +124,8 @@ async def handle_browser_message(ws, raw: str) -> None:
 
     if action == "list_printers":
         for p in state.printers.values():
-            await ws.send(json.dumps({"type": "printer_update", "printer": p.to_dict()}))
+            if _ws_can_see(ws, p.id):
+                await ws.send(json.dumps({"type": "printer_update", "printer": p.to_dict()}))
         return
 
     if action == "discover":
@@ -226,7 +241,7 @@ async def handle_browser_message(ws, raw: str) -> None:
                 loop.run_in_executor(None, spoolman_set_location, spool_id, pid)
         return
 
-    if not printer:
+    if not printer or not _ws_can_see(ws, printer.id):
         await ws.send(json.dumps({"type": "error", "message": "Printer not found"}))
         return
 

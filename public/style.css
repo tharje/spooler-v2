@@ -1943,3 +1943,103 @@ main {
 #spools-list .spools-summary, #spools-list .spools-none { grid-column: 1 / -1; margin: 0; }
 #spools-list .spool-group { margin-bottom: 0; }
 .spools-filters { padding: 12px 16px 0; margin-bottom: 0; }
+
+/* ── Users and roles (RBAC) admin ───────────────────────────────────────── */
+.user-row {
+  display: flex;
+  align-items: center;
+  gap: .5em;
+  flex-wrap: wrap;
+  padding: .55em 0;
+  border-bottom: 1px solid var(--border);
+}
+.user-row .user-name { font-weight: 600; margin-right: auto; }
+.user-row select {
+  padding: .3em .5em;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+}
+.role-box {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: .7em .8em;
+  margin-bottom: .7em;
+  background: var(--surface);
+}
+.role-head { display: flex; align-items: center; gap: .5em; margin-bottom: .5em; }
+.role-badge {
+  font-size: .72em;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--accent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: .1em .45em;
+}
+.role-note { font-size: .8em; color: var(--text-muted); margin-left: auto; }
+.role-perms {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: .25em .8em;
+  margin-bottom: .6em;
+}
+.role-perm {
+  display: flex;
+  align-items: flex-start;
+  gap: .4em;
+  font-size: .9em;
+  color: var(--text);
+}
+.role-perm input { margin-top: .2em; }
+.role-actions { display: flex; gap: .5em; flex-wrap: wrap; }
+
+/* printer-visibility pickers in the users/roles admin */
+.role-sub { font-size: .82em; color: var(--text-muted); margin: .2em 0 .3em; }
+.printer-picker { display: flex; flex-direction: column; gap: .4em; margin-bottom: .5em; }
+.printer-picker select {
+  align-self: flex-start;
+  padding: .3em .5em;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+}
+.printer-choices { display: flex; flex-wrap: wrap; gap: .2em .8em; }
+.printer-choice { display: flex; align-items: center; gap: .35em; font-size: .9em; }
+.user-block { padding: .4em 0; border-bottom: 1px solid var(--border); }
+.user-block .user-row { border-bottom: none; padding-bottom: .25em; }
+.user-printers { display: flex; align-items: center; flex-wrap: wrap; gap: .5em; padding-left: .2em; }
+.user-printers-label { font-size: .82em; color: var(--text-muted); }
+
+/* ── Settings: grouped sidebar + wide two-pane on desktop ────────────────── */
+.settings-group { margin-bottom: 12px; }
+.settings-group:last-child { margin-bottom: 0; }
+.settings-group-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin: 4px 4px 6px;
+}
+.settings-menu-item.active {
+  background: var(--surface3, var(--surface2));
+  border-color: var(--accent);
+}
+.settings-menu-item.active svg:first-child { color: var(--accent); }
+
+/* On a wider screen the settings modal gets roomier and the grouped menu lays
+   out in two columns instead of one tall narrow list. Opening a section still
+   shows that section's page (no auto-jump into a page). */
+@media (min-width: 680px) {
+  .modal-box.settings-modal { width: min(720px, 94vw); }
+  .modal-box.settings-modal .settings-menu-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 22px;
+    align-items: start;
+    margin-bottom: 8px;
+  }
+}

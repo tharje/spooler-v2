@@ -22,9 +22,11 @@ import tempfile
 import threading
 import time
 import uploads
+import users
 import urllib.error
 import urllib.parse
 import urllib.request
+from auth import current_user
 from backup import (
     BACKUP_DIR, RestoreError, create_backup_zip, list_auto_backups, restore_from_zip,
 )
@@ -182,7 +184,7 @@ class AdminMixin:
         params = urllib.parse.parse_qs(parsed.query)
         printer_id = urllib.parse.unquote(parsed.path[len("/api/upload/"):])
         printer = state.printers.get(printer_id)
-        if not printer:
+        if not printer or not self._can_see_printer(printer_id):
             self._json({"error": "Printer not found"}, 404)
             return
         if not printer.supports_upload:
@@ -216,6 +218,8 @@ class AdminMixin:
             if http_common.ws_loop() is None:
                 self._json({"error": "Server not ready"}, 503)
                 return
+            if start_after:
+                printer._pending_owner = current_user(self)   # attribute the print in history
             fut = asyncio.run_coroutine_threadsafe(
                 printer.upload_file(local_path, name, start_after), http_common.ws_loop())
             ok = fut.result(timeout=uploads.forward_timeout(local_path.stat().st_size) + 30)
@@ -259,6 +263,11 @@ class AdminMixin:
                 return
             requirements = {k: params.get(k, [""])[0] for k in
                              ("printer_type", "printer_id", "material", "colour", "quantity", "priority")}
+            pid = (requirements.get("printer_id") or "").strip()
+            if pid and not self._can_see_printer(pid):
+                self._json({"error": "Printer not found"}, 404)
+                return
+            requirements["owner"] = current_user(self)
             job = job_queue.add_job(local_path, name, requirements)
             local_path = None  # add_job() moved it into the queue folder
             self._json({"ok": True, "job": job})
@@ -282,6 +291,10 @@ class AdminMixin:
             if not printer_id or not filename:
                 self._json({"error": "printer_id and filename are required"}, 400)
                 return
+            if not self._can_see_printer(printer_id):
+                self._json({"error": "Printer not found"}, 404)
+                return
+            body["owner"] = current_user(self)
             job = job_queue.add_existing_job(printer_id, filename, body)
             self._json({"ok": True, "job": job})
         except job_queue.QueueError as e:
@@ -295,6 +308,8 @@ class AdminMixin:
         job_id = urllib.parse.unquote(self.path[len("/api/queue/"):])
         try:
             changes = json.loads(self._read_body() or b"{}")
+            if not self._may_touch_job(job_id, cancelling=changes.get("status") == "cancelled"):
+                return
             job = job_queue.update_job(job_id, changes)
             self._json({"ok": True, "job": job})
         except job_queue.QueueError as e:
@@ -305,17 +320,45 @@ class AdminMixin:
     @requires_feature("job_queue")
     def _handle_queue_delete(self):
         job_id = urllib.parse.unquote(self.path[len("/api/queue/"):])
+        if not self._may_touch_job(job_id, cancelling=True):
+            return
         try:
             job_queue.delete_job(job_id)
             self._json({"ok": True})
         except job_queue.QueueError as e:
             self._json({"error": str(e)}, 404)
 
+    def _may_touch_job(self, job_id: str, cancelling: bool) -> bool:
+        """Authorise cancelling/removing a queued job by its owner. Reordering or
+        re-prioritising (not cancelling) needs the general queue.manage permission;
+        cancelling needs job.cancel_own (for your own) or job.cancel_any. Sends the
+        error response and returns False when not allowed. No-ops (returns True)
+        when login is off or the request carries no identity (single-admin/tests)."""
+        from auth import AUTH_ENABLED
+        user = current_user(self)
+        if not AUTH_ENABLED or not user:
+            return True
+        job = job_queue.get_job(job_id)
+        if job is None:
+            self._json({"error": "Job not found"}, 404)
+            return False
+        if cancelling:
+            if users.can_cancel_job(user, job.get("owner")):
+                return True
+        elif users.has_permission(user, "queue.manage"):
+            return True
+        self._json({"error": "forbidden",
+                    "need": "job.cancel_any" if cancelling else "queue.manage"}, 403)
+        return False
+
     @requires_feature("job_queue")
     def _handle_queue_confirm(self):
         """POST /api/queue/<printer id>/confirm -- the user has cleared the
         plate; upload and start this printer's assigned job now."""
         printer_id = urllib.parse.unquote(self.path[len("/api/queue/"):-len("/confirm")])
+        if not self._can_see_printer(printer_id):
+            self._json({"error": "Printer not found"}, 404)
+            return
         try:
             fut = asyncio.run_coroutine_threadsafe(
                 job_queue.confirm_plate_cleared(printer_id), http_common.ws_loop())
@@ -568,3 +611,67 @@ class AdminMixin:
         result = test_spoolman_connection()
         config.record_test_result("spoolman", result["ok"], result["message"])
         self._json(result)
+
+    # ── Users & roles (RBAC admin) ───────────────────────────────────────────
+
+    def _handle_users_list(self):
+        self._json({"users": users.list_users(), "current": current_user(self)})
+
+    def _handle_users_create(self):
+        try:
+            body = json.loads(self._read_body() or b"{}")
+            u = users.create_user(body.get("username", ""), body.get("password", ""),
+                                  body.get("role", ""), printers=body.get("printers"))
+            self._json({"ok": True, "user": u})
+        except ValueError as e:
+            self._json({"error": str(e)}, 400)
+
+    def _handle_users_update(self, username: str):
+        try:
+            body = json.loads(self._read_body() or b"{}")
+            if body.get("password"):
+                users.set_password(username, body["password"])
+            if body.get("role"):
+                users.set_role(username, body["role"])
+            if "printers" in body:
+                users.set_user_printers(username, body["printers"])
+            self._json({"ok": True, "user": users.get_user(username)})
+        except ValueError as e:
+            self._json({"error": str(e)}, 400)
+
+    def _handle_users_delete(self, username: str):
+        try:
+            users.delete_user(username)
+            self._json({"ok": True})
+        except ValueError as e:
+            self._json({"error": str(e)}, 400)
+
+    def _handle_roles_list(self):
+        self._json({"roles": users.list_roles(),
+                    "permissions": [{"key": k, "label": lbl} for k, lbl in users.PERMISSIONS]})
+
+    def _handle_roles_create(self):
+        try:
+            body = json.loads(self._read_body() or b"{}")
+            r = users.create_role(body.get("name", ""), body.get("permissions", []),
+                                  body.get("label", ""),
+                                  printers=body.get("printers", users.ALL_PRINTERS))
+            self._json({"ok": True, "role": r})
+        except ValueError as e:
+            self._json({"error": str(e)}, 400)
+
+    def _handle_roles_update(self, name: str):
+        try:
+            body = json.loads(self._read_body() or b"{}")
+            users.update_role(name, permissions=body.get("permissions"),
+                              label=body.get("label"), printers=body.get("printers"))
+            self._json({"ok": True})
+        except ValueError as e:
+            self._json({"error": str(e)}, 400)
+
+    def _handle_roles_delete(self, name: str):
+        try:
+            users.delete_role(name)
+            self._json({"ok": True})
+        except ValueError as e:
+            self._json({"error": str(e)}, 400)
