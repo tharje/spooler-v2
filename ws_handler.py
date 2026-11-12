@@ -37,8 +37,8 @@ def _ws_has(ws, perm: str) -> bool:
 ACTION_PERMISSIONS = {
     "list_printers": "view", "status": "view", "camera_on": "view",
     "list_files": "view", "get_file_info": "view",
-    "discover": "settings.manage", "add_printer": "settings.manage",
-    "remove_printer": "settings.manage", "update_printer": "settings.manage",
+    "discover": "printers.manage", "add_printer": "printers.manage",
+    "remove_printer": "printers.manage", "update_printer": "printers.manage",
     "link_tray": "filament.manage",
     "start_print": "print.start",
     "delete_file": "print.queue", "delete_files": "print.queue",

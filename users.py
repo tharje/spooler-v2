@@ -49,6 +49,7 @@ PERMISSIONS: tuple[tuple[str, str], ...] = (
     ("printer.control", "Control the printer (temperatures, fans, movement, pause/resume)"),
     ("filament.manage", "Manage filament / Spoolman ledger"),
     ("settings.manage", "Change settings, features, integrations and notifications"),
+    ("printers.manage", "Add, rename and remove printers and change their address"),
     ("notify.channels", "Set up own notification channels (Telegram, ntfy, Discord, webhook)"),
     ("maintenance",     "Run service tasks and diagnostics"),
     ("backup.manage",   "Create and restore backups"),
@@ -97,7 +98,8 @@ def _file() -> Path:
 
 
 def _blank() -> dict:
-    return {"users": {}, "roles": {k: dict(v) for k, v in DEFAULT_ROLES.items()}}
+    return {"users": {}, "roles": {k: dict(v) for k, v in DEFAULT_ROLES.items()},
+            "printers_manage_split": True}
 
 
 def _load() -> dict:
@@ -126,6 +128,15 @@ def ensure_initialised() -> None:
             changed = False
             if ADMIN_ROLE not in data["roles"]:
                 data["roles"][ADMIN_ROLE] = dict(DEFAULT_ROLES[ADMIN_ROLE])
+                changed = True
+            # printers.manage was split out of settings.manage: roles that could
+            # manage printers before keep that ability (once, then it's theirs to edit).
+            if not data.get("printers_manage_split"):
+                for role in data["roles"].values():
+                    perms = role.get("permissions") or []
+                    if "settings.manage" in perms and "printers.manage" not in perms:
+                        perms.append("printers.manage")
+                data["printers_manage_split"] = True
                 changed = True
             if changed:
                 _save(data)

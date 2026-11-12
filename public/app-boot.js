@@ -110,6 +110,7 @@ if (new URLSearchParams(location.search).get("demo") === "states") {
     .then(({ spoolman_url, permissions, user }) => {
       if (spoolman_url) document.getElementById("btn-spoolman-ui").href = spoolman_url;
       window.SPOOLER_PERMS = permissions || [];
+      document.body.classList.toggle("no-printers-manage", !window.SPOOLER_PERMS.includes("printers.manage"));
       window.SPOOLER_USER = user || "";
       if (window.SPOOLER_PERMS.includes("users.manage")) {
         const b = document.getElementById("btn-settings-goto-users");

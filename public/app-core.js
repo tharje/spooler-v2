@@ -264,6 +264,7 @@ function handleMessage(msg) {
       Object.values(printers).forEach(p => renderPrinter(p));
       break;
     case "cc2_discovered":
+      if (document.body.classList.contains("no-printers-manage")) break;
       for (const ip of (msg.ips || [])) {
         toastAction(`CC2 found at ${ip} — enter access code to add`, "Add", () => {
           resetPrinterForm();
