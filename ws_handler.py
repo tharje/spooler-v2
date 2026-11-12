@@ -47,7 +47,6 @@ ACTION_PERMISSIONS = {
     "set_temperature": "printer.advanced", "set_fan": "printer.advanced",
     "move_axis": "printer.advanced", "home": "printer.advanced",
     "auto_level": "printer.advanced", "heaters_off": "printer.advanced",
-    "motors_off": "printer.advanced",
 }
 DEFAULT_ACTION_PERMISSION = "printer.control"
 from discovery import discover_cc2_printers, discover_printers
@@ -151,8 +150,6 @@ async def _dispatch_printer_action(action, printer, msg) -> str | None:
         return await printer_actions.auto_level(printer)
     if action == "heaters_off":
         return await printer_actions.heaters_off(printer)
-    if action == "motors_off":
-        return await printer_actions.motors_off(printer)
     return None
 
 

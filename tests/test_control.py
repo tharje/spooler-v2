@@ -257,13 +257,3 @@ def test_auto_level_needs_capability_and_idle_printer(cc2):
     p = PrinterConnection("a", "10.0.0.1", "A")
     p.connected = True
     assert v(p, "auto_level") is not None
-
-
-def test_motors_off_needs_capability_and_idle_printer(cc2):
-    assert v(cc2, "motors_off") is None
-    cc2.status = {"PrintInfo": {"Status": 13}}
-    assert "printing" in v(cc2, "motors_off")
-    from printers.base import PrinterConnection
-    p = PrinterConnection("a", "10.0.0.1", "A")
-    p.connected = True
-    assert v(p, "motors_off") is not None   # no motors_off capability

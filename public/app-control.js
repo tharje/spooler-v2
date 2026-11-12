@@ -111,9 +111,6 @@ function ctlLevel() {
   if (confirm("Start auto leveling? The printer will heat up and probe the bed.")) _ctlSend("auto_level", {});
 }
 function ctlAllOff() { _ctlSend("heaters_off", {}); }
-function ctlMotorsOff() {
-  if (confirm("Turn off the stepper motors? The axes go loose and can be moved by hand. Don't do this during a print.")) _ctlSend("motors_off", {});
-}
 function ctlStep(v) {
   _ctlStep = v;
   document.querySelectorAll("#modal-control .ctl-step").forEach(b => b.classList.toggle("active", +b.dataset.step === v));
@@ -184,7 +181,7 @@ function _controlHtml(p) {
       <output id="ctl-fan-${f}">${cur}%</output></div>`;
   };
   const jog = (a, s, txt, cls = "") => `<button class="ctl-jog ${cls}" onclick="ctlMove('${a}',${s})" aria-label="${a}${s > 0 ? "+" : "−"}">${txt}</button>`;
-  const motion = (has("move") || has("home") || has("level") || has("motors_off")) ? `
+  const motion = (has("move") || has("home") || has("level")) ? `
     <section class="ctl-section">
       <h4>Motion</h4>
       <p id="ctl-motion-note" class="ctl-note hidden">Axes are locked while the printer is printing or paused.</p>
@@ -202,7 +199,6 @@ function _controlHtml(p) {
           <div class="ctl-btnrow">
             ${has("home") ? `<button class="btn btn-sm btn-secondary" onclick="ctlHome('XYZ')">Home all</button>` : ""}
             ${has("level") ? `<button class="btn btn-sm btn-secondary" onclick="ctlLevel()">Auto leveling</button>` : ""}
-            ${has("motors_off") ? `<button class="btn btn-sm btn-secondary" onclick="ctlMotorsOff()">Motors off</button>` : ""}
           </div>
         </div>
       </div>

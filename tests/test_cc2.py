@@ -569,34 +569,3 @@ def test_fan_speeds_are_reported_as_percent():
     assert _fan_percents({"fan": {"speed": 255}, "aux_fan": {"speed": 0.5}, "box_fan": {"speed": 0}}) == \
         {"part": 100, "aux": 50, "chamber": 0}
     assert _fan_percents({"fan": {"speed": 128}, "box_fan": {}}) == {"part": 50}
-
-
-async def test_cc2_disable_steppers_posts_m84_to_moonraker(printer, monkeypatch):
-    # The screen's "motor stop" button sends gcode M84 via Klipper's gcode/script;
-    # over the network that is Moonraker on :7125. disable_steppers must do the same.
-    import urllib.request
-    seen = {}
-
-    class FakeResp:
-        def __enter__(self): return self
-        def __exit__(self, *a): return False
-        def read(self): return b"{}"
-
-    def fake_urlopen(req, timeout=None):
-        seen["url"] = req.full_url
-        seen["method"] = req.get_method()
-        return FakeResp()
-
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    assert await printer.disable_steppers() is True
-    assert seen["method"] == "POST"
-    assert "10.0.0.5:7125/printer/gcode/script" in seen["url"]
-    assert "script=M84" in seen["url"]
-
-
-async def test_cc2_disable_steppers_reports_failure_when_moonraker_absent(printer, monkeypatch):
-    import urllib.request
-    def boom(req, timeout=None):
-        raise OSError("connection refused")
-    monkeypatch.setattr(urllib.request, "urlopen", boom)
-    assert await printer.disable_steppers() is False   # -> action says "Not supported yet"

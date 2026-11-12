@@ -47,7 +47,7 @@ PERMISSIONS: tuple[tuple[str, str], ...] = (
     ("job.cancel_own",  "Cancel or remove own jobs"),
     ("job.cancel_any",  "Cancel or remove anyone's jobs"),
     ("printer.control", "Control the printer (pause/resume/stop, light, print speed)"),
-    ("printer.advanced", "Advanced control: temperatures, fans, axes, homing, motors off and bed levelling"),
+    ("printer.advanced", "Advanced control: temperatures, fans, axes, homing and bed levelling"),
     ("filament.manage", "Manage filament / Spoolman ledger"),
     ("settings.manage", "Change settings, features, integrations and notifications"),
     ("printers.manage", "Add, rename and remove printers and change their address"),
