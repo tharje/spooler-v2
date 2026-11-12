@@ -2101,3 +2101,8 @@ main {
   .ctl-fan { grid-template-columns: 90px 1fr 40px; }
 }
 .ctl-btnrow { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Users without printers.manage don't see ways to add/edit/remove printers */
+body.no-printers-manage #btn-add,
+body.no-printers-manage #btn-discover,
+body.no-printers-manage #btn-settings-goto-printers { display: none !important; }

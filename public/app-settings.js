@@ -860,7 +860,10 @@ inputType.addEventListener("change", () => {
     : inputType.value === "prusa" ? "API key from PrusaLink settings" : "12345";
 });
 
+// Adding, editing and removing printers needs printers.manage.
+const _canManagePrinters = () => !document.body.classList.contains("no-printers-manage");
 const openPrinters = () => {
+  if (!_canManagePrinters()) { toast("You don't have permission to manage printers", true); return; }
   printersPanel.classList.add("open");
   historyBackdrop.classList.add("open");
 };

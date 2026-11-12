@@ -33,6 +33,7 @@ def setup(monkeypatch):
     users.create_user("gran", "secret1", "viewer")
     users.create_user("kid", "secret1", "operator")
     p = PrinterConnection("a", "10.0.0.1", "A")
+    p.connected = True                  # no "offline" timer from _broadcast_state
     calls = []
 
     async def send_cmd(cmd, data=None):
@@ -104,3 +105,26 @@ async def test_link_tray_needs_to_see_the_printer(setup):
 async def test_unknown_actions_need_printer_control():
     assert ws_handler.ACTION_PERMISSIONS.get("some_future_action") is None
     assert ws_handler.DEFAULT_ACTION_PERMISSION == "printer.control"
+
+
+async def test_printers_manage_is_separate_from_settings(setup):
+    users.create_role("helper", ["view", "settings.manage"])
+    users.create_user("helper1", "secret1", "helper")
+    assert (await _do("helper1", action="update_printer", name="X")).denied()
+    users.update_role("helper", permissions=["view", "printers.manage"])
+    assert not (await _do("helper1", action="update_printer", name="X")).denied()
+    assert state.printers["a"].name == "X"
+
+
+def test_roles_with_settings_manage_get_printers_manage_once(tmp_path):
+    import persistence
+    data = users._load()
+    data.pop("printers_manage_split", None)
+    data["roles"]["helper"] = {"permissions": ["view", "settings.manage"], "printers": "*"}
+    users._save(data)
+    users.ensure_initialised()
+    assert "printers.manage" in users._load()["roles"]["helper"]["permissions"]
+    # Taken away afterwards: stays away.
+    users.update_role("helper", permissions=["view", "settings.manage"])
+    users.ensure_initialised()
+    assert "printers.manage" not in users._load()["roles"]["helper"]["permissions"]
