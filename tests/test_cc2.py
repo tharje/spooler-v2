@@ -78,6 +78,13 @@ def test_apply_cc2_status_maps_homing_and_leveling_sub_statuses(printer, sub_sta
     assert printer.status["PrintInfo"]["Status"] == expected_code
 
 
+@pytest.mark.parametrize("mode,pct", [(0, 50), (1, 100), (2, 130), (3, 160)])
+def test_apply_cc2_status_reads_speed_from_speed_mode(printer, mode, pct):
+    printer._cc2_state["gcode_move"] = {"speed_mode": mode}
+    printer._apply_cc2_status()
+    assert printer.status["SpeedFactor"] == pct
+
+
 @pytest.mark.asyncio
 async def test_error_code_captured_from_api_response_poll_path(printer):
     # Simulates the 5s status poller's method 1003 response, which goes
@@ -540,3 +547,10 @@ def test_start_print_leveling_sets_both_firmware_flags(printer, monkeypatch, lev
     cfg = sent[0][1]["config"]
     assert cfg["bedlevel_force"] is leveling
     assert cfg["printer_check"] is leveling
+
+
+def test_fan_speeds_are_reported_as_percent():
+    from printers.cc2 import _fan_percents
+    assert _fan_percents({"fan": {"speed": 255}, "aux_fan": {"speed": 0.5}, "box_fan": {"speed": 0}}) == \
+        {"part": 100, "aux": 50, "chamber": 0}
+    assert _fan_percents({"fan": {"speed": 128}, "box_fan": {}}) == {"part": 50}
