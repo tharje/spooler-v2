@@ -156,42 +156,6 @@ async def test_cc2_auto_level_sends_method_1032(cc2, monkeypatch, tmp_path):
     monkeypatch.setattr(cc2, "send_cmd", fake_send)
     assert await pa.auto_level(cc2) is None
     assert sent == [(1032, {"layout": "A"})]
-    assert await pa.auto_level(cc2, 60) is None             # the printer's own default: same tested command
-    assert sent[-1] == (1032, {"layout": "A"})
-
-
-async def test_cc2_auto_level_with_other_bed_temp_goes_through_moonraker(cc2, monkeypatch, tmp_path):
-    import features
-    monkeypatch.setattr(control, "CONTROL_LOG", tmp_path / "log.json")
-    monkeypatch.setattr(features, "is_enabled", lambda k: True)
-    scripts = []
-
-    async def fake_gcode(script, long_running=False):
-        scripts.append((script, long_running))
-        return True
-    monkeypatch.setattr(cc2, "_moonraker_gcode", fake_gcode)
-    assert await pa.auto_level(cc2, 75) is None
-    assert scripts == [("BED_MESH_CALIBRATE PROFILE=default BED_TEMP=75", True)]
-
-
-@pytest.mark.parametrize("bed", [30, 101, "hot"])
-async def test_auto_level_bed_temp_is_checked(cc2, monkeypatch, tmp_path, bed):
-    import features
-    monkeypatch.setattr(control, "CONTROL_LOG", tmp_path / "log.json")
-    monkeypatch.setattr(features, "is_enabled", lambda k: True)
-    err = await pa.auto_level(cc2, bed)
-    assert err and "between 40" in err
-
-
-def test_moonraker_timeout_counts_as_started_for_long_gcode(cc2, monkeypatch):
-    import asyncio
-    import urllib.request
-
-    def slow(req, timeout=None):
-        raise TimeoutError("timed out")
-    monkeypatch.setattr(urllib.request, "urlopen", slow)
-    assert asyncio.run(cc2._moonraker_gcode("BED_MESH_CALIBRATE", long_running=True)) is True
-    assert asyncio.run(cc2._moonraker_gcode("M84")) is False
 
 
 @pytest.mark.parametrize("axis,dist,expected", [

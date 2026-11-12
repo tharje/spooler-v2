@@ -189,10 +189,8 @@ async def home(printer, axes="XYZ") -> str | None:
     return await _advanced(printer, "home", {"axes": axes}, lambda: printer.home(axes))
 
 
-async def auto_level(printer, bed_temp=None) -> str | None:
-    """bed_temp None = the printer's own levelling (bed 60 °C)."""
-    return await _advanced(printer, "auto_level", {"bed_temp": bed_temp},
-                           lambda: printer.auto_level(None if bed_temp is None else int(round(float(bed_temp)))))
+async def auto_level(printer) -> str | None:
+    return await _advanced(printer, "auto_level", {}, printer.auto_level)
 
 
 async def heaters_off(printer) -> str | None:

@@ -148,7 +148,7 @@ async def _dispatch_printer_action(action, printer, msg) -> str | None:
     if action == "home":
         return await printer_actions.home(printer, msg.get("axes", "XYZ"))
     if action == "auto_level":
-        return await printer_actions.auto_level(printer, msg.get("bed_temp"))
+        return await printer_actions.auto_level(printer)
     if action == "heaters_off":
         return await printer_actions.heaters_off(printer)
     if action == "motors_off":
