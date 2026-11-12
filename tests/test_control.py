@@ -144,12 +144,18 @@ def test_printer_without_capabilities_refuses_everything():
     assert v(p, "move_axis", axis="X", distance=1) is not None
 
 
-async def test_unverified_protocol_reports_not_supported(cc2, monkeypatch, tmp_path):
+async def test_cc2_auto_level_sends_method_1032(cc2, monkeypatch, tmp_path):
     import features
     monkeypatch.setattr(control, "CONTROL_LOG", tmp_path / "log.json")
     monkeypatch.setattr(features, "is_enabled", lambda k: True)
-    assert await pa.auto_level(cc2) == "Not supported by this printer yet"
-    assert "Not supported" in (tmp_path / "log.json").read_text()
+    sent = []
+
+    async def fake_send(cmd, data=None):
+        sent.append((cmd, data))
+        return True
+    monkeypatch.setattr(cc2, "send_cmd", fake_send)
+    assert await pa.auto_level(cc2) is None
+    assert sent == [(1032, {"layout": "A"})]
 
 
 @pytest.mark.parametrize("axis,dist,expected", [

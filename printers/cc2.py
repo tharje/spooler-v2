@@ -255,7 +255,7 @@ class CC2Connection(PrinterConnection):
         if cmd == CMD_LIGHT and data:
             light_on = data.get("LightStatus", {}).get("SecondLight", False)
             payload["params"] = {"brightness": 255 if light_on else 0, "power": 1 if light_on else 0}
-        elif method in (1020, 1026, 1027, 1028, 1030, 1031, 1044, 1045, 1046, 1047) and data:
+        elif method in (1020, 1026, 1027, 1028, 1030, 1031, 1032, 1044, 1045, 1046, 1047) and data:
             payload["params"] = data
         try:
             await self._mqtt_client.publish(topic, json.dumps(payload))
@@ -699,6 +699,13 @@ class CC2Connection(PrinterConnection):
         # Method 1027 → MANUAL_MOVE (relative); the firmware refuses moves on
         # axes that are not homed and moves outside the axis range.
         return await self.send_cmd(1027, {"axes": axis.lower(), "distance": distance_mm})
+
+    async def auto_level(self) -> bool:
+        # Method 1032 → BED_MESH_CALIBRATE (heats the bed to 60 °C, several
+        # minutes, idle only: error 1009 otherwise). "layout" picks the mesh
+        # profile: "A" = default, "B" = default1 (found in the firmware binary
+        # and Elegoo's print_layout docs; not yet tested on a real printer).
+        return await self.send_cmd(1032, {"layout": "A"})
 
     async def home(self, axes: str = "XYZ") -> bool:
         # Method 1026 always runs a plain G28 (all axes) and only when the
