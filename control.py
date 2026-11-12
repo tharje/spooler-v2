@@ -104,6 +104,13 @@ def validate_command(printer, action: str, params: dict, enabled: bool = True) -
     if action == "heaters_off":
         return None   # always allowed (when connected)
 
+    if action == "motors_off":
+        if "motors_off" not in caps:
+            return "This printer cannot release its motors from here"
+        if display_state(printer) in BUSY_STATES:
+            return "Motors cannot be released while the printer is printing"
+        return None
+
     return "Unknown command"
 
 

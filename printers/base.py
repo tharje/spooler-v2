@@ -166,7 +166,7 @@ class PrinterConnection:
     supports_light: bool = False
     # Advanced control (T12). Empty until the protocol commands are verified on
     # a real printer; see control.py for how they are checked.
-    capabilities: frozenset = frozenset()   # temp_nozzle, temp_bed, temp_chamber, fan_part, fan_aux, fan_chamber, move, home, home_axes (per-axis homing)
+    capabilities: frozenset = frozenset()   # temp_nozzle, temp_bed, temp_chamber, fan_part, fan_aux, fan_chamber, move, home, home_axes (per-axis homing), motors_off
     limits: dict = {}                       # {"nozzle": {"max": 300, "assumed": True}, ...}
     controls_verified: bool = False
 
@@ -183,6 +183,9 @@ class PrinterConnection:
         return False
 
     async def auto_level(self) -> bool:
+        return False
+
+    async def disable_steppers(self) -> bool:
         return False
 
     async def heaters_off(self, heaters: list) -> bool:

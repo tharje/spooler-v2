@@ -2080,6 +2080,9 @@ main {
 .ctl-heater-set input { width: 84px !important; padding: 6px 8px !important; font-size: 13px !important; }
 .ctl-fan { display: grid; grid-template-columns: 110px 1fr 44px; align-items: center; gap: 12px; font-size: 13.5px; }
 .ctl-fan-steps { display: flex; flex-wrap: wrap; gap: 6px; }
+.ctl-fan-set { display: flex; gap: 8px; align-items: center; }
+.ctl-fan-slider { flex: 1; min-width: 60px; accent-color: var(--accent); }
+.ctl-fan-num { width: 64px !important; padding: 6px 8px !important; font-size: 13px !important; }
 .ctl-fan output { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-dim-strong); }
 .ctl-motion { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; transition: opacity .15s; }
 .ctl-disabled { opacity: .35; pointer-events: none; }

@@ -89,33 +89,47 @@ function ctlPreset(i) {
   if (caps.includes("temp_nozzle")) _ctlSend("set_temperature", { heater: "nozzle", target: pr.nozzle });
   if (caps.includes("temp_bed")) _ctlSend("set_temperature", { heater: "bed", target: pr.bed });
 }
-function ctlSetFan(fan, pct) { _ctlSend("set_fan", { fan, percent: +pct }); }
+function ctlSetFan(fan, pct) {
+  if (pct === "" || pct == null) return;              // empty field: ignore, use Off to stop
+  const v = Math.round(Math.max(0, Math.min(100, Number(pct))));
+  if (!Number.isFinite(v)) return;
+  _ctlSend("set_fan", { fan, percent: v });
+  // reflect the sent value in both controls right away
+  const r = document.getElementById("ctl-fan-range-" + fan), n = document.getElementById("ctl-fan-in-" + fan);
+  if (r) r.value = v;
+  if (n) n.value = v;
+}
+// Live-sync the number field while the slider is dragged (does not send).
+function ctlFanSlide(fan, val) {
+  const n = document.getElementById("ctl-fan-in-" + fan);
+  if (n) n.value = val;
+}
+function ctlFanOff(fan) { ctlSetFan(fan, 0); }
 function ctlMove(axis, sign) { _ctlSend("move_axis", { axis, distance: sign * _ctlStep }); }
 function ctlHome(axes) { _ctlSend("home", { axes }); }
 function ctlLevel() {
   if (confirm("Start auto leveling? The printer will heat up and probe the bed.")) _ctlSend("auto_level", {});
 }
 function ctlAllOff() { _ctlSend("heaters_off", {}); }
+function ctlMotorsOff() {
+  if (confirm("Turn off the stepper motors? The axes go loose and can be moved by hand. Don't do this during a print.")) _ctlSend("motors_off", {});
+}
 function ctlStep(v) {
   _ctlStep = v;
   document.querySelectorAll("#modal-control .ctl-step").forEach(b => b.classList.toggle("active", +b.dataset.step === v));
 }
 
-// Highlight the step nearest the speed the printer reports, and show the
-// exact value next to the buttons.
+// Show the speed the printer reports, and move the slider/field to match it --
+// but never while the user is dragging or typing (don't fight their input).
 function _ctlFanRefresh(p) {
   const speeds = (p.status || {}).FanSpeed || {};
-  document.querySelectorAll("#modal-control .ctl-fan-step").forEach(b => {
-    const cur = speeds[b.dataset.fan];
-    const near = cur == null ? null
-      : CTL_FAN_STEPS.reduce((a, v) => Math.abs(v - cur) < Math.abs(a - cur) ? v : a);
-    const on = near === +b.dataset.pct;
-    b.classList.toggle("btn-primary", on);
-    b.classList.toggle("btn-secondary", !on);
-  });
   for (const [f, cur] of Object.entries(speeds)) {
     const o = document.getElementById("ctl-fan-" + f);
     if (o) o.textContent = cur + "%";
+    const r = document.getElementById("ctl-fan-range-" + f);
+    const n = document.getElementById("ctl-fan-in-" + f);
+    if (r && document.activeElement !== r) r.value = cur;
+    if (n && document.activeElement !== n) n.value = cur;
   }
 }
 
@@ -153,16 +167,24 @@ function _controlHtml(p) {
   };
   const fans = [["part", "Part cooling", "fan_part"], ["aux", "Auxiliary", "fan_aux"], ["chamber", "Chamber", "fan_chamber"]]
     .filter(([, , c]) => has(c));
-  // Fixed steps, not a slider: "Off" must always send, even when the panel
-  // does not know the fan's real speed, and scrolling must not start a fan.
-  const fanRow = ([f, label]) => `<div class="ctl-fan"><span>${label}</span>
-      <div class="ctl-fan-steps" role="group" aria-label="${label} speed">
-        ${CTL_FAN_STEPS.map(v => `<button class="btn btn-sm btn-secondary ctl-fan-step" data-fan="${f}" data-pct="${v}"
-            onclick="ctlSetFan('${f}',${v})">${v ? v + "%" : "Off"}</button>`).join("")}
+  const fanSpeeds = (p.status || {}).FanSpeed || {};
+  // Slider + a type-in field + Off. The slider and field send on release/Enter
+  // (dragging or typing alone does not send); Off always sends 0.
+  const fanRow = ([f, label]) => {
+    const cur = Math.round(Number(fanSpeeds[f] ?? 0)) || 0;
+    return `<div class="ctl-fan"><span>${label}</span>
+      <div class="ctl-fan-set" role="group" aria-label="${label} speed">
+        <input type="range" class="ctl-fan-slider" id="ctl-fan-range-${f}" min="0" max="100" step="1" value="${cur}"
+          oninput="ctlFanSlide('${f}',this.value)" onchange="ctlSetFan('${f}',this.value)" aria-label="${label} speed">
+        <input type="number" class="ctl-fan-num" id="ctl-fan-in-${f}" min="0" max="100" step="1" value="${cur}"
+          placeholder="0–100" aria-label="${label} percent" onchange="ctlSetFan('${f}',this.value)"
+          onkeydown="if(event.key==='Enter'){ctlSetFan('${f}',this.value);this.blur();}">
+        <button class="btn btn-sm btn-secondary" onclick="ctlFanOff('${f}')">Off</button>
       </div>
-      <output id="ctl-fan-${f}"></output></div>`;
+      <output id="ctl-fan-${f}">${cur}%</output></div>`;
+  };
   const jog = (a, s, txt, cls = "") => `<button class="ctl-jog ${cls}" onclick="ctlMove('${a}',${s})" aria-label="${a}${s > 0 ? "+" : "−"}">${txt}</button>`;
-  const motion = (has("move") || has("home") || has("level")) ? `
+  const motion = (has("move") || has("home") || has("level") || has("motors_off")) ? `
     <section class="ctl-section">
       <h4>Motion</h4>
       <p id="ctl-motion-note" class="ctl-note hidden">Axes are locked while the printer is printing or paused.</p>
@@ -180,6 +202,7 @@ function _controlHtml(p) {
           <div class="ctl-btnrow">
             ${has("home") ? `<button class="btn btn-sm btn-secondary" onclick="ctlHome('XYZ')">Home all</button>` : ""}
             ${has("level") ? `<button class="btn btn-sm btn-secondary" onclick="ctlLevel()">Auto leveling</button>` : ""}
+            ${has("motors_off") ? `<button class="btn btn-sm btn-secondary" onclick="ctlMotorsOff()">Motors off</button>` : ""}
           </div>
         </div>
       </div>

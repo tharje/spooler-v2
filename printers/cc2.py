@@ -7,6 +7,9 @@ import json
 import math
 import secrets
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 import uuid
 from pathlib import Path
 
@@ -140,7 +143,7 @@ class CC2Connection(PrinterConnection):
     # Shown in the advanced-control panel; the commands themselves (1028, 1030,
     # 1026, 1027) are not wired up until verified on a real printer. Limits are
     # assumed, not taken from Elegoo.
-    capabilities = frozenset({"temp_nozzle", "temp_bed", "fan_part", "fan_aux", "fan_chamber", "move", "home", "level"})
+    capabilities = frozenset({"temp_nozzle", "temp_bed", "fan_part", "fan_aux", "fan_chamber", "move", "home", "level", "motors_off"})
     limits = {"nozzle": {"max": 300, "assumed": True}, "bed": {"max": 100, "assumed": True},
               # Firmware refuses box_fan (error 1009) while printing
               "fan_chamber": {"idle_only": True}}
@@ -746,6 +749,38 @@ class CC2Connection(PrinterConnection):
         # Method 1028 reads "extruder" (M104) and "heater_bed" (M140) independently,
         # so one request switches both off.
         return await self.send_cmd(1028, {"extruder": 0, "heater_bed": 0})
+
+    async def disable_steppers(self) -> bool:
+        # Release all stepper motors. This is exactly what the printer's own
+        # touchscreen "motor stop" button does: ec-eeb001-gui's ctrl_klippy_M84
+        # sends the gcode "M84" through Klipper's "gcode/script" interface.
+        # The Elegoo MQTT method table has NO motor-off method (checked against
+        # the firmware's whole handler list), so this can't go over MQTT like the
+        # other controls. Klipper's gcode interface is reachable over the network
+        # through Moonraker (port 7125) on the community firmware. Stock firmware
+        # has no Moonraker, so there this returns False and the action honestly
+        # reports "Not supported by this printer yet".
+        return await self._moonraker_gcode("M84")
+
+    async def _moonraker_gcode(self, script: str) -> bool:
+        loop = asyncio.get_running_loop()
+
+        def _post() -> bool:
+            url = f"http://{self.ip}:7125/printer/gcode/script?" + urllib.parse.urlencode({"script": script})
+            req = urllib.request.Request(url, data=b"", method="POST")
+            try:
+                with urllib.request.urlopen(req, timeout=5) as r:
+                    r.read()
+                return True
+            except urllib.error.HTTPError as e:
+                print(f"[Printer {self.name}] Moonraker gcode {script!r} -> HTTP {e.code}")
+                return False
+
+        try:
+            return await loop.run_in_executor(None, _post)
+        except Exception as e:
+            print(f"[Printer {self.name}] Moonraker gcode {script!r} failed: {e}")
+            return False
 
     async def start_print_file(self, filename: str, print_opts: dict | None = None) -> bool:
         self._current_filename = filename

@@ -196,3 +196,7 @@ async def auto_level(printer) -> str | None:
 async def heaters_off(printer) -> str | None:
     heaters = [h for h, cap in control.HEATERS.items() if cap in printer.capabilities]
     return await _advanced(printer, "heaters_off", {}, lambda: printer.heaters_off(heaters))
+
+
+async def motors_off(printer) -> str | None:
+    return await _advanced(printer, "motors_off", {}, printer.disable_steppers)
