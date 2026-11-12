@@ -232,6 +232,11 @@ class PrinterConnection:
         self.phase: str = ""
         self._last_spooler_cmd_at: float | None = None
         self._current_print_pauses: list = []
+        # Who started the current print (Spooler username), for the history entry.
+        # Set by the start action just before the printer reports the print, then
+        # captured when the "print started" event fires.
+        self._pending_owner: str | None = None
+        self._current_print_owner: str | None = None
         # Epoch seconds (not an ISO string) deliberately — the frontend does
         # "how long ago was this" math against it, which an ISO string without
         # a timezone suffix (as time.strftime("%Y-%m-%dT%H:%M:%S") produces
@@ -937,6 +942,8 @@ class PrinterConnection:
         if event == "start":
             self.state_reason = None
             self._current_print_pauses = []
+            self._current_print_owner = self._pending_owner
+            self._pending_owner = None
             self._print_start_time = time.time()
             self._max_total_layer   = pi.get("TotalLayer", 0) or 0
             self._max_current_layer = pi.get("CurrentLayer", 0) or 0
@@ -997,6 +1004,7 @@ class PrinterConnection:
                     "error_code":    reason["code"] if reason and reason["kind"] == "error" and reason["code"] else None,
                     "error_message": reason["message"] if reason and reason["kind"] == "error" and reason["message"] else None,
                     "initiated_by":  reason["initiated_by"] if reason else None,
+                    "owner":         self._current_print_owner,
                     "pauses":        list(self._current_print_pauses),
                     "started_at":    (time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(self._print_start_time))
                                       if self._print_start_time else None),
@@ -1025,6 +1033,7 @@ class PrinterConnection:
                         loop.run_in_executor(None, update_history_entry, entry["id"], {"spools": used})
                     clear_active(self.id)
             self._acct = None
+            self._current_print_owner = None
             self._max_total_layer = 0
             self._max_current_layer = 0
             if not extras_started:

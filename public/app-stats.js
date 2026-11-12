@@ -415,8 +415,9 @@ function renderPrints() {
     const layerPart = e.total_layers
       ? ` · ${_endStateOf(e) === "complete" ? e.total_layers : (e.current_layer || 0)}/${e.total_layers} layers`
       : "";
+    const ownerPart = e.owner ? ` · ${e.owner}` : "";
     const meta = _el("div", "print-row-meta",
-      `${(e.timestamp || "").replace("T", " ").slice(0, 16)} · ${e.printer_name || "Printer"} · ${formatTime(e.print_time_s || 0)} · ${_fmtNum(e.filament_g || 0, 1)} g${layerPart}`);
+      `${(e.timestamp || "").replace("T", " ").slice(0, 16)} · ${e.printer_name || "Printer"}${ownerPart} · ${formatTime(e.print_time_s || 0)} · ${_fmtNum(e.filament_g || 0, 1)} g${layerPart}`);
     main.append(title, meta);
     const icon = _el("span", `result-icon ${st.cls}`, st.icon);
     icon.title = st.label;
@@ -505,6 +506,7 @@ function _renderPrintDetail() {
     const atLayer = _endStateOf(e) === "complete" ? e.total_layers : (e.current_layer || 0);
     facts.append(_fact("Layers", `${atLayer} / ${e.total_layers}`));
   }
+  if (e.owner) facts.append(_fact("Started by", e.owner));
   if (e.material || e.vendor) facts.append(_fact("Material", [e.vendor, e.material].filter(Boolean).join(" ")));
   if (Array.isArray(e.spools) && e.spools.length) {
     const names = e.spools.map(sp => {

@@ -61,6 +61,12 @@ def list_jobs() -> list:
     return sorted(jobs, key=lambda j: (rank.get(j["status"], 99), -j.get("priority", 0), j["added_at"]))
 
 
+def get_job(job_id: str) -> dict | None:
+    """A single job record by id, or None."""
+    with _lock:
+        return next((j for j in _load() if j["id"] == job_id), None)
+
+
 def _spool_material(printer) -> str | None:
     """Best-effort: the material of whatever spool is linked to this printer's
     active tray right now, or None if Spoolman/tray-link isn't set up or the
@@ -112,6 +118,7 @@ def add_job(local_path: Path, filename: str, requirements: dict) -> dict:
         "assigned_printer_id": None,
         "gcode_printer_model": gcode_model,
         "gcode_filament_type": first_value(meta, "filament_type"),
+        "owner": (requirements.get("owner") or "").strip() or None,
         "error": None,
     }
     with _lock:
@@ -147,6 +154,7 @@ def add_existing_job(printer_id: str, filename: str, requirements: dict) -> dict
         "assigned_printer_id": None,
         "gcode_printer_model": None,   # already on this exact printer -- nothing to validate
         "gcode_filament_type": None,
+        "owner": (requirements.get("owner") or "").strip() or None,
         "error": None,
     }
     with _lock:
@@ -288,6 +296,8 @@ async def confirm_plate_cleared(printer_id: str) -> dict:
         job = next((j for j in jobs if j["status"] == "assigned" and j["assigned_printer_id"] == printer_id), None)
         if job is None:
             raise QueueError("No job is assigned to this printer.")
+    # Attribute the print to whoever queued it, for the history entry.
+    printer._pending_owner = job.get("owner")
     try:
         if job.get("source") == "printer_file":
             # Already on this printer's own storage -- just start it, nothing to upload.
