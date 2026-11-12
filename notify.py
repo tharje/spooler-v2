@@ -110,13 +110,36 @@ def should_send(n: Notification) -> bool:
 
 
 def _deliver(n: Notification, channels: list) -> None:
+    """`channels`: shared channel names, or (label, channel, settings lookup)
+    for a user's own channel."""
     for ch in channels:
+        label, name, get = ch if isinstance(ch, tuple) else (ch, ch, None)
         try:
-            notifiers.send(ch, n)
+            if get is None:
+                notifiers.send(name, n)
+            else:
+                notifiers.send(name, n, get)
         except notifiers.NotifierError as e:
-            print(f"[Notify] {ch} failed: {e}")
+            print(f"[Notify] {label} failed: {e}")
         except Exception as e:  # a bug in one channel must not hide the others
-            print(f"[Notify] {ch} error: {type(e).__name__}")
+            print(f"[Notify] {label} error: {type(e).__name__}")
+
+
+def _user_channels(n: Notification) -> list:
+    """Users' own channels that should get `n`: the user wants this event,
+    may see the printer and is still allowed to have own channels."""
+    import user_channels
+    import users
+    key = EVENT_SETTING.get(n.event)
+    shared = load_notif_settings()
+    out = []
+    for user in user_channels.users_with_channels():
+        if not users.has_permission(user, user_channels.PERMISSION):
+            continue
+        if not push._may_receive(user, key, n.printer_id, shared):
+            continue
+        out += [(f"{user}/{name}", name, get) for name, get in user_channels.active(user)]
+    return out
 
 
 def notify(n: Notification) -> bool:
@@ -126,21 +149,24 @@ def notify(n: Notification) -> bool:
         return False
     channels = notifiers.active_channels()
     if n.event != "test" and not shared_on(n.event):
-        # Only some users' own choices want it: just their devices.
+        # Only some users' own choices want it: just their devices and channels.
         channels = [c for c in channels if c == "webpush"]
+    if n.event != "test":
+        channels = channels + _user_channels(n)
     if not channels:
         return False
-    print(f"[Notify] {n.event} ({n.printer_name or n.printer_id}) -> {', '.join(channels)}")
+    names = [c[0] if isinstance(c, tuple) else c for c in channels]
+    print(f"[Notify] {n.event} ({n.printer_name or n.printer_id}) -> {', '.join(names)}")
     _executor.submit(_deliver, n, channels)
     return True
 
 
-def send_test(channel: str) -> None:
+def send_test(channel: str, get=None) -> None:
     """Send a test message through one channel right now (not queued), so the
     caller can report success or the readable failure. Ignores event settings."""
     n = Notification(event="test", printer_id="", title="Spooler — test notification",
                      body="If you can read this, this channel works.")
-    notifiers.send(channel, n)
+    notifiers.send(channel, n, get)
 
 
 def reset_spam_guard() -> None:

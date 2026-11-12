@@ -1,6 +1,8 @@
 """Per-user notifications (step A): push subscriptions belong to a user, each
 user picks their own events, and nobody is told about a printer they can't see."""
 
+import json
+
 import pytest
 
 import auth
@@ -148,3 +150,91 @@ def test_deleting_user_forgets_devices_and_choices():
     st, _ = _call("DELETE", "/api/users/kid", _session("boss"))
     assert st == 200
     assert push._push_subs == [] and push.user_event_choices("kid") is None
+
+
+# ── step B: users' own channels ──────────────────────────────────────────────
+
+import user_channels
+
+
+def _capture(monkeypatch):
+    got = []
+    monkeypatch.setattr(notify._executor, "submit", lambda fn, n, chans: got.append(chans))
+    monkeypatch.setattr(notifiers, "active_channels", lambda: [])
+    return got
+
+
+def test_users_own_channel_gets_their_events(monkeypatch):
+    users.update_role("operator", permissions=["view", "notify.channels"])
+    user_channels.update("kid", "ntfy", True, {"ntfy.topic": "kid-topic"})
+    push.save_user_event_choices("kid", {"started": True})
+    got = _capture(monkeypatch)
+    assert notify.notify(Notification("print_started", "p1", "T"))
+    (chans,) = got
+    assert [(label, name) for label, name, _ in chans] == [("kid/ntfy", "ntfy")]
+    assert chans[0][2]("ntfy.topic") == "kid-topic"
+
+
+def test_own_channel_respects_visibility_choice_and_permission(monkeypatch):
+    users.update_role("operator", permissions=["view", "notify.channels"])
+    user_channels.update("kid", "ntfy", True, {"ntfy.topic": "kid-topic"})
+    push.save_notif_settings({"started": {"enabled": True}, "finished": {"enabled": True}})
+    push.save_user_event_choices("kid", {"started": True})
+    users.set_user_printers("kid", ["p2"])
+    got = _capture(monkeypatch)
+    notify.notify(Notification("print_started", "p1", "T"))        # can't see p1
+    notify.notify(Notification("print_complete", "p2", "T"))       # doesn't want it
+    users.update_role("operator", permissions=["view"])
+    notify.notify(Notification("print_started", "p2", "T"))        # permission taken away
+    assert got == []
+
+
+def test_switched_off_or_unconfigured_channel_is_skipped():
+    user_channels.update("kid", "ntfy", False, {"ntfy.topic": "t"})
+    user_channels.update("kid", "discord", True, {})
+    assert user_channels.active("kid") == []
+
+
+def test_telegram_uses_shared_bot_unless_own_token(monkeypatch):
+    import config
+    config.set("telegram.token", "111:shared")
+    user_channels.update("kid", "telegram", True, {"telegram.chat_id": "42"})
+    (_, get), = user_channels.active("kid")
+    assert get("telegram.token") == "111:shared" and get("telegram.chat_id") == "42"
+    user_channels.update("kid", "telegram", values={"telegram.token": "222:own"})
+    (_, get), = user_channels.active("kid")
+    assert get("telegram.token") == "222:own"
+
+
+def test_blank_secret_keeps_old_value_and_clear_removes_it():
+    user_channels.update("kid", "webhook", True, {"webhook.url": "https://example.com/h"})
+    user_channels.update("kid", "webhook", values={"webhook.url": ""})
+    assert user_channels.channels_of("kid")["webhook"]["values"]["webhook.url"] == "https://example.com/h"
+    user_channels.update("kid", "webhook", clear=["webhook.url"])
+    assert "webhook.url" not in user_channels.channels_of("kid")["webhook"]["values"]
+
+
+def test_unknown_channel_or_field_is_rejected():
+    with pytest.raises(ValueError):
+        user_channels.update("kid", "webpush", True)
+    with pytest.raises(ValueError):
+        user_channels.update("kid", "ntfy", values={"telegram.chat_id": "1"})
+
+
+def test_my_channels_api_hides_secrets_and_needs_permission():
+    kid = _session("kid")
+    st, _ = _call("GET", "/api/my-channels", kid)
+    assert st == 403
+    users.update_role("operator", permissions=["view", "notify.channels"])
+    st, d = _call("PATCH", "/api/my-channels", kid,
+                  {"channel": "discord", "enabled": True, "values": {"discord.webhook": "https://discord.com/api/webhooks/1/hush-xyz"}})
+    assert st == 200 and d["channels"]["discord"]["configured"] is True
+    st, d = _call("GET", "/api/my-channels", kid)
+    assert st == 200 and "hush-xyz" not in json.dumps(d)
+    assert d["channels"]["discord"]["fields"][0]["set"] is True
+
+
+def test_deleting_user_forgets_their_channels():
+    user_channels.update("kid", "ntfy", True, {"ntfy.topic": "t"})
+    _call("DELETE", "/api/users/kid", _session("boss"))
+    assert user_channels.channels_of("kid") == {}

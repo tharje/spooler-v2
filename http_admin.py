@@ -22,6 +22,7 @@ import tempfile
 import threading
 import time
 import uploads
+import user_channels
 import users
 import urllib.error
 import urllib.parse
@@ -112,6 +113,63 @@ class AdminMixin:
         push.save_user_event_choices(user, None if events is None else
                                      {k: bool(v) for k, v in events.items() if k in valid})
         self._json({"ok": True})
+
+    def _my_channels_user(self) -> str | None:
+        """The signed-in user, when they may have own channels (sends the error otherwise)."""
+        user = current_user(self)
+        if not user:
+            self._json({"error": "Sign in with an account to set up your own channels."}, 400)
+            return None
+        if not users.has_permission(user, user_channels.PERMISSION):
+            self._json({"error": "forbidden", "need": user_channels.PERMISSION}, 403)
+            return None
+        return user
+
+    @requires_feature("notifications")
+    def _handle_my_channels_get(self):
+        user = self._my_channels_user()
+        if user:
+            self._json({"channels": user_channels.describe(user)})
+
+    @requires_feature("notifications")
+    def _handle_my_channels_update(self):
+        """{"channel": "telegram", "enabled": true, "values": {...}, "clear": [...]}"""
+        user = self._my_channels_user()
+        if not user:
+            return
+        try:
+            body = json.loads(self._read_body() or b"{}")
+            values, clear = body.get("values") or {}, body.get("clear") or []
+            if not isinstance(values, dict) or not isinstance(clear, list):
+                raise ValueError("Bad request.")
+            enabled = body.get("enabled")
+            user_channels.update(user, str(body.get("channel", "")),
+                                 None if enabled is None else bool(enabled), values, clear)
+        except ValueError as e:
+            self._json({"error": str(e)}, 400)
+            return
+        except Exception:
+            self._json({"error": "Bad request"}, 400)
+            return
+        self._json({"ok": True, "channels": user_channels.describe(user)})
+
+    @requires_feature("notifications")
+    def _handle_my_channel_test(self, channel: str):
+        self._read_body()
+        user = self._my_channels_user()
+        if not user:
+            return
+        vals = (user_channels.channels_of(user).get(channel) or {}).get("values") or {}
+        if not user_channels.is_configured(channel, vals):
+            msg = ("Spooler has no shared Telegram bot yet: ask an admin to set one up, or enter your own bot token."
+                   if channel == "telegram" and vals.get("telegram.chat_id") else "Fill in the channel's settings first.")
+            self._json({"ok": False, "message": msg}, 400)
+            return
+        try:
+            notify.send_test(channel, notifiers.user_getter(vals, channel))
+            self._json({"ok": True, "message": "Sent. Check your " + channel + "."})
+        except notifiers.NotifierError as e:
+            self._json({"ok": False, "message": str(e)}, 502)
 
     @requires_feature("notify_webpush")
     def _handle_push_test(self):
@@ -682,6 +740,7 @@ class AdminMixin:
         try:
             users.delete_user(username)
             push.remove_owner(username)
+            user_channels.remove_user(username)
             self._json({"ok": True})
         except ValueError as e:
             self._json({"error": str(e)}, 400)

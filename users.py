@@ -49,6 +49,7 @@ PERMISSIONS: tuple[tuple[str, str], ...] = (
     ("printer.control", "Control the printer (temperatures, fans, movement, pause/resume)"),
     ("filament.manage", "Manage filament / Spoolman ledger"),
     ("settings.manage", "Change settings, features, integrations and notifications"),
+    ("notify.channels", "Set up own notification channels (Telegram, ntfy, Discord, webhook)"),
     ("maintenance",     "Run service tasks and diagnostics"),
     ("backup.manage",   "Create and restore backups"),
     ("apitokens.manage","Manage external API tokens"),

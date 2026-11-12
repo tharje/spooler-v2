@@ -438,6 +438,8 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
 
         if self.path == "/api/my-notifications":
             self._handle_my_notifications_get()
+        elif self.path == "/api/my-channels":
+            self._handle_my_channels_get()
         elif self.path == "/api/features":
             self._json(describe_all_features())
         elif self.path.split("?")[0] == "/api/diagnostics":
@@ -575,6 +577,9 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
             if self._require("settings.manage"):
                 self._handle_patch_integrations()
             return
+        if self.path == "/api/my-channels":
+            self._handle_my_channels_update()
+            return
         if self.path.startswith("/api/users/"):
             if self._require("users.manage"):
                 self._handle_users_update(urllib.parse.unquote(self.path[len("/api/users/"):]))
@@ -666,6 +671,9 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
                 self._handle_notif_settings()
         elif self.path == "/api/my-notifications":
             self._handle_my_notifications_set()
+        elif self.path.startswith("/api/my-channels/") and self.path.endswith("/test") \
+                and self.path.split("/")[3] in notifiers.USER_CHANNELS:
+            self._handle_my_channel_test(self.path.split("/")[3])
         elif self.path == "/api/push-test":
             self._handle_push_test()
         elif self.path in ("/api/service/tasks", "/api/service/log", "/api/service/hours"):

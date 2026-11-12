@@ -335,6 +335,105 @@ function _collectExtraNotifEvents() {
   return out;
 }
 
+// ─── My channels (a user's own ntfy/Telegram/Discord/webhook) ───────────────
+const _MY_CHANNEL_INFO = {
+  ntfy:     { title: "ntfy", help: "ntfy.sh or your own ntfy server. Install the ntfy app and subscribe to your topic." },
+  telegram: { title: "Telegram", help: "Send any message to the Spooler bot, then enter your chat ID (e.g. from @userinfobot). The bot token is only needed if you want to use your own bot." },
+  discord:  { title: "Discord", help: "Channel settings → Integrations → Webhooks → copy the webhook address." },
+  webhook:  { title: "Webhook", help: "Spooler sends each of your notifications as JSON (POST) to this address." },
+};
+const _MY_FIELD_LABELS = {
+  "ntfy.url": "ntfy server (blank = ntfy.sh)", "ntfy.topic": "ntfy topic", "ntfy.token": "ntfy access token (optional)",
+  "telegram.chat_id": "Your Telegram chat ID", "telegram.thread_id": "Topic number (optional, for groups with topics)",
+  "telegram.token": "Own bot token (optional)", "discord.webhook": "Discord webhook address", "webhook.url": "Webhook address",
+};
+const _canOwnChannels = () => (window.SPOOLER_PERMS || []).includes("notify.channels");
+
+function _renderMyChannels(chans) {
+  const host = document.getElementById("notif-mychannels");
+  if (!host) return;
+  const on = Object.values(chans).filter(c => c.enabled && c.configured).length;
+  const pill = document.getElementById("notif-mychannels-summary");
+  if (pill) pill.textContent = on ? `${on} on` : "none on";
+  host.innerHTML = Object.entries(chans).map(([key, ch]) => {
+    const info = _MY_CHANNEL_INFO[key] || { title: key, help: "" };
+    const status = !ch.configured ? "Not set up" : (ch.enabled ? "On" : "Off");
+    const fields = ch.fields.map(f => `<div class="integration-field">
+      <label>${escHtml(_MY_FIELD_LABELS[f.key] || f.key)}
+        <input type="${f.secret ? "password" : "text"}" data-my-key="${escAttr(f.key)}" value="${f.secret ? "" : escAttr(f.value || "")}"
+               placeholder="${escAttr(f.secret ? (f.set ? "•••• (leave blank to keep)" : "Not set") : "")}" autocomplete="off" />
+      </label>${f.secret && f.set ? `<div class="integration-field-meta"><button type="button" class="btn btn-secondary btn-sm" data-my-clear="${escAttr(f.key)}">Remove</button></div>` : ""}
+    </div>`).join("");
+    return `<details class="notif-channel" data-my-channel="${key}">
+      <summary>
+        <span class="notif-label">${escHtml(info.title)}</span>
+        <span class="notif-channel-status${ch.configured ? "" : " missing"}">${status}</span>
+        <label class="toggle-switch" onclick="event.stopPropagation()">
+          <input type="checkbox" data-my-enabled="${key}" ${ch.enabled ? "checked" : ""} />
+          <span class="toggle-slider"></span>
+        </label>
+      </summary>
+      <div class="notif-channel-body">
+        <p class="report-desc">${escHtml(info.help)}</p>
+        ${fields}
+        <div class="integration-test-row"><button type="button" class="btn btn-secondary btn-sm" data-my-test="${key}">Send test</button></div>
+      </div>
+    </details>`;
+  }).join("");
+  host.querySelectorAll("button[data-my-clear]").forEach(btn => btn.addEventListener("click", async () => {
+    const channel = btn.closest("[data-my-channel]").dataset.myChannel;
+    const r = await _patchMyChannel({ channel, clear: [btn.dataset.myClear] });
+    if (r) { _renderMyChannels(r); toast("Removed"); }
+  }));
+  host.querySelectorAll("button[data-my-test]").forEach(btn => btn.addEventListener("click", async () => {
+    const key = btn.dataset.myTest;
+    btn.disabled = true; btn.textContent = "Sending…";
+    try {
+      if (!await _saveMyChannel(key)) return;
+      const r = await fetch(`/api/my-channels/${encodeURIComponent(key)}/test`, { method: "POST" });
+      const d = await r.json().catch(() => ({}));
+      toast(d.message || (r.ok ? "Sent" : "Failed"), !d.ok);
+    } finally {
+      btn.disabled = false; btn.textContent = "Send test";
+    }
+  }));
+}
+
+async function _patchMyChannel(body) {
+  const r = await fetch("/api/my-channels", { method: "PATCH", headers: { "Content-Type": "application/json" },
+                                              body: JSON.stringify(body) }).catch(() => null);
+  const d = await r?.json().catch(() => ({}));
+  if (!r?.ok) { toast(d?.error || "Could not save", true); return null; }
+  return d.channels;
+}
+
+async function _saveMyChannel(key) {
+  const box = document.querySelector(`#notif-mychannels [data-my-channel="${key}"]`);
+  if (!box) return true;
+  const values = {};
+  box.querySelectorAll("[data-my-key]").forEach(i => { values[i.dataset.myKey] = i.value; });
+  const enabled = box.querySelector("[data-my-enabled]")?.checked ?? false;
+  return !!await _patchMyChannel({ channel: key, enabled, values });
+}
+
+async function _saveAllMyChannels() {
+  if (!_canOwnChannels()) return true;
+  for (const box of document.querySelectorAll("#notif-mychannels [data-my-channel]")) {
+    if (!await _saveMyChannel(box.dataset.myChannel)) return false;
+  }
+  return true;
+}
+
+async function _loadMyChannels() {
+  const group = document.getElementById("notif-mychannels-group");
+  if (!group) return;
+  group.style.display = _canOwnChannels() ? "" : "none";
+  if (!_canOwnChannels()) return;
+  const r = await fetch("/api/my-channels").catch(() => null);
+  if (!r?.ok) { group.style.display = "none"; return; }
+  _renderMyChannels((await r.json()).channels || {});
+}
+
 // Notifications sub-page UI. Admins (settings.manage) edit the shared setup:
 // channels, thresholds, photos and the events those channels get; their own
 // devices follow it. Everyone else picks just which events reach their own
@@ -350,9 +449,10 @@ async function _populateNotifForm() {
   _settingsNotifPage?.classList.toggle("notif-personal", !admin);
   const note = document.getElementById("notif-events-note");
   if (note) note.textContent = admin
-    ? "Events are sent to every channel that is switched on above, and to your own devices."
-    : "These choices are for your own devices (browser push). Thresholds and shared channels like Telegram are set by an admin. You only hear about printers you have access to.";
+    ? "Events are sent to the shared channels above, and to your own devices and channels."
+    : "These choices are for your own devices and channels. Thresholds and the shared channels are set by an admin. You only hear about printers you have access to.";
   if (admin) await _reloadChannels(false);
+  await _loadMyChannels();
   const resp = await fetch(admin ? "/api/notification-settings" : "/api/my-notifications").catch(() => null);
   let s = resp?.ok ? await resp.json().catch(() => ({})) : {};
   if (!admin) {
@@ -540,6 +640,7 @@ document.getElementById("btn-notif-save")?.addEventListener("click", async () =>
       await _unsubscribePush();
     }
   }
+  if (!await _saveAllMyChannels()) return;
   let r;
   if (admin) {
     if (!await _saveAllChannelFields()) return;
