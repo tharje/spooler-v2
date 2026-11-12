@@ -17,6 +17,8 @@ MAX_LOG_ENTRIES = 500
 _log_lock = threading.Lock()
 
 HEATERS = {"nozzle": "temp_nozzle", "bed": "temp_bed", "chamber": "temp_chamber"}
+# Nozzle PID calibration target range (°C)
+PID_MIN, PID_MAX = 150, 280
 FANS = {"part": "fan_part", "aux": "fan_aux", "chamber": "fan_chamber"}
 AXES = ("X", "Y", "Z")
 MAX_STEP_MM = {"X": 10.0, "Y": 10.0, "Z": 10.0}
@@ -99,6 +101,24 @@ def validate_command(printer, action: str, params: dict, enabled: bool = True) -
             return "This printer cannot level from here"
         if display_state(printer) in BUSY_STATES:
             return "The printer cannot level while printing"
+        return None
+
+    if action == "pid_calibrate":
+        if "pid" not in caps:
+            return "This printer cannot run PID calibration from here"
+        if display_state(printer) in BUSY_STATES:
+            return "PID calibration can't run while the printer is printing"
+        target = _num(params.get("target"))
+        top = min((limits.get("nozzle") or {}).get("max", PID_MAX), PID_MAX)
+        if target is None or not PID_MIN <= target <= top:
+            return f"PID target must be between {PID_MIN} and {top:g} °C"
+        return None
+
+    if action == "shaper_calibrate":
+        if "shaper" not in caps:
+            return "This printer cannot run the resonance test from here"
+        if display_state(printer) in BUSY_STATES:
+            return "The resonance test can't run while the printer is printing"
         return None
 
     if action == "heaters_off":

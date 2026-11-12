@@ -289,3 +289,31 @@ def test_read_log_filters_by_printer_and_is_newest_first(monkeypatch, tmp_path):
     assert [e["time"] for e in control.read_log()] == [3, 2, 1]
     assert [e["time"] for e in control.read_log({"p2"}, {"p2": "Old CC2"})] == [3, 1]
     assert control.read_log(set()) == []
+
+
+async def test_cc2_pid_and_shaper_send_1034_and_1033(cc2, monkeypatch, tmp_path):
+    import features
+    monkeypatch.setattr(control, "CONTROL_LOG", tmp_path / "log.json")
+    monkeypatch.setattr(features, "is_enabled", lambda k: True)
+    sent = []
+
+    async def fake_send(cmd, data=None):
+        sent.append((cmd, data))
+        return True
+    monkeypatch.setattr(cc2, "send_cmd", fake_send)
+    assert await pa.pid_calibrate(cc2, 220) is None
+    assert await pa.shaper_calibrate(cc2) is None
+    assert sent == [(1034, {"target_temp": 220}), (1033, {})]
+
+
+@pytest.mark.parametrize("target", [100, 300, "hot", None])
+def test_pid_target_is_checked(cc2, target):
+    err = v(cc2, "pid_calibrate", target=target)
+    assert err and "between 150" in err
+
+
+@pytest.mark.parametrize("action,params", [("pid_calibrate", {"target": 220}), ("shaper_calibrate", {})])
+def test_calibration_only_when_idle(cc2, action, params):
+    assert v(cc2, action, **params) is None
+    cc2.status = {"PrintInfo": {"Status": 13}}
+    assert "printing" in v(cc2, action, **params)

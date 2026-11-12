@@ -142,7 +142,7 @@ class CC2Connection(PrinterConnection):
     # Shown in the advanced-control panel; the commands themselves (1028, 1030,
     # 1026, 1027) are not wired up until verified on a real printer. Limits are
     # assumed, not taken from Elegoo.
-    capabilities = frozenset({"temp_nozzle", "temp_bed", "fan_part", "fan_aux", "fan_chamber", "move", "home", "level"})
+    capabilities = frozenset({"temp_nozzle", "temp_bed", "fan_part", "fan_aux", "fan_chamber", "move", "home", "level", "pid", "shaper"})
     limits = {"nozzle": {"max": 300, "assumed": True}, "bed": {"max": 100, "assumed": True},
               # Firmware refuses box_fan (error 1009) while printing
               "fan_chamber": {"idle_only": True}}
@@ -254,7 +254,7 @@ class CC2Connection(PrinterConnection):
         if cmd == CMD_LIGHT and data:
             light_on = data.get("LightStatus", {}).get("SecondLight", False)
             payload["params"] = {"brightness": 255 if light_on else 0, "power": 1 if light_on else 0}
-        elif method in (1020, 1026, 1027, 1028, 1030, 1031, 1032, 1044, 1045, 1046, 1047) and data:
+        elif method in (1020, 1026, 1027, 1028, 1030, 1031, 1032, 1034, 1044, 1045, 1046, 1047) and data:
             payload["params"] = data
         try:
             await self._mqtt_client.publish(topic, json.dumps(payload))
@@ -752,6 +752,18 @@ class CC2Connection(PrinterConnection):
         if key is None:
             return False
         return await self.send_cmd(1030, {key: round(max(0, min(100, percent)) * 255 / 100)})
+
+    async def pid_calibrate(self, target: int) -> bool:
+        # Method 1034 (handle_pid_check) runs "PID_CALIBRATE HEATER=extruder
+        # TARGET=<target_temp>" (200 when missing). Read from the firmware
+        # binary; not yet tested on a real printer.
+        return await self.send_cmd(1034, {"target_temp": int(target)})
+
+    async def shaper_calibrate(self) -> bool:
+        # Method 1033 (handle_ringing_optimize) runs SHAPER_CALIBRATE, the
+        # resonance test for input shaping. No parameters. Read from the
+        # firmware binary; not yet tested on a real printer.
+        return await self.send_cmd(1033, {})
 
     async def heaters_off(self, heaters: list) -> bool:
         # Method 1028 reads "extruder" (M104) and "heater_bed" (M140) independently,

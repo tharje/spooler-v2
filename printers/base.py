@@ -185,6 +185,12 @@ class PrinterConnection:
     async def auto_level(self) -> bool:
         return False
 
+    async def pid_calibrate(self, target: int) -> bool:
+        return False
+
+    async def shaper_calibrate(self) -> bool:
+        return False
+
     async def heaters_off(self, heaters: list) -> bool:
         # Printers that can switch everything off in one command override this
         results = [await self.set_temperature(h, 0.0) for h in heaters]

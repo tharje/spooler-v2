@@ -111,6 +111,16 @@ function ctlLevel() {
   if (confirm("Start auto leveling? The printer will heat up and probe the bed.")) _ctlSend("auto_level", {});
 }
 function ctlAllOff() { _ctlSend("heaters_off", {}); }
+function ctlPid() {
+  const t = Math.round(Number(document.getElementById("ctl-pid-target")?.value || 220));
+  if (!Number.isFinite(t) || t < 150 || t > 280) { toast("PID target must be 150–280 °C", true); return; }
+  if (confirm(`Run PID calibration of the nozzle at ${t} °C? It heats the nozzle and takes a few minutes. Don't leave the printer unattended.`))
+    _ctlSend("pid_calibrate", { target: t });
+}
+function ctlShaper() {
+  if (confirm("Run the resonance test (input shaper)? The printer homes and shakes the toolhead and bed for a few minutes. Keep the bed clear."))
+    _ctlSend("shaper_calibrate", {});
+}
 function ctlStep(v) {
   _ctlStep = v;
   document.querySelectorAll("#modal-control .ctl-step").forEach(b => b.classList.toggle("active", +b.dataset.step === v));
@@ -147,13 +157,15 @@ function _controlRefresh() {
 
 // Who did what on this printer from the advanced panel, newest first.
 const _CTL_ACTION_LABEL = { set_temperature: "Temperature", set_fan: "Fan", move_axis: "Move", home: "Home",
-                            auto_level: "Auto leveling", heaters_off: "All heating off" };
+                            auto_level: "Auto leveling", heaters_off: "All heating off",
+                            pid_calibrate: "PID calibration", shaper_calibrate: "Resonance test" };
 function _ctlParamText(e) {
   const p = e.params || {};
   if (e.action === "set_temperature") return `${p.heater ?? ""} → ${p.target ?? ""} °C`;
   if (e.action === "set_fan") return `${p.fan ?? ""} → ${p.percent ?? ""} %`;
   if (e.action === "move_axis") return `${p.axis ?? ""} ${p.distance > 0 ? "+" : ""}${p.distance ?? ""} mm`;
   if (e.action === "home") return p.axes || "";
+  if (e.action === "pid_calibrate") return `${p.target ?? ""} °C`;
   return "";
 }
 async function ctlLoadLog() {
@@ -248,6 +260,14 @@ function _controlHtml(p) {
       <button class="btn btn-danger ctl-alloff" onclick="ctlAllOff()">Turn off all heating</button></section>` : ""}
     ${fans.length ? `<section class="ctl-section"><h4>Fans</h4>${fans.map(fanRow).join("")}</section>` : ""}
     ${motion}
+    ${(has("pid") || has("shaper")) ? `<section class="ctl-section">
+      <h4>Calibration</h4>
+      <div class="ctl-btnrow">
+        ${has("pid") ? `<span class="ctl-pid"><button class="btn btn-sm btn-secondary" onclick="ctlPid()">PID calibrate nozzle</button>
+          <input type="number" id="ctl-pid-target" min="150" max="280" step="5" value="220" aria-label="PID target temperature"> °C</span>` : ""}
+        ${has("shaper") ? `<button class="btn btn-sm btn-secondary" onclick="ctlShaper()">Resonance test (input shaper)</button>` : ""}
+      </div>
+    </section>` : ""}
     <section class="ctl-section">
       <details class="ctl-log" ontoggle="if (this.open) ctlLoadLog()">
         <summary><h4>Command log</h4></summary>

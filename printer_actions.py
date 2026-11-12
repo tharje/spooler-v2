@@ -198,6 +198,15 @@ async def auto_level(printer) -> str | None:
     return await _advanced(printer, "auto_level", {}, printer.auto_level)
 
 
+async def pid_calibrate(printer, target) -> str | None:
+    return await _advanced(printer, "pid_calibrate", {"target": target},
+                           lambda: printer.pid_calibrate(int(round(float(target)))))
+
+
+async def shaper_calibrate(printer) -> str | None:
+    return await _advanced(printer, "shaper_calibrate", {}, printer.shaper_calibrate)
+
+
 async def heaters_off(printer) -> str | None:
     heaters = [h for h, cap in control.HEATERS.items() if cap in printer.capabilities]
     return await _advanced(printer, "heaters_off", {}, lambda: printer.heaters_off(heaters))

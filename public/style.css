@@ -2122,3 +2122,5 @@ body.no-printers-manage #btn-settings-goto-printers { display: none !important; 
 .ctl-log-what small { color: var(--text-muted); }
 .ctl-log-result.ok { color: var(--green, #3fb950); }
 .ctl-log-result.fail { color: var(--red, #f85149); text-align: right; }
+.ctl-pid { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.modal-box .ctl-pid input { width: 64px; padding: 5px 6px; font-size: 13px; }
