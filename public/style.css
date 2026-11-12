@@ -2078,12 +2078,9 @@ main {
 .ctl-target { font-size: 13px; font-weight: 500; color: var(--text-muted); margin-left: 10px; }
 .ctl-heater-set { display: flex; gap: 6px; align-items: center; }
 .ctl-heater-set input { width: 84px !important; padding: 6px 8px !important; font-size: 13px !important; }
-.ctl-fan { display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; margin-bottom: 10px; }
-.ctl-fan-head { display: flex; justify-content: space-between; }
-.ctl-fan-set { display: flex; align-items: center; gap: 8px; }
-.ctl-fan-slider { flex: 1; min-width: 80px; accent-color: var(--accent); }
-.ctl-fan-input { width: 64px !important; padding: 6px 8px !important; font-size: 13px !important; }
-.ctl-fan output { font-variant-numeric: tabular-nums; color: var(--text-dim-strong); }
+.ctl-fan { display: grid; grid-template-columns: 110px 1fr 44px; align-items: center; gap: 12px; font-size: 13.5px; }
+.ctl-fan-steps { display: flex; flex-wrap: wrap; gap: 6px; }
+.ctl-fan output { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-dim-strong); }
 .ctl-motion { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; transition: opacity .15s; }
 .ctl-disabled { opacity: .35; pointer-events: none; }
 .ctl-pad { display: grid; grid-template-columns: repeat(3, 46px); grid-template-rows: repeat(3, 46px); gap: 6px; }
@@ -2101,6 +2098,7 @@ main {
 @media (max-width: 520px) {
   .ctl-box { padding: 18px; }
   .ctl-heater { grid-template-columns: 1fr; gap: 6px; }
+  .ctl-fan { grid-template-columns: 90px 1fr 40px; }
 }
 .ctl-btnrow { display: flex; gap: 8px; flex-wrap: wrap; }
 
