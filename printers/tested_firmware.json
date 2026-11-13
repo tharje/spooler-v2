@@ -1,8 +1,8 @@
 {
   "_comment": "Firmware versions that have actually been run with Spooler on real printers. Exact versions or patterns with * (case-insensitive). Add a version here in the same PR as any fix it needs; see 'Tested firmware' in the README.",
   "cc1": {
-    "tested": ["V0.4.0-o"],
-    "notes": {"V0.4.0-o": "OpenCentauri patched firmware"}
+    "tested": ["V0.4.0-o", "V1.4.49"],
+    "notes": {"V0.4.0-o": "OpenCentauri patched firmware", "V1.4.49": "OpenCentauri firmware; status, files, camera and advanced control (temperatures) tested 2026-11"}
   },
   "cc2": {
     "tested": ["02.01.00.00", "02.01.01.07"],
