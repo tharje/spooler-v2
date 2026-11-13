@@ -1,5 +1,22 @@
 [
   {
+    "version": "2.3.5",
+    "date": "2026-11-13",
+    "changes": [
+      "Users and roles: Spooler can now have several logins, each with a role (Admin, Operator, Viewer or one you make) that decides what they may do and which printers they see; someone who can't see a printer can't print to it or control it either. The old single login becomes an admin, so nobody is logged out. Adding, renaming and removing printers is its own permission. Settings → Users and roles.",
+      "Notifications per user: everyone picks their own events, browser push only goes to their own devices and only about printers they can see, and users who are allowed can add their own ntfy, Telegram, Discord or webhook under My channels.",
+      "New: Advanced control (off by default, Settings → Features) for the Centauri Carbon 2: nozzle and bed temperature with presets, fans, moving and homing the axes, auto leveling, PID calibration of the nozzle and the resonance test (input shaper). Only for users with the Advanced control permission; every command is logged with who sent it. Tested on a real CC2.",
+      "Advanced control for the Centauri Carbon 1: temperatures, fans, moving and homing, with the same commands as the printer's own web page. Temperatures are tested on a real CC1; fans and moving are not yet, so the panel says so. The CC1 has no network command for leveling, PID or the resonance test.",
+      "Idle guard: heating left on while a printer isn't printing is switched off after 30 minutes (adjustable in the Advanced control panel, 0 = off). Printing, preheating, leveling and calibration don't count.",
+      "New menu: Stats, Spools, Service, Queue and Settings open as pages next to the side menu instead of panels sliding over the printers, with a Printers item to get back. The back button works and a reload stays on the same page. On a computer, Stats uses the whole width and fits without scrolling.",
+      "New Me page (tap your name at the bottom of the menu): your role and permissions, your prints with records and milestones, your push devices (with Remove), your queue jobs and commands, and your account. Prints started from Spooler now record who started them, so these statistics count from this version on.",
+      "Centauri Carbon 2: bed leveling chosen when starting a sliced file now actually runs (the printer ignored it before).",
+      "Centauri Carbon 2: error 704 (leveling failed) explains the likely cause and what to try, and all 75 error codes the printer's screen knows are listed (was 36).",
+      "Centauri Carbon 2: the card no longer stays on Leveling or Homing after the printer has gone back to idle.",
+      "Every printer action over the live connection now checks the user's permission."
+    ]
+  },
+  {
     "version": "2.3.4",
     "date": "2026-10-27",
     "changes": [

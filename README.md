@@ -60,7 +60,7 @@ Open **`http://<server-ip>:8080`** in your browser. On first visit you will be p
 - **Auto-discovery** – finds printers on the local network automatically
 - **Persistence** – printers, history and spool data saved between restarts
 - **Authentication** – password-protected login; first-time setup via the web UI, no terminal needed
-- **Users and roles** – several logins, each with a role (Admin, Operator, Viewer or one you make) that decides what they may do and which printers they see
+- **Users and roles** – several logins, each with a role (Admin, Operator, Viewer or one you make) that decides what they may do and which printers they see, and a **Me** page per user with their own prints, milestones and devices
 - **Spoolman integration** – filament spool inventory with auto-deduction after each print
 - **Filament catalogue import** – import a brand's filament types (Elegoo and others) from SpoolmanDB
 - **Feature switches** – turn camera, notifications, backups, Spoolman, upload, statistics and more on or off under Settings → Features
@@ -165,6 +165,8 @@ Built-in roles:
 - **Viewer** – look only
 
 You can edit Operator and Viewer or make your own roles by ticking permissions, for example who may add, rename and remove printers or change their address, who may change settings, and who may set up their own notification channels.
+
+Tap your own name at the bottom of the side menu for your **Me** page: your role and what you may do, your prints with records and milestones (counted for prints started from Spooler, from 2.3.5 on), the devices that get push notifications for you, your queue jobs and recent commands, and your account (password, light/dark, sign out on other devices).
 
 ## Adding printers
 
