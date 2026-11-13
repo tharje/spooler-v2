@@ -2232,3 +2232,4 @@ body[data-page="settings"] #settings-menu > h3 { font-size: 22px; }
   .side-panel.page .side-panel-body, .stats-panel.page .side-panel-body { padding: 0 12px 16px; }
   body[data-page="settings"] #modal-app-settings.open { padding: 16px 12px; }
 }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; align-items: start; }

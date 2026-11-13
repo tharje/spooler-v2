@@ -109,10 +109,13 @@ function _svg(tag, attrs) {
   return e;
 }
 
-function _renderStatsChart(d, tip) {
+// width: the chart's width in pixels. Narrow screens keep the 640-wide drawing
+// scaled down; wider ones draw at their real width, so the text and the height
+// stay the same instead of growing with the screen.
+function _renderStatsChart(d, tip, width = 640) {
   const metric = _STATS_METRICS[_statsMetric];
   const series = d.series;
-  const W = 640, H = 230, L = 44, R = 8, T = 10, B = 26;
+  const W = Math.max(640, Math.round(width)), H = 230, L = 44, R = 8, T = 10, B = 26;
   const pw = W - L - R, ph = H - T - B;
   const vals = series.map(b => b[_statsMetric]);
   const max = Math.max(0, ...vals);
@@ -264,17 +267,20 @@ function renderStats() {
     const wrap = _el("div", "stats-chart-wrap");
     const tip = _el("div", "stats-tip");
     tip.hidden = true;
-    wrap.append(_renderStatsChart(d, tip), tip);
+    // card padding (14 px each side) and border
+    wrap.append(_renderStatsChart(d, tip, body.clientWidth - 30), tip);
     card.append(wrap);
   }
   frag.append(card);
 
+  // The smaller cards sit side by side when there is room (one column on a phone).
+  const grid = _el("div", "stats-grid");
   const mats = Object.entries(d.by_material).map(([k, v]) => ({ label: k, value: v, text: `${_fmtNum(v, 0)} g` }));
-  frag.append(_barList("Filament by material", mats));
+  grid.append(_barList("Filament by material", mats));
   const prs = Object.entries(d.by_printer).map(([k, v]) => ({
     label: k, value: v.grams, text: `${_fmtNum(v.grams, 0)} g`,
     sub: `${v.prints} prints · ${_fmtNum(v.hours, 1)} h${v.layers ? ` · ${_fmtNum(v.layers)} layers` : ""}` }));
-  frag.append(_barList("By printer", prs));
+  grid.append(_barList("By printer", prs));
 
   const res = _el("div", "stats-card");
   res.append(_el("h4", null, "Results"));
@@ -284,7 +290,7 @@ function renderStats() {
                _el("strong", null, `${n}  (${_fmtNum(100 * n / d.prints, 0)}%)`));
     res.append(row);
   });
-  frag.append(res);
+  grid.append(res);
 
   const why = Object.entries(d.failure_reasons);
   if (why.length) {
@@ -295,8 +301,9 @@ function renderStats() {
       row.append(_el("span", "result-label", _REASON_CATEGORY_LABEL[reason] || reason), _el("strong", null, String(n)));
       wc.append(row);
     });
-    frag.append(wc);
+    grid.append(wc);
   }
+  frag.append(grid);
   body.replaceChildren(frag);
 }
 
@@ -531,3 +538,15 @@ function _renderPrintDetail() {
   host.replaceChildren(frag);
 }
 
+
+// Redraw the chart at the new width when the window is resized.
+let _statsResizeT = null, _statsLastW = 0;
+window.addEventListener("resize", () => {
+  clearTimeout(_statsResizeT);
+  _statsResizeT = setTimeout(() => {
+    const body = document.getElementById("stats-body");
+    if (!statsPanel.classList.contains("open") || !body || body.clientWidth === _statsLastW) return;
+    _statsLastW = body.clientWidth;
+    if (_statsTab === "overview" && _statsData) renderStats();
+  }, 200);
+});
