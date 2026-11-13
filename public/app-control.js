@@ -61,6 +61,7 @@ function openControl(id) {
   _ctlFanRefresh(p);
   _ctlIdle = null;
   ctlLoadIdle();
+  if (_ctlTab === "log") ctlLoadLog();
   clearInterval(_ctlTimer);
   _ctlTimer = setInterval(_controlRefresh, 1000);
 }
@@ -156,13 +157,34 @@ function _controlRefresh() {
     const c = document.getElementById("ctl-cur-" + h), g = document.getElementById("ctl-tgt-" + h);
     if (c) c.textContent = Math.round(t[h].cur);
     if (g) g.textContent = t[h].tgt ? Math.round(t[h].tgt) + "°" : "off";
+    document.getElementById("ctl-tile-" + h)?.classList.toggle("on", !!t[h].tgt);
   }
+  const st = document.getElementById("ctl-state");
+  if (st) { st.textContent = _ctlStateLabel(p.state); st.dataset.state = p.state || ""; }
   _ctlFanRefresh(p);
   const busy = ["printing", "pausing", "paused", "preparing", "stopping"].includes(p.state);
   document.getElementById("ctl-motion")?.classList.toggle("ctl-disabled", busy);
   document.getElementById("ctl-motion-note")?.classList.toggle("hidden", !busy);
   if (_ctlIdle && Date.now() - _ctlIdle.at > 15000) ctlLoadIdle();
   else _ctlIdleRender();
+}
+
+function _ctlStateLabel(s) {
+  return { idle: "Idle", printing: "Printing", paused: "Paused", pausing: "Pausing", preparing: "Busy",
+           stopping: "Stopping", complete: "Done", cancelled: "Cancelled", error: "Error", offline: "Offline" }[s] || "Idle";
+}
+
+// Tabs: the last one used stays selected while the page is open.
+let _ctlTab = "heat";
+function ctlTab(name) {
+  _ctlTab = name;
+  document.querySelectorAll("#modal-control .ctl-tab").forEach(b => {
+    const on = b.dataset.tab === name;
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-selected", on);
+  });
+  document.querySelectorAll("#modal-control .ctl-pane").forEach(el => { el.hidden = el.dataset.pane !== name; });
+  if (name === "log") ctlLoadLog();
 }
 
 // Idle guard: heaters left on without a print turn off after N minutes (0 = off).
@@ -176,22 +198,24 @@ async function ctlLoadIdle() {
   _ctlIdleRender();
 }
 function _ctlIdleRender() {
-  const host = document.getElementById("ctl-idle");
-  if (!host || !_ctlIdle) return;
-  if (!host.dataset.built) {
-    host.dataset.built = "1";
-    host.innerHTML = `<span id="ctl-idle-text"></span>${_ctlIdle.can_edit ? `
-      <label class="ctl-idle-edit">Turn off after <input type="number" id="ctl-idle-min" min="0" max="1440" step="5"
-        value="${_ctlIdle.minutes}" aria-label="Idle guard minutes" onkeydown="if (event.key === 'Enter') ctlSaveIdle()"> min
-        <button class="btn btn-sm btn-secondary" onclick="ctlSaveIdle()">Save</button></label>` : ""}`;
+  if (!_ctlIdle) return;
+  const edit = document.getElementById("ctl-idle");
+  if (edit && !edit.dataset.built) {
+    edit.dataset.built = "1";
+    edit.innerHTML = _ctlIdle.can_edit
+      ? `<input type="number" id="ctl-idle-min" min="0" max="1440" step="5" value="${_ctlIdle.minutes}"
+           aria-label="Idle guard minutes" onkeydown="if (event.key === 'Enter') ctlSaveIdle()"><span>min</span>
+         <button class="btn btn-sm btn-secondary" onclick="ctlSaveIdle()">Save</button>`
+      : `<span class="ctl-idle-val">${_ctlIdle.minutes ? _ctlIdle.minutes + " min" : "Off"}</span>`;
   }
   const left = _ctlIdle.printers?.[_ctlPrinterId];
   const text = document.getElementById("ctl-idle-text");
-  if (!_ctlIdle.minutes) text.textContent = "Idle guard is off.";
-  else if (left != null) {
+  if (!text) return;
+  if (_ctlIdle.minutes && left != null) {
     const s = Math.max(0, left - Math.floor((Date.now() - _ctlIdle.at) / 1000));
-    text.textContent = `Not printing: heating turns off in ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}.`;
-  } else text.textContent = `Idle guard: heating left on without a print turns off after ${_ctlIdle.minutes} min.`;
+    text.textContent = `Not printing · heating turns off in ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+    text.hidden = false;
+  } else text.hidden = true;
 }
 async function ctlSaveIdle() {
   const min = Number(document.getElementById("ctl-idle-min")?.value);
@@ -246,94 +270,123 @@ function _controlHtml(p) {
   const has = c => caps.includes(c);
   const heaters = [["nozzle", "Nozzle", "temp_nozzle"], ["bed", "Bed", "temp_bed"], ["chamber", "Chamber", "temp_chamber"]]
     .filter(([, , c]) => has(c));
-  const heaterRow = ([h, label]) => {
-    const max = (lim[h] || {}).max ?? 300;
-    return `<div class="ctl-heater">
-      <div class="ctl-heater-name">${label}</div>
-      <div class="ctl-temp"><span id="ctl-cur-${h}">${Math.round(t[h].cur)}</span><small>°C</small>
-        <span class="ctl-target">→ <span id="ctl-tgt-${h}">${t[h].tgt ? Math.round(t[h].tgt) + "°" : "off"}</span></span></div>
-      <div class="ctl-heater-set">
-        <input type="number" id="ctl-in-${h}" min="0" max="${max}" step="5" value="${t[h].tgt || ""}" placeholder="0–${max}" aria-label="${label} target">
-        <button class="btn btn-sm btn-primary" onclick="ctlSetTemp('${h}')">Set</button>
-        <button class="btn btn-sm btn-secondary" onclick="ctlHeaterOff('${h}')">Off</button>
-      </div></div>`;
-  };
   const fans = [["part", "Part cooling", "fan_part"], ["aux", "Auxiliary", "fan_aux"], ["chamber", "Chamber", "fan_chamber"]]
     .filter(([, , c]) => has(c));
   const fanSpeeds = (p.status || {}).FanSpeed || {};
+  const calib = has("level") || has("pid") || has("shaper");
+  const motionOk = has("move") || has("home");
+
+  const tile = ([h, label]) => `<div class="ctl-tile${t[h].tgt ? " on" : ""}" id="ctl-tile-${h}">
+      <span class="ctl-tile-name">${label}</span>
+      <span class="ctl-tile-cur"><span id="ctl-cur-${h}">${Math.round(t[h].cur)}</span>°</span>
+      <span class="ctl-tile-tgt">target <span id="ctl-tgt-${h}">${t[h].tgt ? Math.round(t[h].tgt) + "°" : "off"}</span></span>
+    </div>`;
+
+  const heaterRow = ([h, label]) => {
+    const max = (lim[h] || {}).max ?? 300;
+    return `<div class="ctl-row">
+      <span class="ctl-row-name">${label}</span>
+      <div class="ctl-input-unit"><input type="number" id="ctl-in-${h}" min="0" max="${max}" step="5" value="${t[h].tgt || ""}"
+        placeholder="off" title="0–${max} °C" aria-label="${label} target, 0–${max} °C" onkeydown="if (event.key === 'Enter') ctlSetTemp('${h}')"><span>°C</span></div>
+      <button class="btn btn-sm btn-primary" onclick="ctlSetTemp('${h}')">Set</button>
+      <button class="btn btn-sm btn-secondary" onclick="ctlHeaterOff('${h}')">Off</button>
+    </div>`;
+  };
+
   // Slider + a type-in field + Off. The slider and field send on release/Enter
   // (dragging or typing alone does not send); Off always sends 0.
   const fanRow = ([f, label]) => {
     const cur = Math.round(Number(fanSpeeds[f] ?? 0)) || 0;
-    return `<div class="ctl-fan"><span>${label}</span>
+    return `<div class="ctl-fan">
+      <div class="ctl-fan-top"><span class="ctl-row-name">${label}</span><output id="ctl-fan-${f}">${cur}%</output></div>
       <div class="ctl-fan-set" role="group" aria-label="${label} speed">
         <input type="range" class="ctl-fan-slider" id="ctl-fan-range-${f}" min="0" max="100" step="1" value="${cur}"
           oninput="ctlFanSlide('${f}',this.value)" onchange="ctlSetFan('${f}',this.value)" aria-label="${label} speed">
-        <input type="number" class="ctl-fan-num" id="ctl-fan-in-${f}" min="0" max="100" step="1" value="${cur}"
-          placeholder="0–100" aria-label="${label} percent" onchange="ctlSetFan('${f}',this.value)"
-          onkeydown="if(event.key==='Enter'){ctlSetFan('${f}',this.value);this.blur();}">
+        <div class="ctl-input-unit ctl-fan-num"><input type="number" id="ctl-fan-in-${f}" min="0" max="100" step="1" value="${cur}"
+          aria-label="${label} percent" onchange="ctlSetFan('${f}',this.value)"
+          onkeydown="if(event.key==='Enter'){ctlSetFan('${f}',this.value);this.blur();}"><span>%</span></div>
         <button class="btn btn-sm btn-secondary" onclick="ctlFanOff('${f}')">Off</button>
       </div>
-      <output id="ctl-fan-${f}">${cur}%</output></div>`;
+    </div>`;
   };
-  const jog = (a, s, txt, cls = "") => `<button class="ctl-jog ${cls}" onclick="ctlMove('${a}',${s})" aria-label="${a}${s > 0 ? "+" : "−"}">${txt}</button>`;
-  const motion = (has("move") || has("home")) ? `
-    <section class="ctl-section">
-      <h4>Motion</h4>
-      <p id="ctl-motion-note" class="ctl-note hidden">Axes are locked while the printer is printing or paused.</p>
-      <div id="ctl-motion" class="ctl-motion">
-        <div class="ctl-pad">
-          <span></span>${jog("Y", 1, "Y+")}<span></span>
-          ${jog("X", -1, "X−")}${has("home_axes") ? `<button class="ctl-jog ctl-home" onclick="ctlHome('XY')" aria-label="Home XY">⌂</button>` : "<span></span>"}${jog("X", 1, "X+")}
-          <span></span>${jog("Y", -1, "Y−")}<span></span>
-        </div>
-        <div class="ctl-zcol">${jog("Z", 1, "Z+")}${has("home_axes") ? `<button class="ctl-jog ctl-home" onclick="ctlHome('Z')" aria-label="Home Z">⌂</button>` : "<span></span>"}${jog("Z", -1, "Z−")}</div>
-        <div class="ctl-side">
-          <div class="ctl-steps" role="group" aria-label="Step size">
-            ${[0.1, 1, 10].map(v => `<button class="ctl-step${v === _ctlStep ? " active" : ""}" data-step="${v}" onclick="ctlStep(${v})">${v} mm</button>`).join("")}
-          </div>
-          <div class="ctl-btnrow">
-            ${has("home") ? `<button class="btn btn-sm btn-secondary" onclick="ctlHome('XYZ')">Home all</button>` : ""}
-          </div>
-        </div>
-      </div>
-    </section>` : "";
+
+  const jog = (a, s, txt) => `<button class="ctl-jog" onclick="ctlMove('${a}',${s})" aria-label="${a}${s > 0 ? "+" : "−"}">${txt}</button>`;
+  const homeBtn = (axes, label) => has("home_axes")
+    ? `<button class="ctl-jog ctl-home" onclick="ctlHome('${axes}')" aria-label="${label}" title="${label}">⌂</button>` : "<span></span>";
+
+  const calibItem = (title, desc, btn, extra = "") => `<div class="ctl-cal">
+      <div class="ctl-cal-text"><strong>${title}</strong><span>${desc}</span></div>${btn}${extra}</div>`;
+
+  const tabs = [["heat", "Heat", heaters.length], ["fans", "Fans", fans.length], ["move", "Move", motionOk],
+                ["calib", "Calibrate", calib], ["log", "Log", true]].filter(x => x[2]);
+  if (!tabs.some(x => x[0] === _ctlTab)) _ctlTab = tabs[0][0];
+  const pane = (name, body) => `<div class="ctl-pane" data-pane="${name}" role="tabpanel" ${name === _ctlTab ? "" : "hidden"}>${body}</div>`;
+
   return `<div class="modal-box ctl-box" role="dialog" aria-label="Advanced control">
     <div class="ctl-head">
-      <h3>${_ICON_WRENCH}<span>${escHtml(p.name || "Printer")}</span><em>Advanced control</em></h3>
-      <button class="btn btn-sm btn-secondary" onclick="closeControl()" aria-label="Close">✕</button>
+      <div class="ctl-title">${_ICON_WRENCH}<div><h3>${escHtml(p.name || "Printer")}</h3>
+        <span class="ctl-sub">Changes happen immediately</span></div></div>
+      <span class="ctl-state" id="ctl-state" data-state="${escAttr(p.state || "")}">${_ctlStateLabel(p.state)}</span>
+      <button class="ctl-close" onclick="closeControl()" aria-label="Close">✕</button>
     </div>
-    <div class="ctl-warn">You control the printer directly. Changes happen immediately.</div>
     ${p.controls_verified ? "" : `<div class="ctl-preview">Preview: these commands are not yet verified on a real printer, so they are not sent. Buttons will answer “Not supported by this printer yet”.</div>`}
-    ${heaters.length ? `<section class="ctl-section"><h4>Temperature</h4>
-      <div class="ctl-presets">${CTL_PRESETS.map((pr, i) => `<button class="ctl-chip" onclick="ctlPreset(${i})">${pr.name} <small>${pr.nozzle}/${pr.bed}</small></button>`).join("")}</div>
-      ${heaters.map(heaterRow).join("")}
+    ${heaters.length ? `<div class="ctl-tiles">${heaters.map(tile).join("")}</div>` : ""}
+    <div class="ctl-idle-text" id="ctl-idle-text" hidden></div>
+
+    <div class="ctl-tabs" role="tablist">
+      ${tabs.map(([k, label]) => `<button class="ctl-tab${k === _ctlTab ? " active" : ""}" role="tab" aria-selected="${k === _ctlTab}"
+          data-tab="${k}" onclick="ctlTab('${k}')">${label}</button>`).join("")}
+    </div>
+
+    ${heaters.length ? pane("heat", `
+      <div class="ctl-presets"><span class="ctl-label">Presets</span>
+        ${CTL_PRESETS.map((pr, i) => `<button class="ctl-chip" onclick="ctlPreset(${i})">${pr.name} <small>${pr.nozzle}/${pr.bed}</small></button>`).join("")}</div>
+      <div class="ctl-list">${heaters.map(heaterRow).join("")}</div>
       <button class="btn btn-danger ctl-alloff" onclick="ctlAllOff()">Turn off all heating</button>
-      <div id="ctl-idle" class="ctl-idle ctl-note"></div></section>` : ""}
-    ${fans.length ? `<section class="ctl-section"><h4>Fans</h4>${fans.map(fanRow).join("")}</section>` : ""}
-    ${motion}
-    ${(has("level") || has("pid") || has("shaper")) ? `<section class="ctl-section">
-      <h4>Calibration</h4>
-      <div class="ctl-btnrow">
-        ${has("level") ? `<button class="btn btn-sm btn-secondary" onclick="ctlLevel()">Auto leveling</button>` : ""}
-        ${has("pid") ? `<button class="btn btn-sm btn-secondary" onclick="ctlPidOpen()">PID calibrate nozzle</button>` : ""}
-        ${has("shaper") ? `<button class="btn btn-sm btn-secondary" onclick="ctlShaper()">Resonance test (input shaper)</button>` : ""}
-      </div>
-      ${has("pid") ? `<div id="ctl-pid-box" class="ctl-pid-box" hidden>
-        <p class="ctl-note">Calibrate at the temperature you print at most (e.g. PLA 210–220 °C, PETG 240–255 °C). The nozzle heats up and the run takes a few minutes; stay with the printer.</p>
-        <div class="ctl-pid">
-          <label>Target <input type="number" id="ctl-pid-target" min="150" max="280" step="5" value="220" aria-label="PID target temperature"
-                 onkeydown="if (event.key === 'Enter') ctlPid()"> °C</label>
-          <button class="btn btn-sm btn-primary" onclick="ctlPid()">Start</button>
-          <button class="btn btn-sm btn-secondary" onclick="ctlPidOpen(false)">Cancel</button>
+      <div class="ctl-guard">
+        <div class="ctl-cal-text"><strong>Idle guard</strong><span>Turns heating off when the printer has been idle this long (0 = off).</span></div>
+        <div class="ctl-guard-set" id="ctl-idle"></div>
+      </div>`) : ""}
+
+    ${fans.length ? pane("fans", `<div class="ctl-list">${fans.map(fanRow).join("")}</div>`) : ""}
+
+    ${motionOk ? pane("move", `
+      <p id="ctl-motion-note" class="ctl-note hidden">Axes are locked while the printer is printing or paused.</p>
+      <div id="ctl-motion" class="ctl-motion">
+        <div class="ctl-pads">
+          ${has("move") ? `<div class="ctl-pad">
+            <span></span>${jog("Y", 1, "Y+")}<span></span>
+            ${jog("X", -1, "X−")}${homeBtn("XY", "Home XY")}${jog("X", 1, "X+")}
+            <span></span>${jog("Y", -1, "Y−")}<span></span>
+          </div>
+          <div class="ctl-zcol">${jog("Z", 1, "Z+")}${homeBtn("Z", "Home Z")}${jog("Z", -1, "Z−")}</div>` : ""}
         </div>
-      </div>` : ""}
-    </section>` : ""}
-    <section class="ctl-section">
-      <details class="ctl-log" ontoggle="if (this.open) ctlLoadLog()">
-        <summary><h4>Command log</h4></summary>
-        <div id="ctl-log-list" class="ctl-log-list">Loading…</div>
-      </details>
-    </section>
+        <div class="ctl-motion-foot">
+          ${has("move") ? `<div class="ctl-steps" role="group" aria-label="Step size">
+            ${[0.1, 1, 10].map(v => `<button class="ctl-step${v === _ctlStep ? " active" : ""}" data-step="${v}" onclick="ctlStep(${v})">${v} mm</button>`).join("")}
+          </div>` : ""}
+          ${has("home") ? `<button class="btn btn-sm btn-secondary" onclick="ctlHome('XYZ')">⌂ Home all</button>` : ""}
+        </div>
+      </div>`) : ""}
+
+    ${calib ? pane("calib", `<div class="ctl-list">
+      ${has("level") ? calibItem("Auto leveling", "Heats up and probes the bed.",
+          `<button class="btn btn-sm btn-secondary" onclick="ctlLevel()">Start</button>`) : ""}
+      ${has("pid") ? calibItem("PID calibrate nozzle", "Tunes the nozzle heater for one temperature.",
+          `<button class="btn btn-sm btn-secondary" onclick="ctlPidOpen()">Choose…</button>`,
+          `<div id="ctl-pid-box" class="ctl-pid-box" hidden>
+            <p>Use the temperature you print at most (PLA 210–220 °C, PETG 240–255 °C). Takes a few minutes; stay with the printer.</p>
+            <div class="ctl-pid">
+              <div class="ctl-input-unit"><input type="number" id="ctl-pid-target" min="150" max="280" step="5" value="220"
+                aria-label="PID target temperature" onkeydown="if (event.key === 'Enter') ctlPid()"><span>°C</span></div>
+              <button class="btn btn-sm btn-primary" onclick="ctlPid()">Start</button>
+              <button class="btn btn-sm btn-secondary" onclick="ctlPidOpen(false)">Cancel</button>
+            </div>
+          </div>`) : ""}
+      ${has("shaper") ? calibItem("Resonance test", "Input shaper: shakes the toolhead and bed. Keep the bed clear.",
+          `<button class="btn btn-sm btn-secondary" onclick="ctlShaper()">Start</button>`) : ""}
+    </div>`) : ""}
+
+    ${pane("log", `<div id="ctl-log-list" class="ctl-log-list">Loading…</div>`)}
   </div>`;
 }
