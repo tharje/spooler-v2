@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css?v=112" />
+  <link rel="stylesheet" href="style.css?v=114" />
 </head>
 <body>
   <header>
@@ -94,12 +94,12 @@
       <span>Settings</span>
     </button>
     <div class="sidenav-spacer"></div>
-    <div id="signed-in-as" class="sidenav-item sidenav-user" title="Signed in" style="display:none">
+    <button id="signed-in-as" class="sidenav-item sidenav-user" title="Me: your profile, devices and prints" style="display:none">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
       </svg>
       <span id="signed-in-as-name"></span>
-    </div>
+    </button>
     <button id="btn-signout-nav" class="sidenav-item sidenav-item-signout" title="Sign out">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
@@ -256,6 +256,13 @@
   </div>
 
   <!-- Queue panel -->
+  <div id="panel-me" class="side-panel page">
+    <div class="side-panel-header">
+      <div class="title-row"><h3>Me</h3></div>
+    </div>
+    <div class="side-panel-body" id="me-body"></div>
+  </div>
+
   <div id="panel-queue" class="side-panel page">
     <div class="side-panel-header">
       <div class="title-row">
@@ -964,7 +971,8 @@
   <script src="app-service.js?v=93"></script>
   <script src="app-queue.js?v=3"></script>
   <script src="app-users.js?v=1"></script>
-  <script src="app-nav.js?v=1"></script>
+  <script src="app-me.js?v=2"></script>
+  <script src="app-nav.js?v=2"></script>
   <script src="app-boot.js?v=89"></script>
   <script>
     if ("serviceWorker" in navigator) {

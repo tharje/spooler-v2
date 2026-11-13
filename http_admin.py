@@ -34,6 +34,7 @@ from backup import (
 from features import FeatureError
 from features import describe_all as describe_all_features, is_enabled, requires_feature, set_enabled
 from pathlib import Path
+import me
 import push
 from push import WEBPUSH_AVAILABLE, add_subscription, has_subscriptions, remove_subscription, save_notif_settings, send_push_all
 from snapshot import grab_jpeg
@@ -55,7 +56,7 @@ class AdminMixin:
         if not endpoint:
             self._json({"error": "Missing endpoint"}, 400)
             return
-        add_subscription(sub, owner=current_user(self))
+        add_subscription(sub, owner=current_user(self), device=me.device_name(self.headers.get("User-Agent", "")))
         self._json({"ok": True})
 
     @requires_feature("notify_webpush")

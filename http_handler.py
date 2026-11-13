@@ -36,6 +36,12 @@ from http_admin import AdminMixin
 import config
 import control
 import idle_guard
+import auth
+import job_queue
+import me
+import persistence
+import push
+import user_channels
 import api_tokens
 import spaghetti
 import update_check
@@ -150,6 +156,31 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
         if not user:
             return True
         return users.can_see_printer(user, printer_id)
+
+    def _me_profile(self) -> dict:
+        """Everything the signed-in user's "Me" page shows (only their own data)."""
+        user = current_user(self)
+        ids = self._visible_printer_ids()
+        u = users.get_user(user) if user else None
+        roles = {r["name"]: r for r in users.list_roles()}
+        role = roles.get((u or {}).get("role", ""))
+        perms = users.permissions_for(user) if user else set(users.PERMISSION_KEYS)
+        own = push.user_event_choices(user) if user else None
+        if own is not None:
+            events_on = sum(1 for v in own.values() if v)
+        else:
+            events_on = sum(1 for v in push.load_notif_settings().values() if isinstance(v, dict) and v.get("enabled"))
+        visible = [{"id": pid, "name": p.name} for pid, p in state.printers.items() if pid in ids]
+        return me.profile(
+            user, role=role, permission_labels=dict(users.PERMISSIONS), permissions=perms,
+            printers=sorted(visible, key=lambda x: x["name"].lower()),
+            all_printers=len(visible) == len(state.printers),
+            jobs=job_queue.list_jobs(),
+            commands=control.read_log(ids, {pid: p.name for pid, p in state.printers.items()}, limit=200),
+            subs=list(push._push_subs), history=persistence.load_history(),
+            events_own=own is not None, events_on=events_on,
+            channels_on=len(user_channels.active(user)) if user else 0,
+            sessions=auth.user_session_count(user) if user else 0)
 
     def _visible_printer_ids(self) -> set:
         if not AUTH_ENABLED:
@@ -450,6 +481,8 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
                     ids = ids & {want}
                 names = {pid: p.name for pid, p in state.printers.items()}
                 self._json(control.read_log(ids, names))
+        elif self.path == "/api/me":
+            self._json(self._me_profile())
         elif self.path == "/api/control/idle-guard":
             # Idle guard setting and, per visible printer, seconds until its heaters turn off.
             if self._require("printer.advanced"):
@@ -623,6 +656,19 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
     def do_DELETE(self):
         if not self._check_auth():
             return
+        if self.path.startswith("/api/me/devices/"):
+            # Remove one of the signed-in user's own push devices.
+            dev = self.path.rsplit("/", 1)[-1]
+            user = current_user(self)
+            before = len(push._push_subs)
+            push._push_subs[:] = [x for x in push._push_subs
+                                  if not (x.get("owner", "") == user and me.device_id(x.get("endpoint", "")) == dev)]
+            if len(push._push_subs) == before:
+                self._json({"error": "No such device"}, 404)
+                return
+            push._save_subs()
+            self._json({"ok": True})
+            return
         if self.path.startswith("/api/spoolman-ledger/"):
             if self._require("filament.manage"):
                 self._handle_ledger_action("discard")
@@ -679,6 +725,13 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
         elif self.path == "/api/roles":
             if self._require("users.manage"):
                 self._handle_roles_create()
+        elif self.path == "/api/me/sign-out-others":
+            user = current_user(self)
+            if not user:
+                self._json({"error": "Not signed in"}, 400)
+                return
+            n = auth.sign_out_other_sessions(user, auth._parse_sid(self.headers.get("Cookie", "")))
+            self._json({"ok": True, "signed_out": n})
         elif self.path == "/api/push-subscribe":
             self._handle_push_subscribe()
         elif self.path == "/api/push-unsubscribe":
