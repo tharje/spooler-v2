@@ -78,6 +78,28 @@ def test_apply_cc2_status_maps_homing_and_leveling_sub_statuses(printer, sub_sta
     assert printer.status["PrintInfo"]["Status"] == expected_code
 
 
+@pytest.mark.parametrize("mode,pct", [(0, 50), (1, 100), (2, 130), (3, 160)])
+def test_apply_cc2_status_reads_speed_from_speed_mode(printer, mode, pct):
+    printer._cc2_state["gcode_move"] = {"speed_mode": mode}
+    printer._apply_cc2_status()
+    assert printer.status["SpeedFactor"] == pct
+
+
+@pytest.mark.parametrize("sub_status", [2801, 2802, 2901, 2902])
+def test_leftover_homing_or_leveling_sub_status_is_idle_when_printer_says_idle(printer, sub_status):
+    # Seen live 2026-11-12 after a failed leveling (704): status 1 (idle) with
+    # sub_status 2902 left behind kept the card stuck on "Leveling".
+    printer._cc2_state["machine_status"] = {"status": 1, "sub_status": sub_status}
+    printer._apply_cc2_status()
+    assert printer.status["PrintInfo"]["Status"] == 0
+
+
+def test_leveling_on_its_own_still_shows_while_running(printer):
+    printer._cc2_state["machine_status"] = {"status": 5, "sub_status": 2901}
+    printer._apply_cc2_status()
+    assert printer.status["PrintInfo"]["Status"] == 20
+
+
 @pytest.mark.asyncio
 async def test_error_code_captured_from_api_response_poll_path(printer):
     # Simulates the 5s status poller's method 1003 response, which goes
@@ -433,8 +455,10 @@ def test_standalone_fault_noticed_while_idle(printer, quiet_emit):
     printer._check_standalone_fault("idle")
     assert printer.standalone_fault["code"] == "704"
     assert printer.standalone_fault["message"] == "Leveling failed. Please try again."
+    from printers.error_codes import lookup
     assert quiet_emit == [("printer_fault", "Test CC2 — Printer fault",
-                            "Leveling failed. Please try again. (code 704)", {"category": "leveling", "code": "704"})]
+                            "Leveling failed. Please try again. (code 704) " + lookup(704)["action"],
+                            {"category": "leveling", "code": "704"})]
 
 
 def test_standalone_fault_does_not_renotify_the_same_code(printer, quiet_emit):
@@ -522,3 +546,26 @@ def test_start_print_sends_a_valid_slot_map(printer, monkeypatch):
 ])
 def test_start_print_drops_a_doubtful_slot_map(printer, monkeypatch, bad):
     assert "slot_map" not in _start_with(printer, monkeypatch, bad)
+
+
+@pytest.mark.parametrize("leveling", [True, False])
+def test_start_print_leveling_sets_both_firmware_flags(printer, monkeypatch, leveling):
+    # Sliced files carry their own BED_MESH_CALIBRATE, which the firmware only
+    # runs when printer_check is set; bedlevel_force alone is ignored for them.
+    sent = []
+
+    async def fake_send(cmd, data=None):
+        sent.append((cmd, data))
+        return True
+    monkeypatch.setattr(printer, "send_cmd", fake_send)
+    _run(printer.start_print_file("a.gcode", print_opts={"leveling": leveling}))
+    cfg = sent[0][1]["config"]
+    assert cfg["bedlevel_force"] is leveling
+    assert cfg["printer_check"] is leveling
+
+
+def test_fan_speeds_are_reported_as_percent():
+    from printers.cc2 import _fan_percents
+    assert _fan_percents({"fan": {"speed": 255}, "aux_fan": {"speed": 0.5}, "box_fan": {"speed": 0}}) == \
+        {"part": 100, "aux": 50, "chamber": 0}
+    assert _fan_percents({"fan": {"speed": 128}, "box_fan": {}}) == {"part": 50}

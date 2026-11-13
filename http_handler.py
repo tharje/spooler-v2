@@ -21,7 +21,9 @@ from auth import (
     AUTH_ENABLED, BCRYPT_AVAILABLE, SECURE_COOKIES, SESSION_COOKIE,
     _auth_ok, _check_rate_limit, _create_session, _get_pw_hash, _get_username,
     _has_password, _invalidate_session, _parse_sid, _reset_rate_limit, _save_auth,
+    current_user, has_permission,
 )
+import users
 from backup import list_auto_backups
 from features import describe_all as describe_all_features, is_enabled
 from persistence import DATA_DIR, current_version, load_history
@@ -32,6 +34,14 @@ from http_external import ExternalRoutesMixin
 from http_proxy import ProxyMixin
 from http_admin import AdminMixin
 import config
+import control
+import idle_guard
+import auth
+import job_queue
+import me
+import persistence
+import push
+import user_channels
 import api_tokens
 import spaghetti
 import update_check
@@ -125,6 +135,69 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
             self.end_headers()
         return False
 
+    def _require(self, perm: str) -> bool:
+        """Authenticated AND the user's role grants `perm`. Sends 401 (not
+        logged in) or 403 (logged in, lacks the permission) and returns False
+        otherwise. When login is off, or a single open/admin session has no
+        bound identity, this is just the login check."""
+        if not self._check_auth():
+            return False
+        if has_permission(self, perm):
+            return True
+        self._json({"error": "forbidden", "need": perm}, 403)
+        return False
+
+    def _can_see_printer(self, printer_id: str) -> bool:
+        """Whether the signed-in user is allowed to see/act on this printer.
+        Login off or no bound identity (single-admin/tests) → yes."""
+        if not AUTH_ENABLED:
+            return True
+        user = current_user(self)
+        if not user:
+            return True
+        return users.can_see_printer(user, printer_id)
+
+    def _me_profile(self) -> dict:
+        """Everything the signed-in user's "Me" page shows (only their own data)."""
+        user = current_user(self)
+        ids = self._visible_printer_ids()
+        u = users.get_user(user) if user else None
+        roles = {r["name"]: r for r in users.list_roles()}
+        role = roles.get((u or {}).get("role", ""))
+        perms = users.permissions_for(user) if user else set(users.PERMISSION_KEYS)
+        own = push.user_event_choices(user) if user else None
+        if own is not None:
+            events_on = sum(1 for v in own.values() if v)
+        else:
+            events_on = sum(1 for v in push.load_notif_settings().values() if isinstance(v, dict) and v.get("enabled"))
+        visible = [{"id": pid, "name": p.name} for pid, p in state.printers.items() if pid in ids]
+        return me.profile(
+            user, role=role, permission_labels=dict(users.PERMISSIONS), permissions=perms,
+            printers=sorted(visible, key=lambda x: x["name"].lower()),
+            all_printers=len(visible) == len(state.printers),
+            jobs=job_queue.list_jobs(),
+            commands=control.read_log(ids, {pid: p.name for pid, p in state.printers.items()}, limit=200),
+            subs=list(push._push_subs), history=persistence.load_history(),
+            events_own=own is not None, events_on=events_on,
+            channels_on=len(user_channels.active(user)) if user else 0,
+            sessions=auth.user_session_count(user) if user else 0)
+
+    def _visible_printer_ids(self) -> set:
+        if not AUTH_ENABLED:
+            return set(state.printers)
+        user = current_user(self)
+        if not user:
+            return set(state.printers)
+        return users.visible_printer_ids(user, list(state.printers))
+
+    def _require_printer(self, printer_id: str) -> bool:
+        """Guard a per-printer endpoint; 403 (as 'not found' so hidden printers
+        stay invisible) when the user may not see it."""
+        if self._can_see_printer(printer_id):
+            return True
+        self._json({"error": "Printer not found"}, 404)
+        return False
+
     def _session_cookie(self, token: str, clear: bool = False) -> str:
         is_secure = SECURE_COOKIES or getattr(self.server, "_is_https", False)
         if clear:
@@ -155,20 +228,13 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
         username = body.get("username", "")
         password = body.get("password", "")
 
-        ok = False
-        pw_hash = _get_pw_hash()
-        if AUTH_ENABLED and BCRYPT_AVAILABLE and _bcrypt and pw_hash and username == _get_username():
-            try:
-                ok = _bcrypt.checkpw(password.encode(), pw_hash.encode())
-            except Exception:
-                pass
-
+        ok = AUTH_ENABLED and users.authenticate(username, password)
         if not ok:
             self._json({"error": "Invalid credentials"}, 401)
             return
 
         _reset_rate_limit(ip)
-        token = _create_session()
+        token = _create_session(username)
         resp = json.dumps({"ok": True}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -188,7 +254,7 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
         self.wfile.write(b"{}")
 
     def _handle_setup(self):
-        if _has_password():
+        if users.any_users():
             self._json({"error": "Already configured"}, 403)
             return
         if not BCRYPT_AVAILABLE or not _bcrypt:
@@ -208,12 +274,14 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
             self._json({"error": "Password must be at least 8 characters"}, 400)
             return
         try:
-            pw_hash = _bcrypt.hashpw(password.encode(), _bcrypt.gensalt()).decode()
-            _save_auth(username, pw_hash)
+            users.create_user(username, password, users.ADMIN_ROLE)
+        except ValueError as e:
+            self._json({"error": str(e)}, 400)
+            return
         except Exception as e:
             self._json({"error": str(e)}, 500)
             return
-        token = _create_session()
+        token = _create_session(username)
         resp = json.dumps({"ok": True}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -236,12 +304,15 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
         if len(password) < 8:
             self._json({"error": "Password must be at least 8 characters"}, 400)
             return
+        username = current_user(self)
+        if not username:
+            self._json({"error": "Not signed in"}, 401)
+            return
         try:
-            pw_hash = _bcrypt.hashpw(password.encode(), _bcrypt.gensalt()).decode()
-            from auth import _load_auth
-            auth_data = _load_auth()
-            username = auth_data.get("username", "admin")
-            _save_auth(username, pw_hash)
+            users.set_password(username, password)
+        except ValueError as e:
+            self._json({"error": str(e)}, 400)
+            return
         except Exception as e:
             self._json({"error": str(e)}, 500)
             return
@@ -325,9 +396,19 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
             self._proxy_spoolman_ui("GET", self.path)
             return
         if self.path == "/api/auth-status":
-            resp = {"setup_required": not _has_password()}
+            resp = {"setup_required": not users.any_users()}
             if _auth_ok(self):
                 resp["spoolman_url"] = "/spoolman/" if proxy_spoolman_enabled() else get_spoolman_url() + "/"
+                user = current_user(self)
+                resp["user"] = user
+                if AUTH_ENABLED and user:
+                    resp["permissions"] = sorted(users.permissions_for(user))
+                    u = users.get_user(user)
+                    resp["role"] = u["role"] if u else ""
+                else:
+                    # login off, or a single open/admin session with no bound identity
+                    resp["permissions"] = list(users.PERMISSION_KEYS)
+                    resp["role"] = users.ADMIN_ROLE
             self._json(resp)
             return
 
@@ -388,20 +469,50 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
         if not self._check_auth():
             return
 
-        if self.path == "/api/features":
+        if self.path == "/api/my-notifications":
+            self._handle_my_notifications_get()
+        elif self.path.split("?")[0] == "/api/control/log":
+            # Advanced-control command log, for one printer (?printer=<id>) or all the user can see.
+            if self._require("printer.advanced"):
+                q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                ids = self._visible_printer_ids()
+                want = (q.get("printer") or [None])[0]
+                if want:
+                    ids = ids & {want}
+                names = {pid: p.name for pid, p in state.printers.items()}
+                self._json(control.read_log(ids, names))
+        elif self.path == "/api/me":
+            self._json(self._me_profile())
+        elif self.path == "/api/control/idle-guard":
+            # Idle guard setting and, per visible printer, seconds until its heaters turn off.
+            if self._require("printer.advanced"):
+                self._json({"minutes": idle_guard.minutes(),
+                            "can_edit": has_permission(self, "settings.manage"),
+                            "printers": {pid: idle_guard.seconds_left(pid) for pid in self._visible_printer_ids()}})
+        elif self.path == "/api/my-channels":
+            self._handle_my_channels_get()
+        elif self.path == "/api/features":
             self._json(describe_all_features())
         elif self.path.split("?")[0] == "/api/diagnostics":
             self._handle_diagnostics()
         elif self.path == "/api/integrations":
-            self._json({
-                "fields": config.describe_all(),
-                "tests": {k: config.last_test_result(k) for k in ("spoolman", "spaghetti", *notifiers.CHANNELS)},
-                "server_settings": _server_settings_readonly(),
-            })
+            if self._require("settings.manage"):
+                self._json({
+                    "fields": config.describe_all(),
+                    "tests": {k: config.last_test_result(k) for k in ("spoolman", "spaghetti", *notifiers.CHANNELS)},
+                    "server_settings": _server_settings_readonly(),
+                })
         elif self.path == "/api/update-status":
             self._json({"update": update_check.status()})
         elif self.path == "/api/api-tokens":
-            self._json({"tokens": api_tokens.list_tokens(), "max": api_tokens.MAX_TOKENS})
+            if self._require("apitokens.manage"):
+                self._json({"tokens": api_tokens.list_tokens(), "max": api_tokens.MAX_TOKENS})
+        elif self.path == "/api/users":
+            if self._require("users.manage"):
+                self._handle_users_list()
+        elif self.path == "/api/roles":
+            if self._require("users.manage"):
+                self._handle_roles_list()
         elif self.path == "/api/spoolman-ledger":
             self._handle_ledger_list()
         elif self.path == "/api/service":
@@ -414,13 +525,16 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
         elif self.path.split("?")[0] == "/api/history.csv":
             self._handle_history_csv()
         elif self.path.startswith("/api/snapshot/"):
-            self._handle_snapshot()
+            if self._require_printer(urllib.parse.unquote(self.path[len("/api/snapshot/"):].split("?")[0])):
+                self._handle_snapshot()
         elif self.path.startswith("/api/camera/"):
-            self._proxy_camera()
+            if self._require_printer(urllib.parse.unquote(self.path[len("/api/camera/"):].split("?")[0])):
+                self._proxy_camera()
         elif self.path.startswith("/api/thumbnail/"):
             self._proxy_thumbnail()
         elif self.path == "/api/printers":
-            self._json([p.to_dict() for p in state.printers.values()])
+            visible = self._visible_printer_ids()
+            self._json([p.to_dict() for p in state.printers.values() if p.id in visible])
         elif self.path == "/api/history":
             self._json(load_history())
         elif self.path == "/api/queue":
@@ -507,10 +621,23 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
         if not self._check_auth():
             return
         if self.path == "/api/features":
-            self._handle_patch_features()
+            if self._require("settings.manage"):
+                self._handle_patch_features()
             return
         if self.path == "/api/integrations":
-            self._handle_patch_integrations()
+            if self._require("settings.manage"):
+                self._handle_patch_integrations()
+            return
+        if self.path == "/api/my-channels":
+            self._handle_my_channels_update()
+            return
+        if self.path.startswith("/api/users/"):
+            if self._require("users.manage"):
+                self._handle_users_update(urllib.parse.unquote(self.path[len("/api/users/"):]))
+            return
+        if self.path.startswith("/api/roles/"):
+            if self._require("users.manage"):
+                self._handle_roles_update(urllib.parse.unquote(self.path[len("/api/roles/"):]))
             return
         if self.path.startswith("/api/history/"):
             self._handle_history_update()
@@ -529,16 +656,41 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
     def do_DELETE(self):
         if not self._check_auth():
             return
+        if self.path.startswith("/api/me/devices/"):
+            # Remove one of the signed-in user's own push devices.
+            dev = self.path.rsplit("/", 1)[-1]
+            user = current_user(self)
+            before = len(push._push_subs)
+            push._push_subs[:] = [x for x in push._push_subs
+                                  if not (x.get("owner", "") == user and me.device_id(x.get("endpoint", "")) == dev)]
+            if len(push._push_subs) == before:
+                self._json({"error": "No such device"}, 404)
+                return
+            push._save_subs()
+            self._json({"ok": True})
+            return
         if self.path.startswith("/api/spoolman-ledger/"):
-            self._handle_ledger_action("discard")
+            if self._require("filament.manage"):
+                self._handle_ledger_action("discard")
             return
         if self.path.startswith("/api/service/"):
-            self._handle_service_delete()
+            if self._require("maintenance"):
+                self._handle_service_delete()
             return
         if self.path.startswith("/api/queue/"):
             self._handle_queue_delete()
             return
+        if self.path.startswith("/api/users/"):
+            if self._require("users.manage"):
+                self._handle_users_delete(urllib.parse.unquote(self.path[len("/api/users/"):]))
+            return
+        if self.path.startswith("/api/roles/"):
+            if self._require("users.manage"):
+                self._handle_roles_delete(urllib.parse.unquote(self.path[len("/api/roles/"):]))
+            return
         if self.path.startswith("/api/api-tokens/"):
+            if not self._require("apitokens.manage"):
+                return
             ok = api_tokens.revoke(urllib.parse.unquote(self.path[len("/api/api-tokens/"):]))
             self._json({"ok": True} if ok else {"error": "No such key"}, 200 if ok else 404)
             return
@@ -567,47 +719,79 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
 
         if self.path == "/api/change-password":
             self._handle_change_password()
+        elif self.path == "/api/users":
+            if self._require("users.manage"):
+                self._handle_users_create()
+        elif self.path == "/api/roles":
+            if self._require("users.manage"):
+                self._handle_roles_create()
+        elif self.path == "/api/me/sign-out-others":
+            user = current_user(self)
+            if not user:
+                self._json({"error": "Not signed in"}, 400)
+                return
+            n = auth.sign_out_other_sessions(user, auth._parse_sid(self.headers.get("Cookie", "")))
+            self._json({"ok": True, "signed_out": n})
         elif self.path == "/api/push-subscribe":
             self._handle_push_subscribe()
         elif self.path == "/api/push-unsubscribe":
             self._handle_push_unsubscribe()
         elif self.path == "/api/notification-settings":
-            self._handle_notif_settings()
+            # The shared settings (thresholds, photos, shared channels' events).
+            if self._require("settings.manage"):
+                self._handle_notif_settings()
+        elif self.path == "/api/my-notifications":
+            self._handle_my_notifications_set()
+        elif self.path.startswith("/api/my-channels/") and self.path.endswith("/test") \
+                and self.path.split("/")[3] in notifiers.USER_CHANNELS:
+            self._handle_my_channel_test(self.path.split("/")[3])
         elif self.path == "/api/push-test":
             self._handle_push_test()
         elif self.path in ("/api/service/tasks", "/api/service/log", "/api/service/hours"):
-            self._handle_service_post(self.path.rsplit("/", 1)[1])
+            if self._require("maintenance"):
+                self._handle_service_post(self.path.rsplit("/", 1)[1])
         elif self.path == "/api/api-tokens":
-            self._handle_create_api_token()
+            if self._require("apitokens.manage"):
+                self._handle_create_api_token()
         elif self.path.startswith("/api/spoolman-ledger/") and self.path.endswith("/retry"):
-            self._handle_ledger_action("retry")
+            if self._require("filament.manage"):
+                self._handle_ledger_action("retry")
         elif self.path == "/api/import-filaments":
-            self._handle_import_filaments()
+            if self._require("filament.manage"):
+                self._handle_import_filaments()
         elif self.path == "/api/integrations/spoolman/test":
-            self._handle_test_spoolman()
+            if self._require("settings.manage"):
+                self._handle_test_spoolman()
         elif self.path == "/api/integrations/spaghetti/test":
-            self._handle_test_spaghetti()
+            if self._require("settings.manage"):
+                self._handle_test_spaghetti()
         elif self.path == "/api/update-skip":
             self._handle_update_skip()
         elif self.path == "/api/dataset/label":
             self._handle_dataset_label()
         elif self.path.startswith("/api/integrations/") and self.path.endswith("/test") \
                 and self.path.split("/")[3] in notifiers.CHANNELS:
-            self._handle_test_notifier(self.path.split("/")[3])
+            if self._require("settings.manage"):
+                self._handle_test_notifier(self.path.split("/")[3])
         elif self.path == "/api/restore":
-            self._handle_restore()
+            if self._require("backup.manage"):
+                self._handle_restore()
         elif self.path.startswith("/api/v1/"):
             self._proxy_spoolman_ui("POST", self.path, self._read_body())
         elif self.path.startswith("/api/spoolman"):
             self._proxy_spoolman("POST", self.path[len("/api/spoolman"):], self._read_body())
         elif self.path.startswith("/api/upload/"):
-            self._handle_upload()
+            if self._require("print.start"):
+                self._handle_upload()
         elif self.path == "/api/queue/upload":
-            self._handle_queue_upload()
+            if self._require("print.queue"):
+                self._handle_queue_upload()
         elif self.path == "/api/queue/from-printer":
-            self._handle_queue_from_printer()
+            if self._require("print.queue"):
+                self._handle_queue_from_printer()
         elif self.path.startswith("/api/queue/") and self.path.endswith("/confirm"):
-            self._handle_queue_confirm()
+            if self._require("print.start"):
+                self._handle_queue_confirm()
         else:
             self._json({"error": "Not found"}, 404)
 

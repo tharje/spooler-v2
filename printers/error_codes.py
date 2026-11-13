@@ -17,6 +17,17 @@ Sources:
             itself names one.
   [sdk]     Elegoo's elegoo-link SDK (the library ElegooSlicer uses), which
             maps 109 to "filament runout".
+  [bin]     the CC2's own elegoo_printer binary (firmware 02.01.01.07, read
+            with objdump and Ghidra) together with the printer's logs from a
+            real failure. Read only; nothing on the printer was changed.
+  [gui]     Elegoo's own CC2 firmware 02.01.01.13 -- the touchscreen UI binary
+            /opt/bin/ec-eeb001-gui. Its data table language_index_to_error_code_map
+            lists every error_code the screen knows (73 of them) with a text id,
+            a popup style and a severity; get_text() resolves the id against the
+            English column of language_table. The messages tagged [gui] are that
+            exact on-screen English string, condensed only where noted -- i.e.
+            what the printer itself shows for the code. Extracted 2026-11-10; the
+            method (and the full dumped table) lives in ~/Documents/cc2-firmware.
 
 Fields: category (frontend groups/labels by this), message (short, factual),
 action (optional recommended handling, only when a source names one).
@@ -42,7 +53,27 @@ CC2_ERROR_CODES = {
     # ── Leveling ─────────────────────────────────────────────────────────────
     # Verified 2026-10-02 against a real CC2's touchscreen (Tharje); the
     # constant is BED_MESH_FAIL in [fw].
-    704: {"category": "leveling", "message": "Leveling failed. Please try again."},                                    # [screen] [fw]
+    #
+    # 704 is a catch-all [bin]: BedMeshCalibrate::cmd_BED_MESH_CALIBRATE wraps
+    # the probing in try/catch and on any exception calls
+    # ProbeManager::notify_failed() and respond_ecode("", 704, level 1). The real
+    # cause is the error logged just before it in /opt/usr/logs/elegoo.log.
+    # Seen on a real CC2 (2026-11-09): the load cell under the bed drifted
+    # (tare std up to 17,500 counts against static_std 1000, baseline jump of
+    # about 1.2 M counts = ~48 kg at counts_per_gram 25). The firmware tares
+    # before every tap (LoadCellEndstop::pause_and_tare) and arms a window of
+    # tare ± safety_limit (1200 g = 30,000 counts, _set_endstop_range); the
+    # drift left that window before the nozzle touched (803
+    # LOAD_CELL_ERROR_SAFETY_LIMIT), tap analysis failed, and after 20 retries
+    # "Probe samples exceed samples_tolerance" ended in 704. The same file
+    # leveled fine 20 minutes later. Likely causes, not yet confirmed: something
+    # touching the bed or its frame (e.g. a PETG string from the nozzle wipe),
+    # a poor contact in the load-cell cable that flexes as the bed moves in Z,
+    # or thermal drift right after heating the bed from cold.
+    704: {"category": "leveling", "message": "Leveling failed. Please try again.",
+          "action": "The bed's force sensor gave unstable readings. Check that nothing touches the bed "
+                    "or its frame (e.g. filament strings from the nozzle wipe at the back), check the "
+                    "sensor cable under the bed, and let the bed warm up a few minutes before retrying."},  # [screen] [fw] [bin]
     # ── Hardware connections / covers ────────────────────────────────────────
     707: {"category": "hardware", "message": "Toolhead front cover (fan cover) has come off."},                        # [fw]
     801: {"category": "connection", "message": "Lost communication with the extruder/toolhead board."},               # [fw]
@@ -73,6 +104,88 @@ CC2_ERROR_CODES = {
     1262: {"category": "hardware", "message": "Canvas: cutter fault."},                                               # [fw]
     1263: {"category": "filament_tangle", "message": "Filament tangled (wrap) detected."},                            # [fw]
     1264: {"category": "filament_feed", "message": "External filament holder fault (plug/blockage)."},                # [fw]
+
+    # ── Added 2026-11-10 from the .13 touchscreen binary (see [gui] above). ───
+    # These are every remaining code the screen's own error table carries that
+    # wasn't already listed; the message is the exact on-screen English text,
+    # condensed only where that text bundles a cause and an instruction.
+    # ── Heaters / temperature sensors (more) ─────────────────────────────────
+    105: {"category": "thermal", "message": "Nozzle temperature sensor shorted.",
+          "action": "Check the hotend thermistor and its wiring (power off first)."},                                # [gui]
+    106: {"category": "thermal", "message": "Heated bed temperature sensor shorted.",
+          "action": "Check the heated-bed thermistor and its wiring (power off first)."},                            # [gui]
+    107: {"category": "thermal", "message": "Toolhead over-temperature protection tripped.",
+          "action": "Restart the printer."},                                                                         # [gui]
+    205: {"category": "thermal", "message": "Chamber temperature sensor disconnected.",
+          "action": "Check the chamber thermistor and its wiring."},                                                 # [gui]
+    206: {"category": "thermal", "message": "Chamber temperature sensor shorted.",
+          "action": "Check the chamber thermistor and its wiring."},                                                 # [gui]
+    901: {"category": "thermal", "message": "Chamber temperature too high; filament may soften inside the toolhead."}, # [gui]
+    903: {"category": "thermal", "message": "Mainboard stepper-driver over-temperature protection."},                # [gui]
+    907: {"category": "thermal", "message": "Chamber temperature too high -- printing paused.",
+          "action": "Ambient may be too warm; check whether the top cover and front door are open."},                # [gui]
+    # ── Motion / sensors (more) ──────────────────────────────────────────────
+    # The .13 screen DOES carry X/Y homing codes for CC2 (302/303), unlike CC1's
+    # per-axis-only assumption the CC1 note below used to describe.
+    302: {"category": "motion", "message": "X-axis homing failed. Please try again.",
+          "action": "Check the X-axis motor, limit switch and wiring."},                                             # [gui]
+    303: {"category": "motion", "message": "Y-axis homing failed. Please try again.",
+          "action": "Check the Y-axis motor, limit switch and wiring."},                                             # [gui]
+    502: {"category": "leveling", "message": "Leveling sensor problem "
+          "(excessive platform tilt, sensor failure, or environmental interference)."},                             # [gui]
+    605: {"category": "sensor", "message": "Pressure/strain sensor data error.",
+          "action": "Check the sensor wiring."},                                                                     # [gui]
+    # ── Cutter ───────────────────────────────────────────────────────────────
+    708: {"category": "hardware", "message": "Cutter handle didn't release (handle or blade may be jammed)."},       # [gui]
+    709: {"category": "hardware", "message": "Filament cut failed.",
+          "action": "Check whether the cutter block has been removed."},                                             # [gui]
+    # ── Air filtration / storage / update ────────────────────────────────────
+    110: {"category": "maintenance", "message": "Air filtration system is nearly expired.",
+          "action": "Replace the active-carbon filter to keep filtration effective."},                              # [gui]
+    904: {"category": "storage", "message": "USB storage full.",
+          "action": "Free up space on the USB drive."},                                                              # [gui]
+    905: {"category": "storage", "message": "USB read error. Please try again.",
+          "action": "Re-seat the USB drive."},                                                                       # [gui]
+    906: {"category": "system", "message": "Update failed. Please try again."},                                      # [gui]
+    1303: {"category": "system", "message": "Settings failed. Please try again later."},                             # [gui]
+    1304: {"category": "system", "message": "Reset failed. Please try again later."},                                # [gui]
+    # ── Canvas vent (close) ──────────────────────────────────────────────────
+    1102: {"category": "hardware", "message": "Canvas: exhaust vent failed to close (may be jammed)."},              # [gui]
+    # ── Canvas feed / extrusion / unload (the 12xx two-button prompts) ───────
+    1202: {"category": "filament_runout", "message": "Canvas: filament ran out.",
+           "action": "Insert filament into the same Canvas slot and tap Continue."},                                # [gui]
+    1203: {"category": "filament_feed", "message": "Canvas: feeding filament to the extruder failed "
+           "(filament tangled or spool jammed)."},                                                                  # [gui]
+    1204: {"category": "filament_feed", "message": "Canvas: feeding filament to the extruder failed "
+           "(PTFE tube may not be connected)."},                                                                    # [gui]
+    1205: {"category": "filament_feed", "message": "Extrusion at the toolhead failed (toolhead may be clogged)."},   # [gui]
+    1206: {"category": "filament_feed", "message": "Extrusion at the toolhead failed "
+           "(filament tangled or spool jammed)."},                                                                  # [gui]
+    1207: {"category": "filament_feed", "message": "Extrusion at the toolhead failed "
+           "(filament tangled, spool jammed, or nozzle clogged)."},                                                 # [gui]
+    1208: {"category": "filament_feed", "message": "Filament unload at the toolhead failed "
+           "(nozzle clogged or filament stuck in the extruder)."},                                                  # [gui]
+    1209: {"category": "filament_feed", "message": "Filament unload at the toolhead failed "
+           "(filament slipped or jammed inside Canvas)."},                                                          # [gui]
+    1244: {"category": "filament_feed", "message": "Extrusion at the toolhead failed "
+           "(filament tangled or spool jammed)."},                                                                  # [gui]
+    1261: {"category": "hardware", "message": "Toolhead front cover detached (check if loose or abnormal)."},        # [gui]
+    1265: {"category": "filament_feed", "message": "Filament detection at the toolhead failed (may be jammed).",
+           "action": "Try removing the filament by hand."},                                                         # [gui]
+    1266: {"category": "filament_feed", "message": "Filament detection error at the toolhead.",
+           "action": "Clear any filament in the toolhead and PTFE tube before resuming; contact support if it persists."}, # [gui]
+    1267: {"category": "filament_runout", "message": "No filament detected at the toolhead "
+           "(may be broken inside the PTFE tube).",
+           "action": "Check before resuming the print."},                                                           # [gui]
+    # ── AI detection / cloud ─────────────────────────────────────────────────
+    1301: {"category": "detection", "message": "AI: print-failure (spaghetti) detected.",
+           "action": "Check the print and handle accordingly."},                                                    # [gui]
+    1302: {"category": "detection", "message": "AI: foreign object detected on the build plate."},                  # [gui]
+    2001: {"category": "detection", "message": "AI: print-failure (spaghetti) detected.",
+           "action": "Check the print and handle accordingly."},                                                    # [gui]
+    2002: {"category": "cloud", "message": "Cloud access failed (service may be updating or temporarily unavailable)."}, # [gui]
+    2003: {"category": "cloud", "message": "Failed to retrieve initialization data from the cloud."},               # [gui]
+    2004: {"category": "cloud", "message": "Failed to retrieve account information from the cloud."},                # [gui]
 }
 
 # Codes the original Centauri Carbon (CC1) shows on its own screen. Source:
@@ -83,10 +196,10 @@ CC2_ERROR_CODES = {
 # licence (compatible with this project's AGPL-3.0).
 # NOT yet seen arriving over SDCP: CC1's WebSocket status isn't known to carry
 # these codes, so nothing looks them up until a real capture shows where they
-# come from (see printers/cc1.py _protocol_reason_hint). 101-104, 304 and
-# 701-703 mean the same on CC2; 302/303 (X/Y homing) and 401/402
-# (accelerometer, split per axis) are CC1-only -- CC2_ERROR_CODES above has
-# no X/Y homing codes and only one combined 401 for the accelerometer.
+# come from (see printers/cc1.py _protocol_reason_hint). 101-104, 302-304 and
+# 701-703 mean the same on CC2 (the .13 screen carries 302/303 too, so they are
+# in CC2_ERROR_CODES above now). Only 402 is CC1-only: CC1 splits the
+# accelerometer fault per axis (401 X / 402 Y) where CC2 has a single 401.
 CC1_ERROR_CODES = {
     101: {"category": "thermal", "message": "The heated bed didn't heat up as expected."},
     102: {"category": "thermal", "message": "Anomaly in reading the heated bed NTC.",

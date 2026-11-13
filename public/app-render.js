@@ -235,11 +235,22 @@ function renderPrinter(printer) {
           <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
         </svg>
       </button>
+      ${controlButtonHtml(printer)}
       ${(printing || paused) ? (() => {
         const sf = printer.printer_type === "cc2"
           ? (printer.status?.SpeedFactor ?? 100)
           : (printer.status?.PrintInfo?.PrintSpeedPct ?? 100);
         const sid = `speed-val-${printer.id}`;
+        if (printer.printer_type === "cc2") {
+          // CC2 only knows four speed modes (method 1031)
+          const modes = [[50, "Silent"], [100, "Normal"], [130, "Sport"], [160, "Ludicrous"]];
+          return `<div class="card-speed">
+            <span class="speed-label">Speed: ${sf}%</span>
+            <div class="speed-modes">${modes.map(([pct, label]) =>
+              `<button class="btn btn-sm ${Math.round(sf) === pct ? "btn-primary" : "btn-secondary"}"
+                       onclick="setSpeed('${escAttr(printer.id)}',${pct})">${label}</button>`).join("")}</div>
+          </div>`;
+        }
         return `<div class="card-speed">
           <span class="speed-label">Speed: <span id="${escAttr(sid)}">${sf}%</span></span>
           <input type="range" class="speed-slider" min="10" max="200" step="5" value="${sf}"

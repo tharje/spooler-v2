@@ -77,14 +77,14 @@ def _header(value: str) -> str:
 _NTFY_PRIORITY = {"low": "2", "default": "3", "high": "4", "urgent": "5"}
 
 
-def _ntfy_send(n) -> None:
-    base = _check_http_url(config.get("ntfy.url") or "https://ntfy.sh", "The ntfy server address").rstrip("/")
-    topic = (config.get("ntfy.topic") or "").strip()
+def _ntfy_send(n, get=config.get) -> None:
+    base = _check_http_url(get("ntfy.url") or "https://ntfy.sh", "The ntfy server address").rstrip("/")
+    topic = (get("ntfy.topic") or "").strip()
     if not topic:
         raise NotifierError("No ntfy topic is set.")
     url = f"{base}/{urllib.parse.quote(topic, safe='')}"
     headers = {"Priority": _NTFY_PRIORITY.get(n.priority, "3")}
-    token = config.get("ntfy.token")
+    token = get("ntfy.token")
     if token:
         headers["Authorization"] = f"Bearer {token}"
     if n.image:
@@ -99,12 +99,12 @@ def _ntfy_send(n) -> None:
 
 # ── Telegram ─────────────────────────────────────────────────────────────────
 
-def _telegram_send(n) -> None:
-    token = config.get("telegram.token")
-    chat = (config.get("telegram.chat_id") or "").strip()
+def _telegram_send(n, get=config.get) -> None:
+    token = get("telegram.token")
+    chat = (get("telegram.chat_id") or "").strip()
     if not token or not chat:
         raise NotifierError("The Telegram bot token and chat ID must both be set.")
-    thread = (config.get("telegram.thread_id") or "").strip()
+    thread = (get("telegram.thread_id") or "").strip()
     if thread and not thread.isdigit():
         raise NotifierError("The Telegram topic number must be a number (or empty).")
     api = f"https://api.telegram.org/bot{token}"
@@ -125,8 +125,8 @@ def _telegram_send(n) -> None:
 
 # ── Discord ──────────────────────────────────────────────────────────────────
 
-def _discord_send(n) -> None:
-    hook = config.get("discord.webhook")
+def _discord_send(n, get=config.get) -> None:
+    hook = get("discord.webhook")
     if not hook:
         raise NotifierError("No Discord webhook address is set.")
     _check_http_url(hook, "The Discord webhook address")
@@ -144,8 +144,8 @@ def _discord_send(n) -> None:
 WEBHOOK_SCHEMA_VERSION = 1
 
 
-def _webhook_send(n) -> None:
-    url = config.get("webhook.url")
+def _webhook_send(n, get=config.get) -> None:
+    url = get("webhook.url")
     if not url:
         raise NotifierError("No webhook address is set.")
     _check_http_url(url, "The webhook address")
@@ -162,9 +162,11 @@ def _webhook_send(n) -> None:
 
 # ── Web Push (the pre-existing channel) ──────────────────────────────────────
 
-def _webpush_send(n) -> None:
+def _webpush_send(n, get=config.get) -> None:
+    import notify
     import push
-    push.send_push_all(n.title, n.body)
+    key = None if n.event == "test" else notify.EVENT_SETTING.get(n.event)
+    push.send_push_all(n.title, n.body, key=key, printer_id=n.printer_id)
 
 
 # key -> (feature key, config keys that must be set, sender)
@@ -187,5 +189,30 @@ def active_channels() -> list:
     return [c for c, (feat, _, _) in CHANNELS.items() if is_enabled(feat) and is_configured(c)]
 
 
-def send(channel: str, n) -> None:
-    CHANNELS[channel][2](n)
+def send(channel: str, n, get=None) -> None:
+    """Send through `channel`. `get` looks up its settings (default: the shared
+    ones in config.py; a user's own channel passes their values)."""
+    CHANNELS[channel][2](n, get or config.get)
+
+
+# Channels a user can set up for themselves, and the fields each one takes.
+# Telegram falls back to the shared bot token, so a user usually only needs
+# their own chat ID.
+USER_CHANNELS = {
+    "ntfy":     ("ntfy.url", "ntfy.topic", "ntfy.token"),
+    "telegram": ("telegram.chat_id", "telegram.thread_id", "telegram.token"),
+    "discord":  ("discord.webhook",),
+    "webhook":  ("webhook.url",),
+}
+
+
+def user_getter(values: dict, channel: str):
+    """A settings lookup for a user's own channel."""
+    def get(key: str):
+        v = values.get(key)
+        if v:
+            return v
+        if channel == "telegram" and key == "telegram.token":
+            return config.get(key)            # the shared Spooler bot
+        return None
+    return get

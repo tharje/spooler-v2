@@ -7,44 +7,55 @@ import ipaddress
 import json
 import uuid
 
+import printer_actions
 import state
-from auth import AUTH_ENABLED, _parse_sid, _validate_session
+from auth import AUTH_ENABLED, _parse_sid, _session_user, _validate_session
+import users
+
+
+def _ws_user(ws) -> str:
+    return getattr(ws, "_spooler_user", "")
+
+
+def _ws_can_see(ws, printer_id: str) -> bool:
+    user = _ws_user(ws)
+    if not AUTH_ENABLED or not user:
+        return True
+    return users.can_see_printer(user, printer_id)
+
+
+def _ws_has(ws, perm: str) -> bool:
+    """Same rule as auth.has_permission: login off or no bound identity → allowed."""
+    user = _ws_user(ws)
+    if not AUTH_ENABLED or not user:
+        return True
+    return users.has_permission(user, perm)
+
+
+# Permission each browser action needs. Anything not listed (including
+# actions added later) needs printer.control, so a new action is never open
+# to a viewer by accident.
+ACTION_PERMISSIONS = {
+    "list_printers": "view", "status": "view", "camera_on": "view",
+    "list_files": "view", "get_file_info": "view",
+    "discover": "printers.manage", "add_printer": "printers.manage",
+    "remove_printer": "printers.manage", "update_printer": "printers.manage",
+    "link_tray": "filament.manage",
+    "start_print": "print.start",
+    "delete_file": "print.queue", "delete_files": "print.queue",
+    # T12 advanced control
+    "set_temperature": "printer.advanced", "set_fan": "printer.advanced",
+    "move_axis": "printer.advanced", "home": "printer.advanced",
+    "auto_level": "printer.advanced", "heaters_off": "printer.advanced",
+    "pid_calibrate": "printer.advanced", "shaper_calibrate": "printer.advanced",
+}
+DEFAULT_ACTION_PERMISSION = "printer.control"
 from discovery import discover_cc2_printers, discover_printers
 from persistence import save_printers, save_tray_map
 from printers import PRINTER_TYPES, make_printer
 from spoolman import spoolman_assign, spoolman_set_location
-from printers.protocol import (
-    CMD_CAMERA, CMD_DELETE_FILES, CMD_LIGHT, CMD_LIST_FILES,
-    CMD_PAUSE, CMD_RESUME, CMD_STATUS, CMD_STOP,
-)
 
 MAX_WS_MSG = 1 * 1024 * 1024  # 1 MB
-
-# One pending light-refresh task per printer — cancelled when a new light command arrives
-_light_refresh_tasks: dict = {}
-
-
-async def _run_light_refresh(printer) -> None:
-    try:
-        if printer.printer_type == "cc2":
-            await asyncio.sleep(0.5)
-            await printer.send_cmd(1002)
-            await asyncio.sleep(1.5)
-            await printer.send_cmd(1002)
-        else:
-            await asyncio.sleep(0.4)
-            await printer.send_cmd(CMD_STATUS, {})
-    except asyncio.CancelledError:
-        pass
-    finally:
-        _light_refresh_tasks.pop(printer.id, None)
-
-
-def _schedule_light_refresh(printer) -> None:
-    old = _light_refresh_tasks.pop(printer.id, None)
-    if old:
-        old.cancel()
-    _light_refresh_tasks[printer.id] = asyncio.create_task(_run_light_refresh(printer))
 
 
 def _valid_ip_or_host(value: str) -> bool:
@@ -77,11 +88,13 @@ async def browser_handler(websocket) -> None:
             await websocket.close(1008, "Unauthorized")
             return
 
+    websocket._spooler_user = _session_user(token) if AUTH_ENABLED else ""
     state.browser_clients.add(websocket)
     print(f"[Browser] Client connected ({len(state.browser_clients)} total)")
 
     for p in state.printers.values():
-        await websocket.send(json.dumps({"type": "printer_update", "printer": p.to_dict()}))
+        if _ws_can_see(websocket, p.id):
+            await websocket.send(json.dumps({"type": "printer_update", "printer": p.to_dict()}))
     await websocket.send(json.dumps({"type": "tray_map", "tray_map": state.tray_map}))
 
     try:
@@ -97,6 +110,54 @@ async def browser_handler(websocket) -> None:
         print(f"[Browser] Client disconnected ({len(state.browser_clients)} total)")
 
 
+async def _dispatch_printer_action(action, printer, msg) -> str | None:
+    """Route a per-printer action to printer_actions; returns an error message or None."""
+    if action == "pause":
+        return await printer_actions.pause(printer)
+    if action == "resume":
+        return await printer_actions.resume(printer)
+    if action == "stop":
+        return await printer_actions.stop(printer)
+    if action == "status":
+        return await printer_actions.request_status(printer)
+    if action == "light_on":
+        return await printer_actions.set_light(printer, True)
+    if action == "light_off":
+        return await printer_actions.set_light(printer, False)
+    if action == "camera_on":
+        return await printer_actions.camera_on(printer)
+    if action == "list_files":
+        return await printer_actions.list_files(printer)
+    if action == "start_print":
+        return await printer_actions.start_print(printer, msg.get("filename", ""), msg.get("print_opts"))
+    if action == "delete_files":
+        return await printer_actions.delete_files(printer, msg.get("files", []))
+    if action == "delete_file":
+        return await printer_actions.delete_file(printer, msg.get("filename", ""))
+    if action == "get_file_info":
+        printer_actions.get_file_info(printer, msg.get("filename", ""))
+        return None
+    if action == "set_speed":
+        return await printer_actions.set_speed(printer, msg.get("speed"))
+    if action == "set_temperature":
+        return await printer_actions.set_temperature(printer, msg.get("heater"), msg.get("target"))
+    if action == "set_fan":
+        return await printer_actions.set_fan(printer, msg.get("fan"), msg.get("percent"))
+    if action == "move_axis":
+        return await printer_actions.move_axis(printer, msg.get("axis"), msg.get("distance"))
+    if action == "home":
+        return await printer_actions.home(printer, msg.get("axes", "XYZ"))
+    if action == "auto_level":
+        return await printer_actions.auto_level(printer)
+    if action == "heaters_off":
+        return await printer_actions.heaters_off(printer)
+    if action == "pid_calibrate":
+        return await printer_actions.pid_calibrate(printer, msg.get("target"))
+    if action == "shaper_calibrate":
+        return await printer_actions.shaper_calibrate(printer)
+    return None
+
+
 async def handle_browser_message(ws, raw: str) -> None:
     try:
         msg = json.loads(raw)
@@ -108,9 +169,15 @@ async def handle_browser_message(ws, raw: str) -> None:
     printer    = state.printers.get(printer_id)
     loop       = asyncio.get_running_loop()
 
+    need = ACTION_PERMISSIONS.get(action, DEFAULT_ACTION_PERMISSION)
+    if not _ws_has(ws, need):
+        await ws.send(json.dumps({"type": "error", "message": "You don't have permission to do that."}))
+        return
+
     if action == "list_printers":
         for p in state.printers.values():
-            await ws.send(json.dumps({"type": "printer_update", "printer": p.to_dict()}))
+            if _ws_can_see(ws, p.id):
+                await ws.send(json.dumps({"type": "printer_update", "printer": p.to_dict()}))
         return
 
     if action == "discover":
@@ -208,7 +275,7 @@ async def handle_browser_message(ws, raw: str) -> None:
         pid      = printer_id
         tray_id  = msg.get("tray_id")
         spool_id = msg.get("spool_id")  # int or null
-        if pid is None or tray_id is None:
+        if pid is None or tray_id is None or not _ws_can_see(ws, pid):
             return
         key = str(tray_id)
         if pid not in state.tray_map:
@@ -226,91 +293,11 @@ async def handle_browser_message(ws, raw: str) -> None:
                 loop.run_in_executor(None, spoolman_set_location, spool_id, pid)
         return
 
-    if not printer:
+    if not printer or not _ws_can_see(ws, printer.id):
         await ws.send(json.dumps({"type": "error", "message": "Printer not found"}))
         return
 
-    cmd_map = {
-        "pause":     (CMD_PAUSE,  {}),
-        "resume":    (CMD_RESUME, {}),
-        "stop":      (CMD_STOP,   {}),
-        "status":    (CMD_STATUS, {}),
-        "light_on":  (CMD_LIGHT, {"LightStatus": {"SecondLight": True,  "RgbLight": [0, 0, 0]}}),
-        "light_off": (CMD_LIGHT, {"LightStatus": {"SecondLight": False, "RgbLight": [0, 0, 0]}}),
-        "camera_on": (CMD_CAMERA, {"Enable": True}),
-    }
-
-    if action == "list_files":
-        ok = await printer.request_file_list()
-        if not ok:
-            await ws.send(json.dumps({"type": "error", "message": "Could not retrieve file list"}))
-        return
-
-    if action == "start_print":
-        filename = msg.get("filename", "").strip()
-        if not filename:
-            await ws.send(json.dumps({"type": "error", "message": "No filename specified"}))
-            return
-        if ".." in filename.replace("\\", "/").split("/"):
-            await ws.send(json.dumps({"type": "error", "message": "Invalid filename"}))
-            return
-        print_opts = msg.get("print_opts")
-        if not isinstance(print_opts, (dict, type(None))):
-            print_opts = None
-        ok = await printer.start_print_file(filename, print_opts=print_opts)
-        if not ok:
-            await ws.send(json.dumps({"type": "error", "message": "Could not start print"}))
-        return
-
-    if action == "delete_files":
-        files = msg.get("files", [])
-        if (isinstance(files, list) and len(files) <= 50
-                and all(isinstance(f, str) and f for f in files)):
-            if printer.printer_type == "cc2":
-                await printer.delete_files(files)
-            else:
-                await printer.send_cmd(CMD_DELETE_FILES, {"FileList": files})
-        return
-
-    if action == "delete_file":
-        filename = msg.get("filename", "").strip()
-        parts = filename.replace("\\", "/").split("/")
-        if not filename or ".." in parts:
-            await ws.send(json.dumps({"type": "error", "message": "Invalid filename"}))
-            return
-        if printer.printer_type == "cc2":
-            await printer.delete_files([filename])
-        elif printer.printer_type == "prusa":
-            await printer.delete_file_prusa(filename)
-        elif printer.printer_type == "moonraker":
-            await printer.delete_file_moonraker(filename)
-        else:
-            await printer.send_cmd(CMD_DELETE_FILES, {"FileList": [filename]})
-        return
-
-    if action == "get_file_info":
-        filename = msg.get("filename", "").strip()
-        if filename and hasattr(printer, "fetch_file_info"):
-            asyncio.create_task(printer.fetch_file_info(filename))
-        return
-
-    if action == "set_speed":
-        speed = msg.get("speed")
-        if isinstance(speed, (int, float)) and 10 <= int(speed) <= 200:
-            if printer.printer_type == "cc2":
-                await printer.send_cmd(1031, {"speed": int(speed)})
-            else:
-                await printer.send_cmd(CMD_LIGHT, {"PrintSpeedPct": int(speed)})
-        return
-
-    if action in cmd_map:
-        cmd, data = cmd_map[action]
-        ok = await printer.send_cmd(cmd, data)
-        if not ok:
-            await ws.send(json.dumps({"type": "error", "message": "Printer not connected"}))
-        elif action in ("light_on", "light_off"):
-            _schedule_light_refresh(printer)
-        elif action in ("pause", "stop"):
-            # So state_reason attributes the resulting pause/stop to "spooler"
-            # rather than "printer"/"unknown" when it's observed shortly after.
-            printer.mark_spooler_command()
+    printer_actions.ACTOR.set(_ws_user(ws))
+    err = await _dispatch_printer_action(action, printer, msg)
+    if err:
+        await ws.send(json.dumps({"type": "error", "message": err}))

@@ -164,6 +164,37 @@ class PrinterConnection:
     # Subclasses that can switch the chamber light from Spooler set this True
     # and implement set_light(); the auto-light option is only offered then.
     supports_light: bool = False
+    # Advanced control (T12). Empty until the protocol commands are verified on
+    # a real printer; see control.py for how they are checked.
+    capabilities: frozenset = frozenset()   # temp_nozzle, temp_bed, temp_chamber, fan_part, fan_aux, fan_chamber, move, home, home_axes (per-axis homing)
+    limits: dict = {}                       # {"nozzle": {"max": 300, "assumed": True}, ...}
+    controls_verified: bool = False
+
+    async def set_temperature(self, heater: str, target: float) -> bool:
+        return False
+
+    async def set_fan(self, fan: str, percent: int) -> bool:
+        return False
+
+    async def move_axis(self, axis: str, distance_mm: float) -> bool:
+        return False
+
+    async def home(self, axes: str = "XYZ") -> bool:
+        return False
+
+    async def auto_level(self) -> bool:
+        return False
+
+    async def pid_calibrate(self, target: int) -> bool:
+        return False
+
+    async def shaper_calibrate(self) -> bool:
+        return False
+
+    async def heaters_off(self, heaters: list) -> bool:
+        # Printers that can switch everything off in one command override this
+        results = [await self.set_temperature(h, 0.0) for h in heaters]
+        return bool(results) and all(results)
     upload_unsupported_reason: str = "File upload is not supported for this printer type."
 
     def __init__(
@@ -232,6 +263,11 @@ class PrinterConnection:
         self.phase: str = ""
         self._last_spooler_cmd_at: float | None = None
         self._current_print_pauses: list = []
+        # Who started the current print (Spooler username), for the history entry.
+        # Set by the start action just before the printer reports the print, then
+        # captured when the "print started" event fires.
+        self._pending_owner: str | None = None
+        self._current_print_owner: str | None = None
         # Epoch seconds (not an ISO string) deliberately — the frontend does
         # "how long ago was this" math against it, which an ISO string without
         # a timezone suffix (as time.strftime("%Y-%m-%dT%H:%M:%S") produces
@@ -322,6 +358,9 @@ class PrinterConnection:
             "supports_upload": self.supports_upload,
             "supports_light":  self.supports_light,
             "auto_light":      self.auto_light and self.supports_light,
+            "capabilities":    sorted(self.capabilities),
+            "limits":          self.limits,
+            "controls_verified": self.controls_verified,
             "upload_unsupported_reason": None if self.supports_upload else self.upload_unsupported_reason,
             "spaghetti":       spaghetti.status_for(self.id),
             "dataset":         dataset.status_for(self.id),
@@ -678,8 +717,7 @@ class PrinterConnection:
         if not is_enabled("notifications"):
             return
         s = load_notif_settings()
-        if not s:
-            return
+        wanted = notifylib.key_wanted
         ns = self._notif_state
         pi = self._decoded_printinfo()
         status      = pi.get("Status", 0)
@@ -700,7 +738,7 @@ class PrinterConnection:
         _print_ended = (is_done or is_idle) and ns.get("in_print", False)
         if is_done or is_idle:
             ns["in_print"] = False
-        if s.get("finished", {}).get("enabled") and _print_ended:
+        if _print_ended and wanted("finished"):
             fname = pi.get("Filename", "")
             if status == 8:
                 self._emit("print_cancelled", f"{self.name} — Print cancelled",
@@ -709,8 +747,8 @@ class PrinterConnection:
                 self._emit("print_complete", f"{self.name} — Print complete",
                            f"{fname} is done." if fname else "Your print is complete.", extra={"filename": fname})
 
-        if s.get("nozzle_idle", {}).get("enabled") and is_idle:
-            thr = s["nozzle_idle"].get("threshold", 50)
+        if is_idle and wanted("nozzle_idle"):
+            thr = s.get("nozzle_idle", {}).get("threshold", 50)
             if nozzle > thr and not ns["nozzle_idle_fired"]:
                 self._emit("nozzle_hot_idle", f"{self.name} — Nozzle hot", f"Nozzle is {round(nozzle)}°C while idle.")
                 ns["nozzle_idle_fired"] = True
@@ -726,8 +764,8 @@ class PrinterConnection:
         if not ns.get("in_print"):
             ns["layer_fired"] = False
             ns["layer_seen"] = None
-        elif s.get("layer", {}).get("enabled") and is_printing:
-            target = s["layer"].get("layer", 1)
+        elif is_printing and wanted("layer"):
+            target = s.get("layer", {}).get("layer", 1)
             if layer >= target and not ns["layer_fired"]:
                 # Spooler started in the middle of a print that is already past the layer: too late to announce it.
                 if ns["layer_seen"] is not None or layer <= target:
@@ -735,8 +773,8 @@ class PrinterConnection:
                 ns["layer_fired"] = True
             ns["layer_seen"] = layer
 
-        if s.get("nozzle_printing", {}).get("enabled") and is_printing:
-            thr = s["nozzle_printing"].get("threshold", 260)
+        if is_printing and wanted("nozzle_printing"):
+            thr = s.get("nozzle_printing", {}).get("threshold", 260)
             if nozzle > thr and not ns["nozzle_hot_fired"]:
                 self._emit("nozzle_overheat", f"{self.name} — Nozzle overheat", f"Nozzle is {round(nozzle)}°C during print.", priority="high")
                 ns["nozzle_hot_fired"] = True
@@ -937,6 +975,8 @@ class PrinterConnection:
         if event == "start":
             self.state_reason = None
             self._current_print_pauses = []
+            self._current_print_owner = self._pending_owner
+            self._pending_owner = None
             self._print_start_time = time.time()
             self._max_total_layer   = pi.get("TotalLayer", 0) or 0
             self._max_current_layer = pi.get("CurrentLayer", 0) or 0
@@ -997,6 +1037,7 @@ class PrinterConnection:
                     "error_code":    reason["code"] if reason and reason["kind"] == "error" and reason["code"] else None,
                     "error_message": reason["message"] if reason and reason["kind"] == "error" and reason["message"] else None,
                     "initiated_by":  reason["initiated_by"] if reason else None,
+                    "owner":         self._current_print_owner,
                     "pauses":        list(self._current_print_pauses),
                     "started_at":    (time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(self._print_start_time))
                                       if self._print_start_time else None),
@@ -1025,6 +1066,7 @@ class PrinterConnection:
                         loop.run_in_executor(None, update_history_entry, entry["id"], {"spools": used})
                     clear_active(self.id)
             self._acct = None
+            self._current_print_owner = None
             self._max_total_layer = 0
             self._max_current_layer = 0
             if not extras_started:

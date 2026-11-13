@@ -61,6 +61,7 @@ import diagnostics
 import spaghetti
 import dataset
 import job_queue
+import idle_guard
 import update_check
 import uploads
 from backup import check_startup_backup, daily_backup_loop
@@ -95,6 +96,10 @@ HTTPS_ENABLED = os.getenv("HTTPS_ENABLED", "true").lower() != "false"
 
 # Wire the auth file path now that DATA_DIR is resolved
 auth.set_auth_file(DATA_DIR / "auth.json")
+
+# Create users.json on first run and migrate the legacy single login into it.
+import users
+users.ensure_initialised()
 
 
 async def _ledger_sender() -> None:
@@ -138,10 +143,11 @@ async def main() -> None:
     elif not BCRYPT_AVAILABLE:
         print("[Auth] WARNING: 'bcrypt' package not installed – authentication will not work.")
         print("       Install it: pip install bcrypt")
-    elif not auth._has_password():
-        print("[Auth] No password configured – first-time setup required via the web UI")
+    elif not users.any_users():
+        print("[Auth] No users configured – first-time setup required via the web UI")
     else:
-        print(f"[Auth] Authentication enabled (user: {auth._get_username()})")
+        n = len(users.list_users())
+        print(f"[Auth] Authentication enabled ({n} user{'s' if n != 1 else ''})")
 
     init_vapid()
     check_startup_backup()
@@ -178,6 +184,7 @@ async def main() -> None:
     asyncio.create_task(spaghetti.watch_loop())
     asyncio.create_task(dataset.collect_loop())
     asyncio.create_task(job_queue.assign_loop())
+    asyncio.create_task(idle_guard.watch_loop())
     asyncio.create_task(update_check.check_loop())
     asyncio.create_task(_service_daily())
 

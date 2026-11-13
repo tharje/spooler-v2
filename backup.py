@@ -38,6 +38,8 @@ BACKUP_FILES = [
     "tray_map.json",
     "notification_settings.json",
     "push_subscriptions.json",
+    "notification_prefs.json",
+    "notification_channels.json",
     "vapid_keys.json",
     "auth.json",
     "api_tokens.json",

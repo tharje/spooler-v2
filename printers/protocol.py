@@ -17,6 +17,10 @@ CMD_LIST_FILES   = 258
 CMD_DELETE_FILES = 259
 CMD_CAMERA       = 386
 CMD_LIGHT        = 403
+# Advanced control (T12), as the printer's own web page uses them:
+CMD_MOVE_AXIS    = 401   # {"Axis": "X"|"Y"|"Z", "Step": mm, signed}
+CMD_HOME_AXIS    = 402   # {"Axis": "X"|"Y"|"Z"|"XYZ"}
+CMD_SET_STATUS   = 403   # TempTargetNozzle / TempTargetHotbed / TargetFanSpeed{...} / LightStatus
 CMD_CANVAS       = 324
 
 

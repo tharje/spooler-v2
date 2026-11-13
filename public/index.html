@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css?v=89" />
+  <link rel="stylesheet" href="style.css?v=114" />
 </head>
 <body>
   <header>
@@ -42,6 +42,13 @@
   <div class="app-body">
 
   <nav class="sidenav">
+    <button id="btn-home" class="sidenav-item active" title="Printers">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+        <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+      </svg>
+      <span>Printers</span>
+    </button>
     <button id="btn-stats" class="sidenav-item" title="Statistics and print history">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
         <line x1="6" y1="20" x2="6" y2="11"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="18" y1="20" x2="18" y2="14"/>
@@ -87,6 +94,12 @@
       <span>Settings</span>
     </button>
     <div class="sidenav-spacer"></div>
+    <button id="signed-in-as" class="sidenav-item sidenav-user" title="Me: your profile, devices and prints" style="display:none">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+      </svg>
+      <span id="signed-in-as-name"></span>
+    </button>
     <button id="btn-signout-nav" class="sidenav-item sidenav-item-signout" title="Sign out">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
@@ -171,7 +184,7 @@
   </div>
 
   <!-- Statistics panel -->
-  <div id="panel-stats" class="side-panel stats-panel">
+  <div id="panel-stats" class="side-panel page stats-panel">
     <div class="side-panel-header">
       <div class="title-row">
         <h3>Stats &amp; history</h3>
@@ -207,7 +220,7 @@
     </div>
   </div>
   <!-- Spools panel -->
-  <div id="panel-spools" class="side-panel">
+  <div id="panel-spools" class="side-panel page">
     <div class="side-panel-header">
       <div class="title-row">
         <h3>Filament Spools</h3>
@@ -232,7 +245,7 @@
   </div>
 
   <!-- Service panel -->
-  <div id="panel-service" class="side-panel">
+  <div id="panel-service" class="side-panel page">
     <div class="side-panel-header">
       <div class="title-row">
         <h3>Service</h3>
@@ -243,7 +256,14 @@
   </div>
 
   <!-- Queue panel -->
-  <div id="panel-queue" class="side-panel">
+  <div id="panel-me" class="side-panel page">
+    <div class="side-panel-header">
+      <div class="title-row"><h3>Me</h3></div>
+    </div>
+    <div class="side-panel-body" id="me-body"></div>
+  </div>
+
+  <div id="panel-queue" class="side-panel page">
     <div class="side-panel-header">
       <div class="title-row">
         <h3>Queue</h3>
@@ -469,79 +489,95 @@
 
   <!-- Settings modal -->
   <div id="modal-app-settings" class="modal">
-    <div class="modal-box">
+    <div class="modal-box settings-modal">
       <!-- Main settings menu -->
       <div id="settings-menu">
         <h3>Settings</h3>
         <div class="settings-menu-list">
-          <button class="settings-menu-item" id="btn-settings-goto-password">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            </svg>
-            <span>Change password</span>
-            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-          </button>
-          <button class="settings-menu-item" id="btn-settings-goto-printers">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M2 7h20"/><path d="M5 7v12"/><path d="M19 7v12"/>
-              <rect x="9" y="3" width="6" height="5" rx="1"/>
-              <path d="M12 8v4"/><path d="M10 12h4"/>
-              <path d="M8 16h8"/><path d="M3 19h18"/>
-            </svg>
-            <span>Printers</span>
-            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-          </button>
-          <button class="settings-menu-item" id="btn-settings-goto-notifications">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-            </svg>
-            <span>Notifications</span>
-            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-          </button>
-          <button class="settings-menu-item" id="btn-settings-goto-backup">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            <span>Backup</span>
-            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-          </button>
-          <button class="settings-menu-item" id="btn-settings-goto-features">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3"/>
-              <circle cx="4" cy="12" r="2"/><circle cx="12" cy="10" r="2"/><circle cx="20" cy="14" r="2"/>
-            </svg>
-            <span>Features</span>
-            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-          </button>
-          <button class="settings-menu-item" id="btn-settings-goto-integrations">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>
-              <path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/>
-            </svg>
-            <span>Services and data</span>
-            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-          </button>
-          <button class="settings-menu-item" id="btn-settings-goto-api">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
-            </svg>
-            <span>API access</span>
-            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-          </button>
-          <div class="settings-menu-item settings-toggle-row">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-            </svg>
-            <span>Light mode</span>
-            <label class="toggle-switch" style="margin-left:auto">
-              <input type="checkbox" id="toggle-light-mode" />
-              <span class="toggle-slider"></span>
-            </label>
+          <div class="settings-group">
+            <div class="settings-group-title">Account &amp; access</div>
+            <button class="settings-menu-item" id="btn-settings-goto-password">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+              <span>Change password</span>
+              <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+            <button class="settings-menu-item" id="btn-settings-goto-users" style="display:none">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+              </svg>
+              <span>Users and roles</span>
+              <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
           </div>
-        </div>
-        <div class="modal-actions">
-          <button id="btn-app-settings-cancel" class="btn btn-secondary">Close</button>
+          <div class="settings-group">
+            <div class="settings-group-title">Printers &amp; alerts</div>
+            <button class="settings-menu-item" id="btn-settings-goto-printers">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 7h20"/><path d="M5 7v12"/><path d="M19 7v12"/>
+                <rect x="9" y="3" width="6" height="5" rx="1"/>
+                <path d="M12 8v4"/><path d="M10 12h4"/>
+                <path d="M8 16h8"/><path d="M3 19h18"/>
+              </svg>
+              <span>Printers</span>
+              <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+            <button class="settings-menu-item" id="btn-settings-goto-notifications">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </svg>
+              <span>Notifications</span>
+              <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+          </div>
+          <div class="settings-group">
+            <div class="settings-group-title">System</div>
+            <button class="settings-menu-item" id="btn-settings-goto-backup">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              <span>Backup</span>
+              <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+            <button class="settings-menu-item" id="btn-settings-goto-integrations">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>
+                <path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/>
+              </svg>
+              <span>Services and data</span>
+              <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+            <button class="settings-menu-item" id="btn-settings-goto-api">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+              </svg>
+              <span>API access</span>
+              <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+            <button class="settings-menu-item" id="btn-settings-goto-features">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3"/>
+                <circle cx="4" cy="12" r="2"/><circle cx="12" cy="10" r="2"/><circle cx="20" cy="14" r="2"/>
+              </svg>
+              <span>Features</span>
+              <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+          </div>
+          <div class="settings-group">
+            <div class="settings-group-title">Appearance</div>
+            <div class="settings-menu-item settings-toggle-row">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+              </svg>
+              <span>Light mode</span>
+              <label class="toggle-switch" style="margin-left:auto">
+                <input type="checkbox" id="toggle-light-mode" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
         </div>
       </div>
       <!-- Printers sub-page -->
@@ -626,13 +662,21 @@
           <h3>Notifications</h3>
         </div>
         <div class="notif-list">
-          <details class="notif-group">
+          <details class="notif-group" id="notif-channels-group">
             <summary>
-              <span class="notif-group-text"><strong>Notification channels</strong><small>Browser push, ntfy, Telegram, Discord, webhook</small></span>
+              <span class="notif-group-text"><strong>Shared channels</strong><small>Browser push, ntfy, Telegram, Discord, webhook</small></span>
               <span id="notif-channels-summary" class="notif-group-pill"></span>
               <svg class="notif-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
             </summary>
             <div id="notif-channels"></div>
+          </details>
+          <details class="notif-group" id="notif-mychannels-group" style="display:none">
+            <summary>
+              <span class="notif-group-text"><strong>My channels</strong><small>Your own ntfy, Telegram, Discord or webhook</small></span>
+              <span id="notif-mychannels-summary" class="notif-group-pill"></span>
+              <svg class="notif-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+            </summary>
+            <div id="notif-mychannels"></div>
           </details>
           <div class="feature-group-title">Events</div>
           <details class="notif-group notif-group-events" id="notif-evgroup-progress">
@@ -736,7 +780,7 @@
               <div id="notif-extra-status"></div>
             </div>
           </details>
-          <p class="report-desc">Events are sent to every channel that is switched on above.</p>
+          <p class="report-desc" id="notif-events-note">Events are sent to every channel that is switched on above.</p>
         </div>
         <div class="modal-actions">
           <button id="btn-notif-save" class="btn btn-primary">Save</button>
@@ -848,6 +892,35 @@
           <button id="btn-api-create" class="btn btn-primary btn-sm">Create</button>
         </div>
       </div>
+      <!-- Users and roles sub-page -->
+      <div id="settings-users" style="display:none">
+        <div class="settings-subpage-header">
+          <button id="btn-settings-back-users" class="settings-back-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+          <h3>Users and roles</h3>
+        </div>
+        <p class="report-desc">Give other people their own login. Each user has a role, and a role is just the set of things it is allowed to do. The built-in Admin role always has full access; Operator and Viewer are a starting point you can edit.</p>
+
+        <div class="feature-group-title">Users</div>
+        <div id="users-list"></div>
+        <div class="feature-group-title">Add a user</div>
+        <div class="api-create">
+          <input id="new-user-name" type="text" maxlength="40" placeholder="Username" />
+          <input id="new-user-pass" type="password" maxlength="200" placeholder="Password (min. 6)" />
+          <select id="new-user-role"></select>
+          <button id="btn-add-user" class="btn btn-primary btn-sm">Add</button>
+        </div>
+
+        <div class="feature-group-title" style="margin-top:1.4em">Roles</div>
+        <div id="roles-list"></div>
+        <div class="feature-group-title">Add a role</div>
+        <div class="api-create">
+          <input id="new-role-name" type="text" maxlength="40" placeholder="Role name, e.g. kids" />
+          <input id="new-role-label" type="text" maxlength="80" placeholder="Description (optional)" />
+          <button id="btn-add-role" class="btn btn-primary btn-sm">Create</button>
+        </div>
+      </div>
       <!-- Change password sub-page -->
       <div id="settings-change-password" style="display:none">
         <div class="settings-subpage-header">
@@ -887,16 +960,20 @@
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="/config.js"></script>
-  <script src="app-core.js?v=90"></script>
-  <script src="app-render.js?v=88"></script>
-  <script src="app-settings.js?v=87"></script>
-  <script src="app-files.js?v=87"></script>
-  <script src="app-integrations.js?v=92"></script>
-  <script src="app-stats.js?v=85"></script>
-  <script src="app-spools.js?v=84"></script>
-  <script src="app-service.js?v=92"></script>
-  <script src="app-queue.js?v=2"></script>
-  <script src="app-boot.js?v=84"></script>
+  <script src="app-core.js?v=93"></script>
+  <script src="app-render.js?v=92"></script>
+  <script src="app-settings.js?v=94"></script>
+  <script src="app-files.js?v=89"></script>
+  <script src="app-integrations.js?v=96"></script>
+  <script src="app-stats.js?v=90"></script>
+  <script src="app-spools.js?v=85"></script>
+  <script src="app-control.js?v=20"></script>
+  <script src="app-service.js?v=93"></script>
+  <script src="app-queue.js?v=3"></script>
+  <script src="app-users.js?v=1"></script>
+  <script src="app-me.js?v=2"></script>
+  <script src="app-nav.js?v=2"></script>
+  <script src="app-boot.js?v=89"></script>
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});

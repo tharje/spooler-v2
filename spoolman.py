@@ -252,7 +252,7 @@ def _notify_spool_level(
 
     notif = load_notif_settings()
     spool_low_cfg = notif.get("spool_low", {})
-    if spool_low_cfg.get("enabled") and remaining > 0:
+    if remaining > 0 and notify.key_wanted("spool_low"):
         threshold = float(spool_low_cfg.get("threshold", 100))
         if remaining <= threshold:
             notify.notify(notify.Notification(

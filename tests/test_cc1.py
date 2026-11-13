@@ -92,5 +92,8 @@ def test_cc1_error_catalog_matches_screen_codes():
     # official CC1 firmware source -- this is the complete set.
     assert set(CC1_ERROR_CODES) == {101, 102, 103, 104, 302, 303, 304, 401, 402, 502, 701, 702, 703}
     assert lookup(502, "cc1")["category"] == "leveling"
-    assert lookup(502, "cc2") is None      # 502 isn't a CC2 code
+    # 402 is CC1-only (CC1 splits the accelerometer per axis; CC2 has one 401).
+    # 502 used to be the example of a "not-a-CC2 code", but the .13 screen shows
+    # CC2 carries 502 too, so it's a CC2 code now -- 402 is the clean CC1-only one.
+    assert lookup(402, "cc2") is None
     assert lookup(704, "cc1") is None

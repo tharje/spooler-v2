@@ -22,15 +22,20 @@ import tempfile
 import threading
 import time
 import uploads
+import user_channels
+import users
 import urllib.error
 import urllib.parse
 import urllib.request
+from auth import current_user
 from backup import (
     BACKUP_DIR, RestoreError, create_backup_zip, list_auto_backups, restore_from_zip,
 )
 from features import FeatureError
 from features import describe_all as describe_all_features, is_enabled, requires_feature, set_enabled
 from pathlib import Path
+import me
+import push
 from push import WEBPUSH_AVAILABLE, add_subscription, has_subscriptions, remove_subscription, save_notif_settings, send_push_all
 from snapshot import grab_jpeg
 from spoolman import get_spoolman_db, get_spoolman_url, test_spoolman_connection
@@ -51,7 +56,7 @@ class AdminMixin:
         if not endpoint:
             self._json({"error": "Missing endpoint"}, 400)
             return
-        add_subscription(sub)
+        add_subscription(sub, owner=current_user(self), device=me.device_name(self.headers.get("User-Agent", "")))
         self._json({"ok": True})
 
     @requires_feature("notify_webpush")
@@ -74,16 +79,111 @@ class AdminMixin:
         save_notif_settings(s)
         self._json({"ok": True})
 
+    @requires_feature("notifications")
+    def _handle_my_notifications_get(self):
+        user = current_user(self)
+        own = push.user_event_choices(user) if user else None
+        shared = push.load_notif_settings()
+        keys = sorted(set(notify.EVENT_SETTING.values()))
+        self._json({
+            "user": user,
+            "custom": own is not None,
+            # What this user's devices get now: their own choices, or the shared ones.
+            "events": {k: push.user_wants(user, k, shared) for k in keys} if user else
+                      {k: bool((shared.get(k) or {}).get("enabled")) for k in keys},
+        })
+
+    @requires_feature("notifications")
+    def _handle_my_notifications_set(self):
+        """Save the signed-in user's own event choices ({"events": {key: bool}},
+        or {"events": null} to follow the shared settings again)."""
+        user = current_user(self)
+        if not user:
+            self._json({"error": "Sign in with an account to choose your own notifications."}, 400)
+            return
+        try:
+            body = json.loads(self._read_body() or b"{}")
+        except Exception:
+            self._json({"error": "Bad request"}, 400)
+            return
+        events = body.get("events")
+        if events is not None and not isinstance(events, dict):
+            self._json({"error": "events must be an object"}, 400)
+            return
+        valid = set(notify.EVENT_SETTING.values())
+        push.save_user_event_choices(user, None if events is None else
+                                     {k: bool(v) for k, v in events.items() if k in valid})
+        self._json({"ok": True})
+
+    def _my_channels_user(self) -> str | None:
+        """The signed-in user, when they may have own channels (sends the error otherwise)."""
+        user = current_user(self)
+        if not user:
+            self._json({"error": "Sign in with an account to set up your own channels."}, 400)
+            return None
+        if not users.has_permission(user, user_channels.PERMISSION):
+            self._json({"error": "forbidden", "need": user_channels.PERMISSION}, 403)
+            return None
+        return user
+
+    @requires_feature("notifications")
+    def _handle_my_channels_get(self):
+        user = self._my_channels_user()
+        if user:
+            self._json({"channels": user_channels.describe(user)})
+
+    @requires_feature("notifications")
+    def _handle_my_channels_update(self):
+        """{"channel": "telegram", "enabled": true, "values": {...}, "clear": [...]}"""
+        user = self._my_channels_user()
+        if not user:
+            return
+        try:
+            body = json.loads(self._read_body() or b"{}")
+            values, clear = body.get("values") or {}, body.get("clear") or []
+            if not isinstance(values, dict) or not isinstance(clear, list):
+                raise ValueError("Bad request.")
+            enabled = body.get("enabled")
+            user_channels.update(user, str(body.get("channel", "")),
+                                 None if enabled is None else bool(enabled), values, clear)
+        except ValueError as e:
+            self._json({"error": str(e)}, 400)
+            return
+        except Exception:
+            self._json({"error": "Bad request"}, 400)
+            return
+        self._json({"ok": True, "channels": user_channels.describe(user)})
+
+    @requires_feature("notifications")
+    def _handle_my_channel_test(self, channel: str):
+        self._read_body()
+        user = self._my_channels_user()
+        if not user:
+            return
+        vals = (user_channels.channels_of(user).get(channel) or {}).get("values") or {}
+        if not user_channels.is_configured(channel, vals):
+            msg = ("Spooler has no shared Telegram bot yet: ask an admin to set one up, or enter your own bot token."
+                   if channel == "telegram" and vals.get("telegram.chat_id") else "Fill in the channel's settings first.")
+            self._json({"ok": False, "message": msg}, 400)
+            return
+        try:
+            notify.send_test(channel, notifiers.user_getter(vals, channel))
+            self._json({"ok": True, "message": "Sent. Check your " + channel + "."})
+        except notifiers.NotifierError as e:
+            self._json({"ok": False, "message": str(e)}, 502)
+
     @requires_feature("notify_webpush")
     def _handle_push_test(self):
         self._read_body()
         if not WEBPUSH_AVAILABLE:
             self._json({"error": "Web Push not available on server"}, 503)
             return
-        if not has_subscriptions():
+        # Only to the tester's own devices ("" = login off: every device).
+        owner = current_user(self)
+        if not has_subscriptions(owner):
             self._json({"error": "No push subscriptions registered"}, 400)
             return
-        send_push_all("Spooler — Test notification", "Push notifications are working!")
+        send_push_all("Spooler — Test notification", "Push notifications are working!", owner=owner)
         self._json({"ok": True})
 
     @requires_feature("spoolman")
@@ -182,7 +282,7 @@ class AdminMixin:
         params = urllib.parse.parse_qs(parsed.query)
         printer_id = urllib.parse.unquote(parsed.path[len("/api/upload/"):])
         printer = state.printers.get(printer_id)
-        if not printer:
+        if not printer or not self._can_see_printer(printer_id):
             self._json({"error": "Printer not found"}, 404)
             return
         if not printer.supports_upload:
@@ -216,6 +316,8 @@ class AdminMixin:
             if http_common.ws_loop() is None:
                 self._json({"error": "Server not ready"}, 503)
                 return
+            if start_after:
+                printer._pending_owner = current_user(self)   # attribute the print in history
             fut = asyncio.run_coroutine_threadsafe(
                 printer.upload_file(local_path, name, start_after), http_common.ws_loop())
             ok = fut.result(timeout=uploads.forward_timeout(local_path.stat().st_size) + 30)
@@ -259,6 +361,11 @@ class AdminMixin:
                 return
             requirements = {k: params.get(k, [""])[0] for k in
                              ("printer_type", "printer_id", "material", "colour", "quantity", "priority")}
+            pid = (requirements.get("printer_id") or "").strip()
+            if pid and not self._can_see_printer(pid):
+                self._json({"error": "Printer not found"}, 404)
+                return
+            requirements["owner"] = current_user(self)
             job = job_queue.add_job(local_path, name, requirements)
             local_path = None  # add_job() moved it into the queue folder
             self._json({"ok": True, "job": job})
@@ -282,6 +389,10 @@ class AdminMixin:
             if not printer_id or not filename:
                 self._json({"error": "printer_id and filename are required"}, 400)
                 return
+            if not self._can_see_printer(printer_id):
+                self._json({"error": "Printer not found"}, 404)
+                return
+            body["owner"] = current_user(self)
             job = job_queue.add_existing_job(printer_id, filename, body)
             self._json({"ok": True, "job": job})
         except job_queue.QueueError as e:
@@ -295,6 +406,8 @@ class AdminMixin:
         job_id = urllib.parse.unquote(self.path[len("/api/queue/"):])
         try:
             changes = json.loads(self._read_body() or b"{}")
+            if not self._may_touch_job(job_id, cancelling=changes.get("status") == "cancelled"):
+                return
             job = job_queue.update_job(job_id, changes)
             self._json({"ok": True, "job": job})
         except job_queue.QueueError as e:
@@ -305,17 +418,45 @@ class AdminMixin:
     @requires_feature("job_queue")
     def _handle_queue_delete(self):
         job_id = urllib.parse.unquote(self.path[len("/api/queue/"):])
+        if not self._may_touch_job(job_id, cancelling=True):
+            return
         try:
             job_queue.delete_job(job_id)
             self._json({"ok": True})
         except job_queue.QueueError as e:
             self._json({"error": str(e)}, 404)
 
+    def _may_touch_job(self, job_id: str, cancelling: bool) -> bool:
+        """Authorise cancelling/removing a queued job by its owner. Reordering or
+        re-prioritising (not cancelling) needs the general queue.manage permission;
+        cancelling needs job.cancel_own (for your own) or job.cancel_any. Sends the
+        error response and returns False when not allowed. No-ops (returns True)
+        when login is off or the request carries no identity (single-admin/tests)."""
+        from auth import AUTH_ENABLED
+        user = current_user(self)
+        if not AUTH_ENABLED or not user:
+            return True
+        job = job_queue.get_job(job_id)
+        if job is None:
+            self._json({"error": "Job not found"}, 404)
+            return False
+        if cancelling:
+            if users.can_cancel_job(user, job.get("owner")):
+                return True
+        elif users.has_permission(user, "queue.manage"):
+            return True
+        self._json({"error": "forbidden",
+                    "need": "job.cancel_any" if cancelling else "queue.manage"}, 403)
+        return False
+
     @requires_feature("job_queue")
     def _handle_queue_confirm(self):
         """POST /api/queue/<printer id>/confirm -- the user has cleared the
         plate; upload and start this printer's assigned job now."""
         printer_id = urllib.parse.unquote(self.path[len("/api/queue/"):-len("/confirm")])
+        if not self._can_see_printer(printer_id):
+            self._json({"error": "Printer not found"}, 404)
+            return
         try:
             fut = asyncio.run_coroutine_threadsafe(
                 job_queue.confirm_plate_cleared(printer_id), http_common.ws_loop())
@@ -568,3 +709,69 @@ class AdminMixin:
         result = test_spoolman_connection()
         config.record_test_result("spoolman", result["ok"], result["message"])
         self._json(result)
+
+    # ── Users & roles (RBAC admin) ───────────────────────────────────────────
+
+    def _handle_users_list(self):
+        self._json({"users": users.list_users(), "current": current_user(self)})
+
+    def _handle_users_create(self):
+        try:
+            body = json.loads(self._read_body() or b"{}")
+            u = users.create_user(body.get("username", ""), body.get("password", ""),
+                                  body.get("role", ""), printers=body.get("printers"))
+            self._json({"ok": True, "user": u})
+        except ValueError as e:
+            self._json({"error": str(e)}, 400)
+
+    def _handle_users_update(self, username: str):
+        try:
+            body = json.loads(self._read_body() or b"{}")
+            if body.get("password"):
+                users.set_password(username, body["password"])
+            if body.get("role"):
+                users.set_role(username, body["role"])
+            if "printers" in body:
+                users.set_user_printers(username, body["printers"])
+            self._json({"ok": True, "user": users.get_user(username)})
+        except ValueError as e:
+            self._json({"error": str(e)}, 400)
+
+    def _handle_users_delete(self, username: str):
+        try:
+            users.delete_user(username)
+            push.remove_owner(username)
+            user_channels.remove_user(username)
+            self._json({"ok": True})
+        except ValueError as e:
+            self._json({"error": str(e)}, 400)
+
+    def _handle_roles_list(self):
+        self._json({"roles": users.list_roles(),
+                    "permissions": [{"key": k, "label": lbl} for k, lbl in users.PERMISSIONS]})
+
+    def _handle_roles_create(self):
+        try:
+            body = json.loads(self._read_body() or b"{}")
+            r = users.create_role(body.get("name", ""), body.get("permissions", []),
+                                  body.get("label", ""),
+                                  printers=body.get("printers", users.ALL_PRINTERS))
+            self._json({"ok": True, "role": r})
+        except ValueError as e:
+            self._json({"error": str(e)}, 400)
+
+    def _handle_roles_update(self, name: str):
+        try:
+            body = json.loads(self._read_body() or b"{}")
+            users.update_role(name, permissions=body.get("permissions"),
+                              label=body.get("label"), printers=body.get("printers"))
+            self._json({"ok": True})
+        except ValueError as e:
+            self._json({"error": str(e)}, 400)
+
+    def _handle_roles_delete(self, name: str):
+        try:
+            users.delete_role(name)
+            self._json({"ok": True})
+        except ValueError as e:
+            self._json({"error": str(e)}, 400)

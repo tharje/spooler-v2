@@ -107,8 +107,22 @@ if (new URLSearchParams(location.search).get("demo") === "states") {
 } else {
   fetch("/api/auth-status")
     .then(r => r.json())
-    .then(({ spoolman_url }) => {
+    .then(({ spoolman_url, permissions, user }) => {
       if (spoolman_url) document.getElementById("btn-spoolman-ui").href = spoolman_url;
+      window.SPOOLER_PERMS = permissions || [];
+      document.body.classList.toggle("no-printers-manage", !window.SPOOLER_PERMS.includes("printers.manage"));
+      // Printer cards may have rendered before the permissions arrived (advanced-control button).
+      if (typeof renderPrinter === "function") Object.values(printers).forEach(p => renderPrinter(p));
+      window.SPOOLER_USER = user || "";
+      if (window.SPOOLER_PERMS.includes("users.manage")) {
+        const b = document.getElementById("btn-settings-goto-users");
+        if (b) b.style.display = "";
+      }
+      if (user) {
+        const nameEl = document.getElementById("signed-in-as-name");
+        const wrap = document.getElementById("signed-in-as");
+        if (nameEl && wrap) { nameEl.textContent = user; wrap.style.display = ""; }
+      }
     })
     .catch(() => {});
   loadChangelog();
@@ -128,13 +142,16 @@ if (new URLSearchParams(location.search).get("demo") === "states") {
 (async () => {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
   try {
-    const resp = await fetch("/api/notification-settings");
+    const resp = await fetch("/api/my-notifications");
     if (!resp.ok) return;
-    const s = await resp.json();
-    if (!s || !Object.values(s).some(v => v?.enabled)) return;
+    const { events } = await resp.json();
+    if (!events || !Object.values(events).some(Boolean)) return;
     const reg = await navigator.serviceWorker.ready;
     const sub = await reg.pushManager.getSubscription();
-    if (!sub) await _subscribePush();
+    if (!sub) { await _subscribePush(); return; }
+    // Re-register the existing one so it belongs to whoever is signed in on this device now.
+    await fetch("/api/push-subscribe", { method: "POST", headers: { "Content-Type": "application/json" },
+                                         body: JSON.stringify(sub.toJSON()) });
   } catch (_) {}
 })();
 

@@ -24,7 +24,7 @@ SECURE_COOKIES  = os.getenv("SECURE_COOKIES", "false").lower() == "true"
 SESSION_COOKIE = "spooler_sid"
 SESSION_TTL    = 30 * 24 * 3600  # 30 days
 
-_sessions: dict = {}  # token → expiry (Unix epoch)
+_sessions: dict = {}  # token → {"exp": Unix epoch, "user": username}
 
 # Rate limiting: ip → (attempt_count, window_start_timestamp)
 _login_attempts: dict = {}
@@ -83,16 +83,23 @@ def _parse_sid(cookie_header: str) -> str:
 def _validate_session(token: str) -> bool:
     if not token:
         return False
-    expiry = _sessions.get(token, 0)
-    if time.time() > expiry:
+    sess = _sessions.get(token)
+    if not sess or time.time() > sess["exp"]:
         _sessions.pop(token, None)
         return False
     return True
 
 
-def _create_session() -> str:
+def _session_user(token: str) -> str:
+    """The username bound to a still-valid session token, or ''."""
+    if not _validate_session(token):
+        return ""
+    return _sessions.get(token, {}).get("user", "")
+
+
+def _create_session(user: str = "") -> str:
     token = secrets.token_urlsafe(32)
-    _sessions[token] = time.time() + SESSION_TTL
+    _sessions[token] = {"exp": time.time() + SESSION_TTL, "user": user}
     return token
 
 
@@ -100,11 +107,44 @@ def _invalidate_session(token: str) -> None:
     _sessions.pop(token, None)
 
 
+def user_session_count(user: str) -> int:
+    now = time.time()
+    return sum(1 for s in list(_sessions.values()) if s.get("user") == user and now <= s["exp"])
+
+
+def sign_out_other_sessions(user: str, keep_token: str) -> int:
+    """End every session of `user` except `keep_token`. Returns how many ended."""
+    gone = [t for t, s in list(_sessions.items()) if s.get("user") == user and t != keep_token]
+    for t in gone:
+        _sessions.pop(t, None)
+    return len(gone)
+
+
 def _auth_ok(handler) -> bool:
     if not AUTH_ENABLED:
         return True
     token = _parse_sid(handler.headers.get("Cookie", ""))
     return _validate_session(token)
+
+
+def current_user(handler) -> str:
+    """The logged-in username for this request, or '' if none is bound (login
+    disabled, or a test that bypasses _auth_ok without a real session)."""
+    token = _parse_sid(handler.headers.get("Cookie", ""))
+    return _session_user(token)
+
+
+def has_permission(handler, perm: str) -> bool:
+    """Authorisation check. Login off → everything allowed. Authenticated but
+    with no bound identity → allowed (keeps the single-admin/open case and the
+    test bypass working). Otherwise the user's role must grant `perm`."""
+    if not AUTH_ENABLED:
+        return True
+    user = current_user(handler)
+    if not user:
+        return True
+    import users
+    return users.has_permission(user, perm)
 
 
 # ── Rate limiting ──────────────────────────────────────────────────────────────
@@ -132,7 +172,7 @@ async def session_cleanup_loop() -> None:
     while True:
         await asyncio.sleep(3600)
         now = time.time()
-        expired = [t for t, exp in list(_sessions.items()) if now > exp]
+        expired = [t for t, s in list(_sessions.items()) if now > s["exp"]]
         for t in expired:
             _sessions.pop(t, None)
         old_ips = [ip for ip, (_, start) in list(_login_attempts.items())

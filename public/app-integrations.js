@@ -113,7 +113,7 @@ async function loadSecurityStatus() {
 }
 document.getElementById("auth-warning")?.addEventListener("click", (e) => {
   e.preventDefault();
-  _openSettings();
+  showPage("settings");
   _showSettingsPage(_settingsFeaturesPage);
   _renderFeaturesList();
 });
@@ -356,7 +356,7 @@ const _FEATURE_GROUPS = [
   { title: "Monitoring",    keys: ["camera", "print_snapshot", "spaghetti_detection", "dataset_collection"] },
   { title: "Notifications", keys: ["notifications"] },
   { title: "Data",          keys: ["backup", "statistics", "service_log"] },
-  { title: "Printing",      keys: ["job_queue"] },
+  { title: "Printing",      keys: ["job_queue", "advanced_control"] },
   { title: "Services",      keys: ["spoolman", "update_check"] },
 ];
 
@@ -451,6 +451,6 @@ function closeSnapshot() { document.getElementById("snap-lightbox")?.remove(); }
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSnapshot(); });
 
 const historyBackdrop = document.getElementById("panel-backdrop");   // shared dimmer behind side panels
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeSpools(); closeStats(); closePrinters(); closeFileBrowser(); closePrintOpts(); } });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closePrinters(); closeFileBrowser(); closePrintOpts(); } });
 
 
