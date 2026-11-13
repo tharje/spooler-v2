@@ -12,7 +12,7 @@ from persistence import dump_raw_message
 from printers.base import PrinterConnection
 from uploads import UploadError, file_md5, forward_timeout, post_multipart_file
 from printers.protocol import (
-    CMD_ATTRS, CMD_CAMERA, CMD_CANVAS, CMD_LIGHT, CMD_LIST_FILES,
+    CMD_ATTRS, CMD_CAMERA, CMD_CANVAS, CMD_HOME_AXIS, CMD_LIGHT, CMD_LIST_FILES, CMD_MOVE_AXIS, CMD_SET_STATUS,
     CMD_PAUSE, CMD_RESUME, CMD_START, CMD_STATUS, CMD_STOP, decode_printinfo, make_msg,
 )
 from spoolman import spoolman_assign, spoolman_set_location
@@ -65,7 +65,30 @@ def _parse_print_time(filename: str) -> int | None:
     return None
 
 
+# Spooler fan name -> SDCP CurrentFanSpeed / TargetFanSpeed key (both in %).
+_FAN_KEYS = {"part": "ModelFan", "aux": "AuxiliaryFan", "chamber": "BoxFan"}
+
+
+def _fan_percents(fans) -> dict:
+    if not isinstance(fans, dict):
+        return {}
+    out = {}
+    for name, key in _FAN_KEYS.items():
+        v = fans.get(key)
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            out[name] = round(max(0, min(100, v)))
+    return out
+
+
 class CC1Connection(PrinterConnection):
+    # Advanced control over SDCP: the commands the printer's own web page
+    # (port 80) sends -- 403 for temperatures and fans, 401 to jog, 402 to home.
+    # Leveling, PID and the resonance test exist in the firmware but have no
+    # SDCP command. Limits are assumed (printer.cfg allows more).
+    capabilities = frozenset({"temp_nozzle", "temp_bed", "fan_part", "fan_aux", "fan_chamber",
+                              "move", "home", "home_axes"})
+    limits = {"nozzle": {"max": 300, "assumed": True}, "bed": {"max": 100, "assumed": True}}
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, printer_type="cc1", **kwargs)
         self.ws = None
@@ -173,6 +196,32 @@ class CC1Connection(PrinterConnection):
     async def set_light(self, on: bool) -> bool:
         return await self.send_cmd(CMD_LIGHT, {"LightStatus": {"SecondLight": bool(on), "RgbLight": [0, 0, 0]}})
 
+    async def set_temperature(self, heater: str, target: float) -> bool:
+        key = {"nozzle": "TempTargetNozzle", "bed": "TempTargetHotbed"}.get(heater)
+        if key is None:
+            return False
+        return await self.send_cmd(CMD_SET_STATUS, {key: int(round(target))})
+
+    async def heaters_off(self, heaters: list) -> bool:
+        return await self.send_cmd(CMD_SET_STATUS, {"TempTargetNozzle": 0, "TempTargetHotbed": 0})
+
+    async def set_fan(self, fan: str, percent: int) -> bool:
+        key = _FAN_KEYS.get(fan)
+        if key is None:
+            return False
+        return await self.send_cmd(CMD_SET_STATUS, {"TargetFanSpeed": {key: int(max(0, min(100, percent)))}})
+
+    async def move_axis(self, axis: str, distance_mm: float) -> bool:
+        return await self.send_cmd(CMD_MOVE_AXIS, {"Axis": axis.upper(), "Step": distance_mm})
+
+    async def home(self, axes: str = "XYZ") -> bool:
+        # The web page homes "X", "Y", "Z" or "XYZ"; anything else goes one axis at a time.
+        axes = axes.upper()
+        if axes in ("X", "Y", "Z", "XYZ"):
+            return await self.send_cmd(CMD_HOME_AXIS, {"Axis": axes})
+        results = [await self.send_cmd(CMD_HOME_AXIS, {"Axis": a}) for a in axes]
+        return bool(results) and all(results)
+
     async def upload_file(self, local_path, remote_name: str, start_after: bool = False) -> bool:
         # UNVERIFIED against real hardware: single-chunk variant of the SDCP
         # v3 upload form (S-File-MD5/Check/Offset/Uuid/TotalSize/File). See
@@ -263,6 +312,7 @@ class CC1Connection(PrinterConnection):
         if "Status" in msg and isinstance(msg["Status"], dict):
             prev_canvas = self.status.get("canvas_info")
             self.status = msg["Status"]
+            self.status["FanSpeed"] = _fan_percents(self.status.get("CurrentFanSpeed"))
             # Preserve canvas_info — it comes from CMD_CANVAS, not status pushes
             if prev_canvas and "canvas_info" not in self.status:
                 self.status["canvas_info"] = prev_canvas
@@ -298,6 +348,7 @@ class CC1Connection(PrinterConnection):
         elif cmd == CMD_STATUS:
             if payload and payload != {"Ack": 0}:
                 self.status = payload
+                self.status["FanSpeed"] = _fan_percents(self.status.get("CurrentFanSpeed"))
                 self._update_phase()
                 # This is the keepalive poller's CMD_STATUS response, not the
                 # printer's unsolicited "Status" push handled above — it still
@@ -317,7 +368,14 @@ class CC1Connection(PrinterConnection):
             url = payload.get("VideoUrl") or payload.get("Url")
             if url:
                 self.camera_url = url if url.startswith("http") else f"http://{url}"
-        elif cmd == CMD_LIGHT:
+        elif cmd in (CMD_LIGHT, CMD_MOVE_AXIS, CMD_HOME_AXIS):
+            ack = payload.get("Ack") if isinstance(payload, dict) else None
+            if ack not in (0, None):
+                print(f"[Printer {self.name}] CC1 command {cmd} rejected, Ack={ack}")
+                what = {CMD_MOVE_AXIS: "Move", CMD_HOME_AXIS: "Homing"}.get(cmd, "Setting")
+                await state.broadcast_to_browsers({
+                    "type": "error", "message": f"{self.name}: {what} was rejected by the printer (code {ack}).",
+                })
             await self.send_cmd(CMD_STATUS, {})
         elif cmd == CMD_CANVAS:
             ack = payload.get("Ack", 0)

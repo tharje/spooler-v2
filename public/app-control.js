@@ -362,7 +362,7 @@ function _controlHtml(p) {
       <span class="ctl-state" id="ctl-state" data-state="${escAttr(p.state || "")}">${_ctlStateLabel(p.state)}</span>
       <button class="ctl-close" onclick="closeControl()" aria-label="Close">✕</button>
     </div>
-    ${p.controls_verified ? "" : `<div class="ctl-preview">Preview: these commands are not yet verified on a real printer, so they are not sent. Buttons will answer “Not supported by this printer yet”.</div>`}
+    ${p.controls_verified ? "" : `<div class="ctl-preview">Not yet tested on this printer model. Commands are sent to the printer, so stay with it and check that each one does what it should.</div>`}
     ${heaters.length ? `<div class="ctl-tiles">${heaters.map(tile).join("")}</div>` : ""}
     <div class="ctl-idle-text" id="ctl-idle-text" hidden></div>
 
