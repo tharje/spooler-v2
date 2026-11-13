@@ -2046,8 +2046,8 @@ main {
 }
 
 /* "Signed in as" label in the side nav (not a button) */
-.sidenav-user { cursor: default; color: var(--text-muted); opacity: .9; }
-.sidenav-user:hover { background: none; }
+.sidenav-user { color: var(--text-muted); opacity: .9; }
+
 .sidenav-user #signed-in-as-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Notifications page for users without settings.manage: only their own on/off choices */
@@ -2237,3 +2237,44 @@ body[data-page="settings"] #settings-menu > h3 { font-size: 22px; }
   body[data-page="settings"] #modal-app-settings.open { padding: 16px 12px; }
 }
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; align-items: start; }
+
+/* ─── Me page ─────────────────────────────────────────────────────────────── */
+.sidenav-user { cursor: pointer; }
+.sidenav-user:hover { background: var(--surface2); color: var(--text); }
+#me-body { display: flex; flex-direction: column; gap: 14px; }
+.me-card { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.me-card h4 { margin: 0; font-size: 13px; font-weight: 600; }
+.me-note { font-size: 13px; color: var(--text-dim-strong); margin: 0; line-height: 1.4; }
+.me-head { flex-direction: row; align-items: center; gap: 14px; }
+.me-avatar { width: 52px; height: 52px; border-radius: 50%; background: rgba(255,107,43,.15); color: var(--accent);
+  font-size: 22px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.me-who { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
+.me-who strong { font-size: 18px; }
+.me-role { font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-dim-strong); }
+.me-sub { font-size: 12px; color: var(--text-dim-strong); }
+.me-records { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
+.me-record { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.me-record-icon { font-size: 18px; line-height: 1.2; }
+.me-record-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.me-record-text span, .me-record-text small { font-size: 12px; color: var(--text-dim-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.me-record-text strong { font-size: 15px; }
+.me-milestones { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+.me-badge { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-dim-strong); font-size: 12.5px; }
+.me-badge-icon { font-size: 18px; line-height: 1; }
+.me-badge.reached { border-color: var(--accent); color: var(--text); }
+.me-badge.reached .me-badge-icon { color: var(--accent); }
+.me-badge-bar { height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
+.me-badge-bar > div { height: 100%; background: var(--text-muted); }
+.me-perms { margin: 0; padding-left: 18px; font-size: 13px; color: var(--text-dim-strong); display: flex; flex-direction: column; gap: 3px; }
+.me-list { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.me-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-top: 1px solid var(--border); }
+.me-row:first-child { border-top: 0; }
+.me-row-text { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.me-row-text strong { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.me-row-text small { font-size: 12px; color: var(--text-dim-strong); }
+.me-card > .btn { align-self: flex-start; }
+.me-ok { color: var(--green); font-size: 12.5px; }
+.me-fail { color: var(--red); font-size: 12.5px; }
+.me-perms-box summary { cursor: pointer; font-size: 13px; color: var(--text-dim-strong); }
+.me-perms-box[open] summary { margin-bottom: 6px; }

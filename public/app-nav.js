@@ -10,6 +10,7 @@ const _PAGES = {
   spools:   { btn: "btn-spools",       open: () => openSpools(),   close: () => closeSpools() },
   service:  { btn: "btn-service",      open: () => openService(),  close: () => closeService() },
   queue:    { btn: "btn-queue",        open: () => openQueue(),    close: () => closeQueue() },
+  me:       { btn: "signed-in-as",     open: () => openMe(),       close: () => closeMe() },
   settings: { btn: "btn-app-settings", open: () => _openSettings(),
               close: () => document.getElementById("modal-app-settings")?.classList.remove("open") },
 };

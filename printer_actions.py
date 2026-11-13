@@ -127,7 +127,10 @@ async def start_print(printer, filename, print_opts=None) -> str | None:
         return ERR_BAD_FILENAME
     if not isinstance(print_opts, dict):
         print_opts = None
+    printer._pending_owner = ACTOR.get() or None     # who started it, for the history ("Me" page)
     ok = await printer.start_print_file(filename, print_opts=print_opts)
+    if not ok:
+        printer._pending_owner = None
     return None if ok else "Could not start print"
 
 

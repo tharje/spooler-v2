@@ -107,6 +107,19 @@ def _invalidate_session(token: str) -> None:
     _sessions.pop(token, None)
 
 
+def user_session_count(user: str) -> int:
+    now = time.time()
+    return sum(1 for s in list(_sessions.values()) if s.get("user") == user and now <= s["exp"])
+
+
+def sign_out_other_sessions(user: str, keep_token: str) -> int:
+    """End every session of `user` except `keep_token`. Returns how many ended."""
+    gone = [t for t, s in list(_sessions.items()) if s.get("user") == user and t != keep_token]
+    for t in gone:
+        _sessions.pop(t, None)
+    return len(gone)
+
+
 def _auth_ok(handler) -> bool:
     if not AUTH_ENABLED:
         return True

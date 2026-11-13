@@ -3,6 +3,7 @@ Web Push (VAPID) support — key management, subscriptions, and send helpers.
 """
 
 import json
+import time
 import os
 
 try:
@@ -79,12 +80,16 @@ def _save_subs() -> None:
     PUSH_SUBS_FILE.write_text(json.dumps(_push_subs))
 
 
-def add_subscription(sub: dict, owner: str = "") -> None:
+def add_subscription(sub: dict, owner: str = "", device: str = "") -> None:
     """Store a browser's subscription as belonging to `owner` (the signed-in
-    user; "" when login is off). Re-subscribing moves it to the new owner."""
+    user; "" when login is off). Re-subscribing moves it to the new owner.
+    `device` ("Chrome on Android" ...) and the time it was first added are kept
+    for the user's own device list."""
     endpoint = sub.get("endpoint", "")
+    old = next((s for s in _push_subs if s.get("endpoint") == endpoint), {})
     _push_subs[:] = [s for s in _push_subs if s.get("endpoint") != endpoint]
-    _push_subs.append({"endpoint": endpoint, "keys": sub.get("keys") or {}, "owner": owner or ""})
+    _push_subs.append({"endpoint": endpoint, "keys": sub.get("keys") or {}, "owner": owner or "",
+                       "device": device or old.get("device", ""), "added": old.get("added") or int(time.time())})
     _save_subs()
 
 
