@@ -48,7 +48,7 @@ Open **`http://<server-ip>:8080`** in your browser. On first visit you will be p
 - **Canvas / AMS multi-material** – shows filament slots; link each slot to a Spoolman spool for per-tray deduction
 - **Filament tracking** – live mm/g per print; deducts from the correct spool on tray changes
 - **Stats & history** – statistics per period and printer, every past print with the picture taken when it ended, its details and a reference number you can put on it; CSV export
-- **Notifications** – browser push, ntfy, Telegram, Discord or any webhook, for print started/complete/cancelled/paused/error, filament runout, printer offline/online, hot nozzle, layer checkpoint and low spool, optionally with a camera picture
+- **Notifications** – browser push, ntfy, Telegram, Discord or any webhook, for print started/complete/cancelled/paused/error, filament runout, printer offline/online, hot nozzle, layer checkpoint and low spool, optionally with a camera picture. Each user picks their own events and gets push only on their own devices
 - **Service logbook** – note what you have done to each printer (lubrication, nozzle, belt …) and get a reminder after a set number of print hours or days. Click a printer to see its parts counting down, its past print errors with codes, and (for supported printers) a full reference list of known error codes with what each one means; the total print hours of a printer can be edited.
 - **Spaghetti detection** (optional) – watches running prints through the camera with an [Obico](https://github.com/TheSpaghettiDetective/obico-server) detector that you run yourself, and notifies you with a picture if a print looks like it is failing ([docs/spaghetti-detection.md](docs/spaghetti-detection.md))
 - **New version notice** (optional, off by default) – once a day Spooler asks GitHub whether a newer release exists and shows a small notice in the footer, with a Skip button. Nothing about you or your printers is sent, and nothing updates itself. Turn it on under Settings → Features.
@@ -59,6 +59,7 @@ Open **`http://<server-ip>:8080`** in your browser. On first visit you will be p
 - **Auto-discovery** – finds printers on the local network automatically
 - **Persistence** – printers, history and spool data saved between restarts
 - **Authentication** – password-protected login; first-time setup via the web UI, no terminal needed
+- **Users and roles** – several logins, each with a role (Admin, Operator, Viewer or one you make) that decides what they may do and which printers they see
 - **Spoolman integration** – filament spool inventory with auto-deduction after each print
 - **Filament catalogue import** – import a brand's filament types (Elegoo and others) from SpoolmanDB
 - **Feature switches** – turn camera, notifications, backups, Spoolman, upload, statistics and more on or off under Settings → Features
@@ -152,6 +153,18 @@ See [`.env.example`](.env.example) for all options.
 
 ---
 
+## Users and roles
+
+Settings → **Users and roles** (for users allowed to manage users). Add a user, give them a role, and if you like limit which printers they see. A user who can't see a printer can't print to it or control it either.
+
+Built-in roles:
+
+- **Admin** – everything; can't be changed or removed
+- **Operator** – print, start prints and control the printer (pause, resume, stop, light, speed)
+- **Viewer** – look only
+
+You can edit Operator and Viewer or make your own roles by ticking permissions, for example who may add, rename and remove printers or change their address, who may change settings, and who may set up their own notification channels.
+
 ## Adding printers
 
 - Click **Discover** to auto-find printers on the network
@@ -213,6 +226,8 @@ Settings → **Notifications**. Under **Notification channels** switch on the pl
 - **Webhook** – every notification as JSON (`POST`) to an address you choose
 
 Then choose which events to be told about; started, paused, error, filament runout and complete can include a camera picture. The same event is sent at most once per printer every 10 minutes (finished and failed prints always are). Tokens and webhook addresses are stored in `DATA_DIR/integrations.json` and never shown again in the UI.
+
+**Per user.** With several users, each one chooses their own events under Settings → Notifications. Browser push goes only to that user's own devices, and only about printers they can see. The shared channels above (ntfy, Telegram, Discord, webhook) are set up by someone allowed to change settings and send the events chosen there. Users with permission to set up their own channels also get **My channels**: their own ntfy topic, Telegram chat (the shared bot can be used, so only a chat ID is needed), Discord or webhook, stored in `DATA_DIR/notification_channels.json` and, like the shared ones, never shown again in the UI.
 
 ## Automatic light
 
