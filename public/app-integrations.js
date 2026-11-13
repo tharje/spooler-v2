@@ -113,7 +113,7 @@ async function loadSecurityStatus() {
 }
 document.getElementById("auth-warning")?.addEventListener("click", (e) => {
   e.preventDefault();
-  _openSettings();
+  showPage("settings");
   _showSettingsPage(_settingsFeaturesPage);
   _renderFeaturesList();
 });
@@ -451,6 +451,6 @@ function closeSnapshot() { document.getElementById("snap-lightbox")?.remove(); }
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSnapshot(); });
 
 const historyBackdrop = document.getElementById("panel-backdrop");   // shared dimmer behind side panels
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeSpools(); closeStats(); closePrinters(); closeFileBrowser(); closePrintOpts(); } });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closePrinters(); closeFileBrowser(); closePrintOpts(); } });
 
 

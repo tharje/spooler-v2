@@ -178,15 +178,9 @@ document.getElementById("queue-body").addEventListener("change", (ev) => {
 
 const openQueue = () => {
   queuePanel.classList.add("open");
-  historyBackdrop.classList.add("open");
-  btnQueue.classList.add("active");
   renderQueue();
   loadQueue();
 };
 const closeQueue = () => {
   queuePanel.classList.remove("open");
-  historyBackdrop.classList.remove("open");
-  btnQueue.classList.remove("active");
 };
-btnQueue.addEventListener("click", openQueue);
-document.getElementById("btn-queue-close").addEventListener("click", closeQueue);

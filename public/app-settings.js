@@ -128,12 +128,6 @@ function _settingsEditPrinter(id) {
   _showSettingsPage(_settingsPrinterEditPage);
 }
 
-document.getElementById("btn-app-settings")?.addEventListener("click", _openSettings);
-document.getElementById("btn-app-settings-cancel")?.addEventListener("click", () =>
-  _settingsModal?.classList.remove("open"));
-_settingsModal?.addEventListener("click", e => {
-  if (e.target === _settingsModal) _settingsModal.classList.remove("open");
-});
 
 // Light mode toggle
 (function () {
@@ -217,7 +211,7 @@ document.getElementById("btn-app-settings-save")?.addEventListener("click", asyn
   });
   if (r.ok) {
     toast("Password updated");
-    _settingsModal?.classList.remove("open");
+    _backToSettingsMenu();
   } else {
     const d = await r.json().catch(() => ({}));
     toast(d.error || "Failed to update password");

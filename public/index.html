@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Spooler" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="style.css?v=109" />
+  <link rel="stylesheet" href="style.css?v=110" />
 </head>
 <body>
   <header>
@@ -42,6 +42,13 @@
   <div class="app-body">
 
   <nav class="sidenav">
+    <button id="btn-home" class="sidenav-item active" title="Printers">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+        <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+      </svg>
+      <span>Printers</span>
+    </button>
     <button id="btn-stats" class="sidenav-item" title="Statistics and print history">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
         <line x1="6" y1="20" x2="6" y2="11"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="18" y1="20" x2="18" y2="14"/>
@@ -177,7 +184,7 @@
   </div>
 
   <!-- Statistics panel -->
-  <div id="panel-stats" class="side-panel stats-panel">
+  <div id="panel-stats" class="side-panel page stats-panel">
     <div class="side-panel-header">
       <div class="title-row">
         <h3>Stats &amp; history</h3>
@@ -213,7 +220,7 @@
     </div>
   </div>
   <!-- Spools panel -->
-  <div id="panel-spools" class="side-panel">
+  <div id="panel-spools" class="side-panel page">
     <div class="side-panel-header">
       <div class="title-row">
         <h3>Filament Spools</h3>
@@ -238,7 +245,7 @@
   </div>
 
   <!-- Service panel -->
-  <div id="panel-service" class="side-panel">
+  <div id="panel-service" class="side-panel page">
     <div class="side-panel-header">
       <div class="title-row">
         <h3>Service</h3>
@@ -249,7 +256,7 @@
   </div>
 
   <!-- Queue panel -->
-  <div id="panel-queue" class="side-panel">
+  <div id="panel-queue" class="side-panel page">
     <div class="side-panel-header">
       <div class="title-row">
         <h3>Queue</h3>
@@ -564,9 +571,6 @@
               </label>
             </div>
           </div>
-        </div>
-        <div class="modal-actions">
-          <button id="btn-app-settings-cancel" class="btn btn-secondary">Close</button>
         </div>
       </div>
       <!-- Printers sub-page -->
@@ -949,17 +953,18 @@
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="/config.js"></script>
-  <script src="app-core.js?v=92"></script>
+  <script src="app-core.js?v=93"></script>
   <script src="app-render.js?v=92"></script>
-  <script src="app-settings.js?v=93"></script>
+  <script src="app-settings.js?v=94"></script>
   <script src="app-files.js?v=89"></script>
-  <script src="app-integrations.js?v=95"></script>
-  <script src="app-stats.js?v=88"></script>
-  <script src="app-spools.js?v=84"></script>
+  <script src="app-integrations.js?v=96"></script>
+  <script src="app-stats.js?v=89"></script>
+  <script src="app-spools.js?v=85"></script>
   <script src="app-control.js?v=19"></script>
-  <script src="app-service.js?v=92"></script>
-  <script src="app-queue.js?v=2"></script>
+  <script src="app-service.js?v=93"></script>
+  <script src="app-queue.js?v=3"></script>
   <script src="app-users.js?v=1"></script>
+  <script src="app-nav.js?v=1"></script>
   <script src="app-boot.js?v=89"></script>
   <script>
     if ("serviceWorker" in navigator) {

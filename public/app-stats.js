@@ -323,19 +323,13 @@ function _showStatsTab(tab) {
 
 const openStats = () => {
   statsPanel.classList.add("open");
-  historyBackdrop.classList.add("open");
-  btnStats.classList.add("active");
   _fillStatsPrinters();
   _showStatsTab(_statsTab);
 };
 const closeStats = () => {
   statsPanel.classList.remove("open");
-  historyBackdrop.classList.remove("open");
-  btnStats.classList.remove("active");
 };
 const _refreshStats = () => { if (_statsTab === "overview") loadStats(); else renderPrints(); };
-btnStats.addEventListener("click", openStats);
-document.getElementById("btn-stats-close").addEventListener("click", closeStats);
 document.getElementById("stats-printer").addEventListener("change", _refreshStats);
 document.getElementById("stats-tabs").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-tab]");

@@ -348,7 +348,7 @@ function firmwareBadgeHtml(printer) {
 }
 function serviceBadgeHtml(printer) {
   if (typeof _serviceDuePrinters === "undefined" || !_serviceDuePrinters.has(printer.id)) return "";
-  return ` <a class="fw-badge service-badge-card" href="#" onclick="openService();return false;" ` +
+  return ` <a class="fw-badge service-badge-card" href="#" onclick="showPage('service');return false;" ` +
          `title="A service reminder is due. Open the service logbook.">🔧 service due</a>`;
 }
 function spaghettiRowHtml(printer) {
