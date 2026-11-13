@@ -42,20 +42,30 @@ function _ctlStatus(p) {
 function openControl(id) {
   const p = printers[id];
   if (!p || !controlAvailable(p)) return;
+  const m = _ctlModal();
   const last = _ctlUnlocked[id];
-  if (!last || Date.now() - last > CTL_UNLOCK_MS) {
-    if (!confirm(`You are about to control ${p.name || "this printer"} directly.\nChanges happen immediately.`)) return;
+  if (!_ctlWarnOff() && (!last || Date.now() - last > CTL_UNLOCK_MS)) {
+    // Spooler's own warning instead of the browser's confirm(); "Don't show again" is per browser.
+    clearInterval(_ctlTimer);
+    _ctlPrinterId = null;
+    m.innerHTML = `<div class="modal-box ctl-box ctl-warnbox" role="alertdialog" aria-labelledby="ctl-warn-title">
+      <div class="ctl-warn-icon">${_ICON_WRENCH}</div>
+      <h3 id="ctl-warn-title">Advanced control</h3>
+      <p>You are about to control <strong>${escHtml(p.name || "this printer")}</strong> directly. Temperatures, fans,
+        movement and calibration are sent to the printer right away, without the checks a print job has.</p>
+      <p>Make sure the printer is free to move and that nobody is working on it.</p>
+      <label class="ctl-warn-skip"><input type="checkbox" id="ctl-warn-skip"> Don't show this again</label>
+      <div class="ctl-warn-btns">
+        <button class="btn btn-secondary" onclick="closeControl()">Cancel</button>
+        <button class="btn btn-primary" id="ctl-warn-ok" onclick="_ctlWarnAccept('${escAttr(id)}')">Continue</button>
+      </div>
+    </div>`;
+    m.classList.add("open");
+    document.getElementById("ctl-warn-ok")?.focus();
+    return;
   }
   _ctlUnlocked[id] = Date.now();
   _ctlPrinterId = id;
-  let m = document.getElementById("modal-control");
-  if (!m) {
-    m = document.createElement("div");
-    m.id = "modal-control";
-    m.className = "modal";
-    m.addEventListener("click", e => { if (e.target === m) closeControl(); });
-    document.body.appendChild(m);
-  }
   m.innerHTML = _controlHtml(p);
   m.classList.add("open");
   _ctlFanRefresh(p);
@@ -64,6 +74,29 @@ function openControl(id) {
   if (_ctlTab === "log") ctlLoadLog();
   clearInterval(_ctlTimer);
   _ctlTimer = setInterval(_controlRefresh, 1000);
+}
+
+const CTL_WARN_KEY = "spooler.ctlWarnOff";
+function _ctlWarnOff() {
+  try { return localStorage.getItem(CTL_WARN_KEY) === "1"; } catch (_) { return false; }
+}
+function _ctlWarnAccept(id) {
+  if (document.getElementById("ctl-warn-skip")?.checked) {
+    try { localStorage.setItem(CTL_WARN_KEY, "1"); } catch (_) {}
+  }
+  _ctlUnlocked[id] = Date.now();
+  openControl(id);
+}
+function _ctlModal() {
+  let m = document.getElementById("modal-control");
+  if (!m) {
+    m = document.createElement("div");
+    m.id = "modal-control";
+    m.className = "modal";
+    m.addEventListener("click", e => { if (e.target === m) closeControl(); });
+    document.body.appendChild(m);
+  }
+  return m;
 }
 
 function closeControl() {
