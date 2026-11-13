@@ -35,6 +35,7 @@ from http_proxy import ProxyMixin
 from http_admin import AdminMixin
 import config
 import control
+import idle_guard
 import api_tokens
 import spaghetti
 import update_check
@@ -449,6 +450,12 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
                     ids = ids & {want}
                 names = {pid: p.name for pid, p in state.printers.items()}
                 self._json(control.read_log(ids, names))
+        elif self.path == "/api/control/idle-guard":
+            # Idle guard setting and, per visible printer, seconds until its heaters turn off.
+            if self._require("printer.advanced"):
+                self._json({"minutes": idle_guard.minutes(),
+                            "can_edit": has_permission(self, "settings.manage"),
+                            "printers": {pid: idle_guard.seconds_left(pid) for pid in self._visible_printer_ids()}})
         elif self.path == "/api/my-channels":
             self._handle_my_channels_get()
         elif self.path == "/api/features":

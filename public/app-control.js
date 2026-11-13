@@ -59,6 +59,8 @@ function openControl(id) {
   m.innerHTML = _controlHtml(p);
   m.classList.add("open");
   _ctlFanRefresh(p);
+  _ctlIdle = null;
+  ctlLoadIdle();
   clearInterval(_ctlTimer);
   _ctlTimer = setInterval(_controlRefresh, 1000);
 }
@@ -159,6 +161,49 @@ function _controlRefresh() {
   const busy = ["printing", "pausing", "paused", "preparing", "stopping"].includes(p.state);
   document.getElementById("ctl-motion")?.classList.toggle("ctl-disabled", busy);
   document.getElementById("ctl-motion-note")?.classList.toggle("hidden", !busy);
+  if (_ctlIdle && Date.now() - _ctlIdle.at > 15000) ctlLoadIdle();
+  else _ctlIdleRender();
+}
+
+// Idle guard: heaters left on without a print turn off after N minutes (0 = off).
+let _ctlIdle = null;
+async function ctlLoadIdle() {
+  try {
+    const r = await fetch("/api/control/idle-guard");
+    if (!r.ok) return;
+    _ctlIdle = { ...(await r.json()), at: Date.now() };
+  } catch (_) { return; }
+  _ctlIdleRender();
+}
+function _ctlIdleRender() {
+  const host = document.getElementById("ctl-idle");
+  if (!host || !_ctlIdle) return;
+  if (!host.dataset.built) {
+    host.dataset.built = "1";
+    host.innerHTML = `<span id="ctl-idle-text"></span>${_ctlIdle.can_edit ? `
+      <label class="ctl-idle-edit">Turn off after <input type="number" id="ctl-idle-min" min="0" max="1440" step="5"
+        value="${_ctlIdle.minutes}" aria-label="Idle guard minutes" onkeydown="if (event.key === 'Enter') ctlSaveIdle()"> min
+        <button class="btn btn-sm btn-secondary" onclick="ctlSaveIdle()">Save</button></label>` : ""}`;
+  }
+  const left = _ctlIdle.printers?.[_ctlPrinterId];
+  const text = document.getElementById("ctl-idle-text");
+  if (!_ctlIdle.minutes) text.textContent = "Idle guard is off.";
+  else if (left != null) {
+    const s = Math.max(0, left - Math.floor((Date.now() - _ctlIdle.at) / 1000));
+    text.textContent = `Not printing: heating turns off in ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}.`;
+  } else text.textContent = `Idle guard: heating left on without a print turns off after ${_ctlIdle.minutes} min.`;
+}
+async function ctlSaveIdle() {
+  const min = Number(document.getElementById("ctl-idle-min")?.value);
+  if (!Number.isInteger(min) || min < 0 || min > 1440) { toast("Enter whole minutes, 0–1440 (0 = off)", true); return; }
+  try {
+    const r = await fetch("/api/integrations", { method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ values: { "control.idle_heater_min": min } }) });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(data.error || "Could not save", true); return; }
+    toast(min ? `Idle guard: heating turns off after ${min} min` : "Idle guard turned off");
+    ctlLoadIdle();
+  } catch (e) { toast("Could not save: " + e.message, true); }
 }
 
 // Who did what on this printer from the advanced panel, newest first.
@@ -172,6 +217,7 @@ function _ctlParamText(e) {
   if (e.action === "move_axis") return `${p.axis ?? ""} ${p.distance > 0 ? "+" : ""}${p.distance ?? ""} mm`;
   if (e.action === "home") return p.axes || "";
   if (e.action === "pid_calibrate") return `${p.target ?? ""} °C`;
+  if (e.action === "heaters_off" && p.idle_min) return `after ${p.idle_min} min idle`;
   return "";
 }
 async function ctlLoadLog() {
@@ -262,7 +308,8 @@ function _controlHtml(p) {
     ${heaters.length ? `<section class="ctl-section"><h4>Temperature</h4>
       <div class="ctl-presets">${CTL_PRESETS.map((pr, i) => `<button class="ctl-chip" onclick="ctlPreset(${i})">${pr.name} <small>${pr.nozzle}/${pr.bed}</small></button>`).join("")}</div>
       ${heaters.map(heaterRow).join("")}
-      <button class="btn btn-danger ctl-alloff" onclick="ctlAllOff()">Turn off all heating</button></section>` : ""}
+      <button class="btn btn-danger ctl-alloff" onclick="ctlAllOff()">Turn off all heating</button>
+      <div id="ctl-idle" class="ctl-idle ctl-note"></div></section>` : ""}
     ${fans.length ? `<section class="ctl-section"><h4>Fans</h4>${fans.map(fanRow).join("")}</section>` : ""}
     ${motion}
     ${(has("level") || has("pid") || has("shaper")) ? `<section class="ctl-section">

@@ -2127,3 +2127,6 @@ body.no-printers-manage #btn-settings-goto-printers { display: none !important; 
 .ctl-pid-box { margin-top: 10px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .ctl-pid-box .ctl-note { margin: 0 0 8px; }
 .ctl-pid label { display: inline-flex !important; flex-direction: row !important; align-items: center; gap: 6px !important; font-size: 12.5px !important; }
+.ctl-idle { margin-top: 10px; color: var(--text-dim-strong); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.ctl-idle-edit { display: flex; gap: 6px; align-items: center; }
+.modal-box .ctl-idle-edit input { width: 72px; padding: 4px 6px; }
