@@ -336,17 +336,12 @@ document.getElementById("service-body").addEventListener("click", (ev) => {
 
 const openService = () => {
   servicePanel.classList.add("open");
-  historyBackdrop.classList.add("open");
-  btnService.classList.add("active");
   renderService();
   loadService();
 };
 const closeService = () => {
   servicePanel.classList.remove("open");
-  historyBackdrop.classList.remove("open");
-  btnService.classList.remove("active");
 };
-btnService.addEventListener("click", openService);
 
 function _focusCodeRow(code) {
   const row = document.querySelector(`#service-body .service-code[data-code="${CSS.escape(String(code))}"]`);
@@ -360,8 +355,7 @@ function _focusCodeRow(code) {
 function viewErrorCode(printerId, code) {
   _serviceView = printerId;
   _serviceErrorView = true;
-  openService();
+  showPage("service");
   _focusCodeRow(code);
   loadService().then(() => _focusCodeRow(code));
 }
-document.getElementById("btn-service-close").addEventListener("click", closeService);
