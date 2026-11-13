@@ -12,6 +12,7 @@ import config
 import features
 import gcode
 import job_queue
+import control
 import persistence
 import push
 import service
@@ -37,6 +38,7 @@ def isolated_data_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(backup, "_VERSION_MARKER", tmp_path / ".last_version")
     monkeypatch.setattr(backup, "_DAILY_MARKER", tmp_path / ".last_daily_backup")
     monkeypatch.setattr(push, "NOTIF_SETTINGS_FILE", tmp_path / "notification_settings.json")
+    monkeypatch.setattr(control, "CONTROL_LOG", tmp_path / "control_log.json")
     monkeypatch.setattr(push, "NOTIF_PREFS_FILE", tmp_path / "notification_prefs.json")
     monkeypatch.setattr(push, "PUSH_SUBS_FILE", tmp_path / "push_subscriptions.json")
     monkeypatch.setattr(push, "_push_subs", [])

@@ -34,6 +34,8 @@ from http_external import ExternalRoutesMixin
 from http_proxy import ProxyMixin
 from http_admin import AdminMixin
 import config
+import control
+import idle_guard
 import api_tokens
 import spaghetti
 import update_check
@@ -438,6 +440,22 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
 
         if self.path == "/api/my-notifications":
             self._handle_my_notifications_get()
+        elif self.path.split("?")[0] == "/api/control/log":
+            # Advanced-control command log, for one printer (?printer=<id>) or all the user can see.
+            if self._require("printer.advanced"):
+                q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                ids = self._visible_printer_ids()
+                want = (q.get("printer") or [None])[0]
+                if want:
+                    ids = ids & {want}
+                names = {pid: p.name for pid, p in state.printers.items()}
+                self._json(control.read_log(ids, names))
+        elif self.path == "/api/control/idle-guard":
+            # Idle guard setting and, per visible printer, seconds until its heaters turn off.
+            if self._require("printer.advanced"):
+                self._json({"minutes": idle_guard.minutes(),
+                            "can_edit": has_permission(self, "settings.manage"),
+                            "printers": {pid: idle_guard.seconds_left(pid) for pid in self._visible_printer_ids()}})
         elif self.path == "/api/my-channels":
             self._handle_my_channels_get()
         elif self.path == "/api/features":

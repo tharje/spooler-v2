@@ -79,6 +79,25 @@ _MS_KNOWN_IDLE_OR_HANDLED = {0, 1, 2, 9, 11, 12}
 _SUB_LEFTOVER_WHEN_IDLE = {2801, 2802, 2901, 2902}
 _logged_ms_status: set = set()
 _logged_sub_status: set = set()
+# gcode_move.speed_mode -> speed factor (firmware table behind method 1031)
+_SPEED_MODE_FACTOR = {0: 0.5, 1: 1.0, 2: 1.3, 3: 1.6}
+# Nozzle target G28 sets before homing (safe_home_temp in the firmware log)
+_SAFE_HOME_TEMP = 140
+_HOMING_SUBS = {2801, 1045, 1066}
+# Spooler fan name → key under the status "fans" object
+_FAN_KEYS = {"part": "fan", "aux": "aux_fan", "chamber": "box_fan"}
+
+
+def _fan_percents(fans: dict) -> dict:
+    # fans.<name>.speed: PWM 0–255 is what method 1030 takes; values up to 1
+    # are read as a 0–1 fraction (Klipper style) until the scale is confirmed.
+    out = {}
+    for name, key in _FAN_KEYS.items():
+        speed = (fans.get(key) or {}).get("speed")
+        if isinstance(speed, (int, float)) and not isinstance(speed, bool):
+            pct = speed * 100 if speed <= 1 else speed * 100 / 255
+            out[name] = round(max(0, min(100, pct)))
+    return out
 # sub_status values that mean material is (or is about to be) laid down.
 _EXTRUDING_SUBS = {2075, 2401, 2402, 2077, 2501, 2502, 2503, 2504, 2505}
 
@@ -120,6 +139,14 @@ UNANSWERED_LIMIT = 6
 
 class CC2Connection(PrinterConnection):
     estimated_filament = True
+    # Advanced control: every command below was tested on a real CC2 in Nov 2026
+    # (1028 temperatures, 1030 fans, 1026 home, 1027 move, 1032 leveling,
+    # 1034 PID, 1033 resonance test). Limits are assumed, not taken from Elegoo.
+    controls_verified = True
+    capabilities = frozenset({"temp_nozzle", "temp_bed", "fan_part", "fan_aux", "fan_chamber", "move", "home", "level", "pid", "shaper"})
+    limits = {"nozzle": {"max": 300, "assumed": True}, "bed": {"max": 100, "assumed": True},
+              # Firmware refuses box_fan (error 1009) while printing
+              "fan_chamber": {"idle_only": True}}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, printer_type="cc2", **kwargs)
@@ -228,7 +255,7 @@ class CC2Connection(PrinterConnection):
         if cmd == CMD_LIGHT and data:
             light_on = data.get("LightStatus", {}).get("SecondLight", False)
             payload["params"] = {"brightness": 255 if light_on else 0, "power": 1 if light_on else 0}
-        elif method in (1020, 1031, 1044, 1045, 1046, 1047) and data:
+        elif method in (1020, 1026, 1027, 1028, 1030, 1031, 1032, 1034, 1044, 1045, 1046, 1047) and data:
             payload["params"] = data
         try:
             await self._mqtt_client.publish(topic, json.dumps(payload))
@@ -668,6 +695,82 @@ class CC2Connection(PrinterConnection):
             data["filename"] = names[0]
         return await self.send_cmd(1047, data)
 
+    async def move_axis(self, axis: str, distance_mm: float) -> bool:
+        # Method 1027 → MANUAL_MOVE (relative); the firmware refuses moves on
+        # axes that are not homed and moves outside the axis range.
+        return await self.send_cmd(1027, {"axes": axis.lower(), "distance": distance_mm})
+
+    async def auto_level(self) -> bool:
+        # Method 1032 runs "BED_MESH_CALIBRATE PROFILE=default BED_TEMP=60"
+        # (idle only: error 1009 otherwise). "layout" picks the mesh profile:
+        # "A" = default, "B" = default1. Tested on a real CC2 on 2026-11-12.
+        # The bed temperature is fixed by the firmware; the printer's own screen
+        # can choose it only because it talks to Klipper locally, which isn't
+        # reachable over the network on stock firmware.
+        return await self.send_cmd(1032, {"layout": "A"})
+
+    async def home(self, axes: str = "XYZ") -> bool:
+        # Method 1026 always runs a plain G28 (all axes) and only when the
+        # printer is idle; control.validate_command refuses partial homing.
+        nozzle_was_off = not (self._cc2_state.get("extruder", {}).get("target") or 0)
+        ok = await self.send_cmd(1026, {"homed_axes": "xyz"})
+        if ok and nozzle_was_off:
+            asyncio.create_task(self._nozzle_off_after_homing())
+        return ok
+
+    async def _nozzle_off_after_homing(self, poll_s: float = 2.0, timeout_s: float = 300.0) -> None:
+        # G28 heats the nozzle to its safe homing temperature and leaves it
+        # there. Switch it off again once homing is done -- but only if the
+        # target is still the one homing set, so a preheat or print started
+        # meanwhile is left alone.
+        # Homing shows as 2801 (homing), 1045 (heating nozzle), 1066 (heated);
+        # the closing 2802 is too brief to be polled reliably, so homing is
+        # done once those have been seen and the printer has moved on.
+        deadline = time.monotonic() + timeout_s
+        started = False
+        while time.monotonic() < deadline:
+            await asyncio.sleep(poll_s)
+            sub = self._cc2_state.get("machine_status", {}).get("sub_status")
+            if sub in _HOMING_SUBS:
+                started = True
+            elif started:
+                break
+        if self._cc2_state.get("extruder", {}).get("target") == _SAFE_HOME_TEMP:
+            await self.send_cmd(1028, {"extruder": 0})
+
+    async def set_temperature(self, heater: str, target: float) -> bool:
+        # Method 1028: "extruder" -> M104, "heater_bed" -> M140, whole degrees.
+        # The firmware does not range-check; control.validate_command does.
+        key = {"nozzle": "extruder", "bed": "heater_bed"}.get(heater)
+        if key is None:
+            return False
+        return await self.send_cmd(1028, {key: int(round(target))})
+
+    async def set_fan(self, fan: str, percent: int) -> bool:
+        # Method 1030 takes PWM 0-255 per fan: "fan" (part cooling), "aux_fan",
+        # "box_fan" (chamber; idle only, see limits).
+        key = _FAN_KEYS.get(fan)
+        if key is None:
+            return False
+        return await self.send_cmd(1030, {key: round(max(0, min(100, percent)) * 255 / 100)})
+
+    async def pid_calibrate(self, target: int) -> bool:
+        # Method 1034 (handle_pid_check) runs "PID_CALIBRATE HEATER=extruder
+        # TARGET=<target_temp>" (200 when missing). Read from the firmware
+        # binary; not yet tested on a real printer.
+        return await self.send_cmd(1034, {"target_temp": int(target)})
+
+    async def shaper_calibrate(self) -> bool:
+        # Method 1033 (handle_ringing_optimize) runs SHAPER_CALIBRATE, the
+        # resonance test for input shaping. No parameters. Read from the
+        # firmware binary; not yet tested on a real printer.
+        return await self.send_cmd(1033, {})
+
+    async def heaters_off(self, heaters: list) -> bool:
+        # Method 1028 reads "extruder" (M104) and "heater_bed" (M140) independently,
+        # so one request switches both off.
+        return await self.send_cmd(1028, {"extruder": 0, "heater_bed": 0})
+
     async def start_print_file(self, filename: str, print_opts: dict | None = None) -> bool:
         self._current_filename = filename
         opts = print_opts or {}
@@ -896,8 +999,13 @@ class CC2Connection(PrinterConnection):
         led    = s.get("led", {})
         led_on = 1 if (led.get("status", 0) or 0) > 0 else 0
 
+        # CC2 reports the speed as gcode_move.speed_mode (0-3), not speed_factor
         sf = gm.get("speed_factor")
-        speed_factor = sf if sf is not None else 1.0
+        mode = gm.get("speed_mode")
+        if isinstance(mode, int) and mode in _SPEED_MODE_FACTOR:
+            speed_factor = _SPEED_MODE_FACTOR[mode]
+        else:
+            speed_factor = sf if sf is not None else 1.0
 
         self.status = {
             "PrintInfo": {
@@ -920,6 +1028,7 @@ class CC2Connection(PrinterConnection):
             "TempOfBox":        ztemp.get("temperature", 0),
             "LightStatus":      {"SecondLight": led_on},
             "SpeedFactor":      round(speed_factor * 100),
+            "FanSpeed":         _fan_percents(s.get("fans", {})),
         }
 
         # Expose canvas tray info so the browser can render filament slots

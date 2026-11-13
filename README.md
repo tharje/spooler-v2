@@ -56,6 +56,7 @@ Open **`http://<server-ip>:8080`** in your browser. On first visit you will be p
 - **Automatic light** – per printer (Centauri Carbon): light on when a print starts, off when it ends
 - **External API** – let other programs (for example a CRM) read the print history and pictures and set reference numbers, using API keys ([docs/external-api.md](docs/external-api.md))
 - **Controls** – pause, resume, stop, light toggle
+- **Advanced control** (optional, off by default, Centauri Carbon 2) – set nozzle and bed temperature and fan speeds, move and home the axes, run auto leveling, PID calibration and the resonance test, with an idle guard that switches forgotten heating off and a log of who did what
 - **Auto-discovery** – finds printers on the local network automatically
 - **Persistence** – printers, history and spool data saved between restarts
 - **Authentication** – password-protected login; first-time setup via the web UI, no terminal needed
@@ -232,6 +233,22 @@ Then choose which events to be told about; started, paused, error, filament runo
 ## Automatic light
 
 Settings → **Printers** → pick a Centauri Carbon → **Options** → *Automatic light*. The light switches on when a print starts and off when it ends (after the end-of-print picture has been taken).
+
+## Advanced control
+
+Off by default. Turn it on under Settings → **Features** → *Advanced control*, and give the roles that should use it the *Advanced control* permission (Admin has it). Printers that support it then get an *Advanced control* button (sliders icon) on their card. For now that is the Centauri Carbon 2.
+
+The first time, Spooler warns that you are controlling the printer directly; tick *Don't show this again* to skip it on that device. The panel shows the nozzle and bed temperature at the top, with these tabs:
+
+- **Heat** – PLA/PETG/ABS presets, a target for the nozzle and bed, and *Turn off all heating*
+- **Fans** – part cooling, auxiliary and chamber fan, with a slider, a number field and Off (the chamber fan can't be changed while printing)
+- **Move** – jog X, Y and Z in 0.1, 1 or 10 mm steps and home the axes; locked while the printer is printing or paused
+- **Calibrate** – auto leveling, PID calibration of the nozzle (choose a temperature from 150 to 280 °C, ideally the one you print at most) and the resonance test (input shaper; keep the bed clear). Only when the printer is not printing.
+- **Log** – who sent which command, when, and whether it worked
+
+**Idle guard.** If the nozzle or bed is left heating while the printer is not printing, Spooler switches all heating off after 30 minutes. Printing, preheating, leveling and calibration don't count, and the timer starts over after them. A countdown shows in the panel; users allowed to change settings can set the minutes in the Heat tab (0 = off).
+
+PID and resonance results are used by the printer right away, but Spooler can't save them to the printer's configuration: that needs `SAVE_CONFIG`, which the printer's network API has no way to send. They are kept if the printer saves its configuration itself later; otherwise they are lost when it restarts.
 
 ## Picture collection
 

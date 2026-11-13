@@ -106,6 +106,10 @@ FIELDS: dict = {
         env="SPOOLER_DATASET_DIR", default="",
     ),
     "dataset.interval_s": Field(key="dataset.interval_s", label="Seconds between pictures (10-600)", type="int", default=30),
+    "control.idle_heater_min": Field(
+        key="control.idle_heater_min", label="Idle guard: minutes before unused heaters turn off (0 = off)",
+        type="int", default=30,
+    ),
     "backup.interval_days": Field(
         key="backup.interval_days", label="Automatic backup interval (days)", type="int",
         env="SPOOLER_BACKUP_INTERVAL_DAYS", default=1,

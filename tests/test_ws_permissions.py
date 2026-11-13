@@ -128,3 +128,25 @@ def test_roles_with_settings_manage_get_printers_manage_once(tmp_path):
     users.update_role("helper", permissions=["view", "settings.manage"])
     users.ensure_initialised()
     assert "printers.manage" not in users._load()["roles"]["helper"]["permissions"]
+
+
+@pytest.mark.parametrize("action", ["set_temperature", "set_fan", "move_axis", "home", "auto_level", "heaters_off", "pid_calibrate", "shaper_calibrate"])
+async def test_advanced_control_needs_its_own_permission(setup, action):
+    assert ws_handler.ACTION_PERMISSIONS[action] == "printer.advanced"
+    assert (await _do("kid", action=action)).denied()          # operator: printer.control only
+    users.update_role("operator", permissions=["view", "printer.control", "printer.advanced"])
+    assert not (await _do("kid", action=action)).denied()
+
+
+def test_control_log_endpoint_needs_advanced_and_hides_other_printers(setup, monkeypatch, tmp_path):
+    import control
+    from test_rbac_http import _call, _session
+    log = tmp_path / "log.json"
+    monkeypatch.setattr(control, "CONTROL_LOG", log)
+    log.write_text(json.dumps([{"time": 1, "printer": "A", "printer_id": "a", "action": "home", "result": "ok"},
+                               {"time": 2, "printer": "B", "printer_id": "b", "action": "home", "result": "ok"}]))
+    assert _call("GET", "/api/control/log", _session("kid"))[0] == 403
+    users.update_role("operator", permissions=["view", "printer.advanced"])
+    users.set_user_printers("kid", ["a"])
+    st, d = _call("GET", "/api/control/log", _session("kid"))
+    assert st == 200 and [e["printer_id"] for e in d] == ["a"]
