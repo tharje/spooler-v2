@@ -9,15 +9,17 @@ Local web GUI for **Elegoo Centauri Carbon** FDM 3D printers (CC1 and CC2). Moni
 
 > **Disclaimer.** Spooler is an independent project and is not affiliated with, endorsed by, or supported by ELEGOO, Prusa Research, or the Klipper/Moonraker projects. ELEGOO, Centauri Carbon, Prusa, PrusaLink, Klipper and Moonraker are trademarks or names of their respective owners and are used here only to say which printers Spooler works with.
 
-![Short demo: dashboard, advanced control, spools grouped by type, statistics and the Me page](docs/images/demo.gif)
+![Short demo: dashboard, advanced control, spools grouped by type, statistics, service logbook and the Me page](docs/images/demo.gif)
 
-![Dashboard with a CC1 and a CC2: live camera, temperatures, Canvas slots and light control](docs/images/dashboard.png)
+![Dashboard with a CC1 and a CC2 (leveling): live camera, temperatures, Canvas slots, print controls and light](docs/images/dashboard.png)
 
 | Filament spools (Spoolman) | Stats and history |
 |---|---|
 | ![Spools stacked by brand, material and colour, with search and filters](docs/images/spools.png) | ![Stats: prints, success rate, print time and filament per day](docs/images/stats.png) |
 | **Me page** | **Advanced control** |
 | ![Me page: role, own prints with records and milestones](docs/images/me.png) | ![Advanced control panel: live temperatures, tabs for heat, fans, move, calibration and log](docs/images/advanced-control.png) |
+| **Service logbook** | **Settings** |
+| ![Service logbook: parts per printer counting down to their next service](docs/images/service.png) | ![Settings: account and access, printers and alerts, system, appearance](docs/images/settings.png) |
 
 > **Branches**
 > - `main` — latest stable release. This is what the Docker image (`ghcr.io/tharje/spooler-v2:latest`) is built from.
