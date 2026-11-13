@@ -32,8 +32,9 @@ def minutes() -> int:
 
 
 def _heating(printer) -> bool:
-    info = printer._decoded_printinfo()
-    return any((info.get(k) or 0) > 0 for k in ("TempTargetNozzle", "TempTargetHotbed"))
+    # Targets sit at the top of printer.status (next to PrintInfo, not inside it).
+    status = printer.status or {}
+    return any((status.get(k) or 0) > 0 for k in ("TempTargetNozzle", "TempTargetHotbed"))
 
 
 def _guarded(printer) -> bool:

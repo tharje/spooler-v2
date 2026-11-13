@@ -13,11 +13,16 @@ class FakePrinter:
         self.id, self.name = "p1", "P1"
         self.connected = connected
         self.capabilities = frozenset({"temp_nozzle", "temp_bed"})
-        self.status, self.nozzle, self.bed, self.ok = status, nozzle, bed, ok
+        self.code, self.nozzle, self.bed, self.ok = status, nozzle, bed, ok
         self.off_calls = []
 
+    # Same layout as the real printers: targets next to PrintInfo, not inside it.
+    @property
+    def status(self):
+        return {"PrintInfo": {"Status": self.code}, "TempTargetNozzle": self.nozzle, "TempTargetHotbed": self.bed}
+
     def _decoded_printinfo(self):
-        return {"Status": self.status, "TempTargetNozzle": self.nozzle, "TempTargetHotbed": self.bed}
+        return dict(self.status["PrintInfo"])
 
     def _is_busy_between_prints(self):
         return False
@@ -72,9 +77,9 @@ def test_timer_restarts_after_a_busy_spell(guard):
     p = FakePrinter(nozzle=200)
     state.printers["p1"] = p
     run(0)
-    p.status = 2
+    p.code = 2
     run(20 * 60)
-    p.status = 0
+    p.code = 0
     run(25 * 60)
     assert run(50 * 60) == []          # only 25 min idle since the print
     assert run(55 * 60) == ["p1"]
