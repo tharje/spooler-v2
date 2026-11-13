@@ -2185,5 +2185,11 @@ body.no-printers-manage #btn-settings-goto-printers { display: none !important; 
 .ctl-warnbox p { font-size: 14px; line-height: 1.45; color: var(--text-dim-strong); }
 .ctl-warnbox p strong { color: var(--text); }
 .modal-box label.ctl-warn-skip { flex-direction: row; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text); cursor: pointer; }
-.modal-box .ctl-warn-skip input { width: auto; accent-color: var(--accent); }
+.modal-box .ctl-warn-skip input { appearance: none; -webkit-appearance: none; width: 18px; height: 18px; padding: 0; margin: 0;
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; display: grid; place-content: center; cursor: pointer; flex-shrink: 0; }
+.modal-box .ctl-warn-skip input::after { content: ""; width: 5px; height: 9px; border: solid #fff; border-width: 0 2px 2px 0;
+  transform: rotate(45deg) translate(-1px, -1px); opacity: 0; }
+.modal-box .ctl-warn-skip input:checked { background: var(--accent); border-color: var(--accent); }
+.modal-box .ctl-warn-skip input:checked::after { opacity: 1; }
+.modal-box .ctl-warn-skip input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ctl-warn-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
