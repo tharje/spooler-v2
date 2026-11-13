@@ -139,9 +139,10 @@ UNANSWERED_LIMIT = 6
 
 class CC2Connection(PrinterConnection):
     estimated_filament = True
-    # Shown in the advanced-control panel; the commands themselves (1028, 1030,
-    # 1026, 1027) are not wired up until verified on a real printer. Limits are
-    # assumed, not taken from Elegoo.
+    # Advanced control: every command below was tested on a real CC2 in Nov 2026
+    # (1028 temperatures, 1030 fans, 1026 home, 1027 move, 1032 leveling,
+    # 1034 PID, 1033 resonance test). Limits are assumed, not taken from Elegoo.
+    controls_verified = True
     capabilities = frozenset({"temp_nozzle", "temp_bed", "fan_part", "fan_aux", "fan_chamber", "move", "home", "level", "pid", "shaper"})
     limits = {"nozzle": {"max": 300, "assumed": True}, "bed": {"max": 100, "assumed": True},
               # Firmware refuses box_fan (error 1009) while printing
