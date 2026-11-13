@@ -435,19 +435,13 @@ const btnSpools   = document.getElementById("btn-spools");
 
 const openSpools = () => {
   spoolsPanel.classList.add("open");
-  historyBackdrop.classList.add("open");
-  btnSpools.classList.add("active");
   fetchSpools();
   loadLedger();
 };
 const closeSpools = () => {
   spoolsPanel.classList.remove("open");
-  historyBackdrop.classList.remove("open");
-  btnSpools.classList.remove("active");
 };
 
-btnSpools.addEventListener("click", openSpools);
-document.getElementById("btn-spools-close").addEventListener("click", closeSpools);
 
 async function loadImportBrands() {
   const sel = document.getElementById("import-brand");
@@ -494,7 +488,7 @@ document.getElementById("btn-import-filaments").addEventListener("click", async 
 });
 
 // Close all panels on backdrop click
-historyBackdrop.addEventListener("click", () => { closeSpools(); closeStats(); closePrinters(); });
+historyBackdrop.addEventListener("click", () => closePrinters());
 
 // Add Spool modal
 const addSpoolModal = document.getElementById("modal-add-spool");
