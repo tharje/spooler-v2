@@ -155,11 +155,9 @@ document.getElementById("queue-body").addEventListener("click", (ev) => {
   if (t.id === "btn-queue-pick") {
     document.getElementById("queue-file-input").click();
   } else if (t.dataset.start) {
+    // the start dialog: filament slot per tool, leveling, timelapse, plate
     const job = _queueJobs.find(j => j.id === t.dataset.start);
-    t.disabled = true;
-    _queueCall("POST", `/api/queue/${encodeURIComponent(job.assigned_printer_id)}/confirm`)
-      .then(() => { toast("Print started"); loadQueue(); })
-      .catch(e => { toast(e.message, true); t.disabled = false; });
+    if (job) openQueueStartOpts(job);
   } else if (t.dataset.cancel) {
     _queueCall("PATCH", `/api/queue/${encodeURIComponent(t.dataset.cancel)}`, { status: "cancelled" })
       .then(loadQueue).catch(e => toast(e.message, true));

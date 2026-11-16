@@ -2,6 +2,7 @@
 idle printer, and confirm_plate_cleared's upload+start."""
 
 import asyncio
+import threading
 
 import pytest
 
@@ -35,6 +36,7 @@ class FakePrinter:
 
     async def start_print_file(self, filename, print_opts=None):
         self.started = filename
+        self.started_opts = print_opts
         return self.start_result
 
 
@@ -216,6 +218,65 @@ def test_confirm_plate_cleared_leaves_job_assigned_when_start_fails(tmp_path):
         run(job_queue.confirm_plate_cleared("p1"))
     job = job_queue.list_jobs()[0]
     assert job["status"] == "assigned" and job["error"]
+
+
+def test_queued_file_keeps_its_print_info_for_the_start_dialog(tmp_path):
+    path = tmp_path / "two.gcode"
+    path.write_bytes(b"; estimated printing time (normal mode) = 1h 8m 44s\n; filament used [g] = 36.21\n"
+                     b"; filament_colour = #F2754E;#000000\n; filament_type = PETG;PLA\n" + b"x" * 100)
+    job_queue.add_job(path, "two.gcode", {})
+    info = job_queue.list_jobs()[0]["print_info"]
+    assert info == {"print_time": 4124, "filament_g": 36.21, "color_map": [
+        {"t": 0, "color": "#F2754E", "name": "PETG"}, {"t": 1, "color": "#000000", "name": "PLA"}]}
+
+
+def test_jobs_queued_before_print_info_get_it_when_listed(tmp_path):
+    job_queue.add_job(_gcode(tmp_path), "a.gcode", {})
+    jobs = job_queue._load()
+    del jobs[0]["print_info"]
+    job_queue._save(jobs)
+    assert job_queue.list_jobs()[0]["print_info"] == {"print_time": None, "filament_g": None, "color_map": []}
+    assert "print_info" in job_queue._load()[0]
+
+
+def test_clean_print_opts_keeps_only_the_start_dialog_choices():
+    assert job_queue.clean_print_opts(None) is None
+    assert job_queue.clean_print_opts({"leveling": 1, "slot_map": [{"t": 0, "canvas_id": 0, "tray_id": 2}], "rm": "-rf"}) == {
+        "leveling": True, "timelapse": False, "smooth_plate": False, "slot_map": [{"t": 0, "canvas_id": 0, "tray_id": 2}]}
+    assert "slot_map" not in job_queue.clean_print_opts({"slot_map": "all"})
+
+
+def test_confirm_plate_cleared_starts_with_the_dialog_choices(tmp_path):
+    printer = FakePrinter("p1")
+    state.printers["p1"] = printer
+    job_queue.add_job(_gcode(tmp_path), "a.gcode", {})
+    job_queue.assign_ready_jobs()
+    opts = {"leveling": True, "timelapse": False, "smooth_plate": False, "slot_map": [{"t": 0, "canvas_id": 0, "tray_id": 1}]}
+    run(job_queue.confirm_plate_cleared("p1", opts))
+    assert printer.uploaded[2] is False   # uploaded, then started with the options
+    assert printer.started == "a.gcode" and printer.started_opts == opts
+    assert job_queue.list_jobs()[0]["status"] == "done"
+
+
+def test_confirm_route_passes_the_dialog_choices(monkeypatch):
+    import http_admin
+    import http_handler
+    h = http_handler.SPHandler.__new__(http_handler.SPHandler)
+    h.path = "/api/queue/p1/confirm"
+    h._can_see_printer = lambda pid: True
+    h._read_body = lambda: b'{"print_opts": {"leveling": true}}'
+    got = []
+    h._json = lambda body, code=200: got.append((code, body))
+
+    async def confirm(printer_id, print_opts=None):
+        return {"printer": printer_id, "opts": print_opts}
+    monkeypatch.setattr(job_queue, "confirm_plate_cleared", confirm)
+    loop = asyncio.new_event_loop()
+    threading.Thread(target=loop.run_forever, daemon=True).start()
+    monkeypatch.setattr(http_admin.http_common, "ws_loop", lambda: loop)
+    h._handle_queue_confirm()
+    loop.call_soon_threadsafe(loop.stop)
+    assert got == [(200, {"ok": True, "job": {"printer": "p1", "opts": {"leveling": True, "timelapse": False, "smooth_plate": False}}})]
 
 
 def test_queue_upload_route_takes_its_query():

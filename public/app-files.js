@@ -212,6 +212,16 @@ let _printOptsFile = null;
 let _printOptsName = null;
 
 let _printOptsFilename = null; // bare filename used as key for file_info matching
+// A queued job being started from the queue (its file is not on the printer yet), and the
+// printer the file browser had open before, to restore when the dialog closes.
+let _printOptsQueueJob = null;
+let _printOptsPrevPrinter = null;
+
+function openQueueStartOpts(job) {
+  _printOptsPrevPrinter = _currentFilePrinterId;
+  _currentFilePrinterId = job.assigned_printer_id;
+  openPrintOpts(job.filename, job.filename, job.print_info || {}, job);
+}
 
 function _applyFileInfo(msg) {
   // Only update if the modal is still open for the same printer+file
@@ -247,7 +257,8 @@ function _applyFileInfo(msg) {
     _buildCanvasMapping(msg.printer_id || _currentFilePrinterId, msg.color_map);
 }
 
-function openPrintOpts(filePath, fileName, meta = {}) {
+function openPrintOpts(filePath, fileName, meta = {}, queueJob = null) {
+  _printOptsQueueJob = queueJob;
   _printOptsFile = filePath;
   _printOptsName = fileName;
   _printOptsFilename = fileName; // used for file_info matching
@@ -290,7 +301,7 @@ function openPrintOpts(filePath, fileName, meta = {}) {
   const thumbWrap = document.getElementById("print-opts-thumb-wrap");
   thumbImg.style.display = "none";
   thumbImg.src = "";
-  if (isHttpPrinter) {
+  if (isHttpPrinter || queueJob) {
     thumbWrap.style.display = "none";
   } else if (isCC2) {
     // CC2: thumbnail arrives async via WS file_info message; request it now
@@ -427,6 +438,10 @@ function _canvasMapWarn() {
 
 function closePrintOpts() {
   document.getElementById("modal-print-opts").classList.remove("open");
+  if (_printOptsQueueJob) {
+    _currentFilePrinterId = _printOptsPrevPrinter;
+    _printOptsQueueJob = null;
+  }
   _printOptsFile = null;
   _printOptsName = null;
   _printOptsFilename = null;
@@ -459,6 +474,17 @@ document.getElementById("btn-print-opts-send").addEventListener("click", () => {
   if (_canvasMapTools.length && document.getElementById("print-opts-canvas").style.display !== "none") {
     const map = _canvasMapCurrent();
     if (map) opts.slot_map = map;
+  }
+  if (_printOptsQueueJob) {
+    const job = _printOptsQueueJob;
+    const name = _printOptsName;
+    const btn = document.getElementById("btn-print-opts-send");
+    btn.disabled = true;
+    _queueCall("POST", `/api/queue/${encodeURIComponent(job.assigned_printer_id)}/confirm`, { print_opts: opts })
+      .then(() => { toast(`Starting: ${name}`); closePrintOpts(); loadQueue(); })
+      .catch(e => toast(e.message, true))
+      .finally(() => { btn.disabled = false; });
+    return;
   }
   send({
     action:     "start_print",

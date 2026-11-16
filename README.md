@@ -49,6 +49,7 @@ Open **`http://<server-ip>:8080`** in your browser. On first visit you will be p
 - **Print speed control** – adjust speed while printing or paused (CC1 and CC2)
 - **Print options** – preview thumbnail, build plate, time-lapse and bed levelling before starting a print
 - **File browser and upload** – list, upload, start and delete files stored on the printer
+- **Print queue** – queue G-code files for a printer type or one printer; a job waits for a free printer and starts only when you tap **Plate tømt – start**, which opens the start dialog to pick the filament slot for each tool and bed levelling, time-lapse and build plate
 - **Canvas / AMS multi-material** – shows filament slots; link each slot to a Spoolman spool for per-tray deduction
 - **Filament tracking** – live mm/g per print; deducts from the correct spool on tray changes
 - **Stats & history** – statistics per period and printer, every past print with the picture taken when it ended, its details and a reference number you can put on it; CSV export

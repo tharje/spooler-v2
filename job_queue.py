@@ -21,6 +21,7 @@ queue.json (the job list, in the same shape list_jobs() returns).
 
 import asyncio
 import json
+import re
 import threading
 import time
 import uuid
@@ -54,9 +55,42 @@ def _save(jobs: list) -> None:
     _atomic_write(QUEUE_FILE, json.dumps(jobs, indent=1))
 
 
+def print_info(meta: dict) -> dict:
+    """What the start dialog shows for a queued file: time, weight and the filament of each
+    tool in the slice ("color_map" as the CC2 reports it for its own files)."""
+    colours = [c.strip() for c in (meta.get("filament_colour") or "").split(";")]
+    types = [t.strip() for t in (meta.get("filament_type") or "").split(";")]
+    tools = [{"t": i, "color": c if re.fullmatch(r"#[0-9A-Fa-f]{6}", c) else "",
+              "name": types[i] if i < len(types) else ""}
+             for i, c in enumerate(colours) if c or (i < len(types) and types[i])]
+    return {"print_time": _seconds(meta.get("estimated_time")),
+            "filament_g": meta.get("filament_used_g"),
+            "color_map": tools}
+
+
+def _seconds(text) -> int | None:
+    """ "1h 8m 44s" (or "2d 3h 1m 0s") -> seconds, None if there is none."""
+    parts = re.findall(r"(\d+)\s*([dhms])", text or "")
+    if not parts:
+        return None
+    unit = {"d": 86400, "h": 3600, "m": 60, "s": 1}
+    return sum(int(n) * unit[u] for n, u in parts)
+
+
 def list_jobs() -> list:
-    """Queued/assigned jobs first (by priority, then age), finished ones last."""
-    jobs = _load()
+    """Queued/assigned jobs first (by priority, then age), finished ones last. Uploaded
+    files queued before their print info was kept get it now."""
+    with _lock:
+        jobs = _load()
+        missing = [j for j in jobs if j.get("source") == "upload" and "print_info" not in j]
+        for j in missing:
+            path = QUEUE_DIR / f"{j['id']}.gcode"
+            try:
+                j["print_info"] = print_info(meta_for_file(path, j["filename"])) if path.exists() else {}
+            except Exception:
+                j["print_info"] = {}
+        if missing:
+            _save(jobs)
     rank = {s: i for i, s in enumerate(STATUSES)}
     return sorted(jobs, key=lambda j: (rank.get(j["status"], 99), -j.get("priority", 0), j["added_at"]))
 
@@ -118,6 +152,7 @@ def add_job(local_path: Path, filename: str, requirements: dict) -> dict:
         "assigned_printer_id": None,
         "gcode_printer_model": gcode_model,
         "gcode_filament_type": first_value(meta, "filament_type"),
+        "print_info": print_info(meta),
         "owner": (requirements.get("owner") or "").strip() or None,
         "error": None,
     }
@@ -281,9 +316,24 @@ def assigned_job_for(printer_id: str) -> dict | None:
     return None
 
 
-async def confirm_plate_cleared(printer_id: str) -> dict:
+PRINT_OPTS = ("leveling", "timelapse", "smooth_plate")
+
+
+def clean_print_opts(raw) -> dict | None:
+    """The start dialog's choices, as start_print_file() takes them: the yes/no options and
+    the filament slot per tool (slot_map, checked against the printer by the printer)."""
+    if not isinstance(raw, dict):
+        return None
+    opts = {k: bool(raw.get(k)) for k in PRINT_OPTS}
+    if isinstance(raw.get("slot_map"), list):
+        opts["slot_map"] = raw["slot_map"]
+    return opts
+
+
+async def confirm_plate_cleared(printer_id: str, print_opts: dict | None = None) -> dict:
     """The user has cleared the plate and pressed the button on the card:
-    actually upload this printer's assigned job and start it. On success,
+    actually upload this printer's assigned job and start it, with the options picked in
+    the start dialog (filament slots, leveling, ...; None: the printer's defaults). On success,
     one unit is consumed -- if more are left, the job goes back to "queued"
     for the next time this or another matching printer is free; otherwise
     it's "done". On failure the job stays "assigned" so the button can be
@@ -301,7 +351,7 @@ async def confirm_plate_cleared(printer_id: str) -> dict:
     try:
         if job.get("source") == "printer_file":
             # Already on this printer's own storage -- just start it, nothing to upload.
-            ok = await printer.start_print_file(job["filename"])
+            ok = await printer.start_print_file(job["filename"], print_opts=print_opts)
             fail_msg = "Could not start the print."
         else:
             if not _model_matches(job["gcode_printer_model"], printer.printer_type):
@@ -309,7 +359,11 @@ async def confirm_plate_cleared(printer_id: str) -> dict:
             path = QUEUE_DIR / f"{job['id']}.gcode"
             if not path.exists():
                 raise QueueError("The queued file is missing.")
-            ok = await printer.upload_file(path, job["filename"], start_after=True)
+            if print_opts is None:
+                ok = await printer.upload_file(path, job["filename"], start_after=True)
+            else:
+                ok = await printer.upload_file(path, job["filename"])
+                ok = ok and await printer.start_print_file(job["filename"], print_opts=print_opts)
             fail_msg = "Upload succeeded but starting the print failed."
     except UploadError as e:
         raise QueueError(str(e))
