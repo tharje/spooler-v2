@@ -5,7 +5,7 @@
     "notes": {"V0.4.0-o": "OpenCentauri patched firmware", "V1.4.49": "OpenCentauri firmware; status, files, camera and advanced control (temperatures) tested 2026-11"}
   },
   "cc2": {
-    "tested": ["02.01.00.00", "02.01.01.07"],
+    "tested": ["02.01.00.00", "02.01.01.07", "02.01.01.13"],
     "notes": {}
   },
   "moonraker": {
