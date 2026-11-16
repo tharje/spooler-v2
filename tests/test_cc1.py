@@ -1,5 +1,6 @@
 """printers/cc1.py -- CC1 status phases, command rejections, reason hint."""
 
+import asyncio
 import json
 
 import pytest
@@ -97,3 +98,68 @@ def test_cc1_error_catalog_matches_screen_codes():
     # CC2 carries 502 too, so it's a CC2 code now -- 402 is the clean CC1-only one.
     assert lookup(402, "cc2") is None
     assert lookup(704, "cc1") is None
+
+
+def _start_acks(printer, monkeypatch, acks):
+    """Make send_cmd answer each start command with the next Ack in `acks`
+    (None: no answer), the way the printer's reply would arrive."""
+    import printers.cc1 as cc1
+    monkeypatch.setattr(cc1, "START_RETRY_DELAY", 0)
+    monkeypatch.setattr(cc1, "START_ACK_TIMEOUT", 0.05)
+    sent = []
+    queue = list(acks)
+
+    async def fake_send(cmd, data):
+        sent.append((cmd, data))
+        ack = queue.pop(0) if queue else 0
+        if cmd == 128 and ack is not None:
+            asyncio.get_running_loop().call_soon(
+                lambda: asyncio.ensure_future(printer._handle_message(
+                    json.dumps({"Data": {"Cmd": 128, "Data": {"Ack": ack}}}))))
+        return True
+    monkeypatch.setattr(printer, "send_cmd", fake_send)
+    return sent
+
+
+@pytest.mark.asyncio
+async def test_start_right_after_upload_retries_until_the_file_is_there(printer, monkeypatch):
+    # Seen on a real CC1: start sent the moment the upload finished got Ack 2
+    # ("file not found"), though the file was listed on the printer a moment later.
+    import state
+    b = _Broadcasts()
+    monkeypatch.setattr(state, "broadcast_to_browsers", b)
+    sent = _start_acks(printer, monkeypatch, [2, 2, 0])
+    assert await printer.start_print_file("a.gcode", print_opts={"leveling": True}) is True
+    assert [c for c, _ in sent] == [128, 128, 128]
+    assert not [m for m in b.sent if m.get("type") == "error"]
+
+
+@pytest.mark.asyncio
+async def test_start_that_stays_rejected_returns_false_and_reports_once(printer, monkeypatch):
+    import state
+    import printers.cc1 as cc1
+    b = _Broadcasts()
+    monkeypatch.setattr(state, "broadcast_to_browsers", b)
+    sent = _start_acks(printer, monkeypatch, [2] * 20)
+    assert await printer.start_print_file("a.gcode") is False
+    assert len(sent) == cc1.START_RETRIES + 1
+    errors = [m for m in b.sent if m.get("type") == "error"]
+    assert len(errors) == 1 and "wasn't found" in errors[0]["message"]
+
+
+@pytest.mark.asyncio
+async def test_other_rejections_are_not_retried(printer, monkeypatch):
+    import state
+    monkeypatch.setattr(state, "broadcast_to_browsers", _Broadcasts())
+    sent = _start_acks(printer, monkeypatch, [1])
+    assert await printer.start_print_file("a.gcode") is False
+    assert len(sent) == 1
+
+
+@pytest.mark.asyncio
+async def test_start_without_an_answer_counts_as_sent(printer, monkeypatch):
+    import state
+    monkeypatch.setattr(state, "broadcast_to_browsers", _Broadcasts())
+    sent = _start_acks(printer, monkeypatch, [None])
+    assert await printer.start_print_file("a.gcode") is True
+    assert len(sent) == 1
