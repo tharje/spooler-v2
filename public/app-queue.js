@@ -49,6 +49,15 @@ function _jobRequirementsText(j) {
   return bits.join(" · ") || "Any printer";
 }
 
+// Who put the job in the queue, and when ("Added by anna · 16.11.2026, 20:23").
+// The owner is empty when login is off.
+function _jobAddedText(j) {
+  const d = new Date(j.added_at);
+  const when = isNaN(d) ? "" : d.toLocaleString([], { dateStyle: "short", timeStyle: "short" });
+  if (j.owner) return when ? `Added by ${j.owner} · ${when}` : `Added by ${j.owner}`;
+  return when ? `Added ${when}` : "";
+}
+
 // All text interpolated below is escaped with escHtml/escAttr (same helpers
 // used by app-service.js and app-stats.js for the same kind of user-entered
 // strings: filenames, free-text requirement fields).
@@ -59,6 +68,7 @@ function _jobHtml(j) {
     <div class="queue-job-main">
       <div class="queue-job-name">${escHtml(j.filename)}</div>
       <div class="queue-job-reqs">${escHtml(_jobRequirementsText(j))}</div>
+      ${_jobAddedText(j) ? `<div class="queue-job-added">${escHtml(_jobAddedText(j))}</div>` : ""}
       ${j.error ? `<div class="queue-job-error">${escHtml(j.error)}</div>` : ""}
     </div>
     <div class="queue-job-status queue-status-${j.status}">${_STATUS_LABEL[j.status] || j.status}</div>

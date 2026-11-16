@@ -292,3 +292,36 @@ def test_queue_upload_route_takes_its_query():
     h._json = lambda body, code=200: calls.append((code, body))
     h.do_POST()
     assert calls == ["print.queue", "upload"]
+
+
+def _run_queue_js(script: str) -> str:
+    """Run _jobAddedText from public/app-queue.js under node."""
+    import re
+    import shutil
+    import subprocess
+    from pathlib import Path
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    src = (Path(__file__).resolve().parent.parent / "public" / "app-queue.js").read_text()
+    fn = re.search(r"function _jobAddedText\(j\) \{.*?\n\}\n", src, re.S).group(0)
+    out = subprocess.run([node, "-e", fn + script], capture_output=True, text=True, timeout=20)
+    assert out.returncode == 0, out.stderr
+    return out.stdout.strip()
+
+
+def test_queue_list_shows_who_added_the_job():
+    out = _run_queue_js("""
+      console.log(JSON.stringify([
+        _jobAddedText({owner: "anna", added_at: "2026-11-16T20:23:00"}).startsWith("Added by anna · "),
+        _jobAddedText({owner: "anna", added_at: "garbage"}),
+        _jobAddedText({owner: null, added_at: "2026-11-16T20:23:00"}).startsWith("Added "),
+        _jobAddedText({owner: null, added_at: ""}),
+      ]));
+    """)
+    assert out == '[true,"Added by anna",true,""]'
+
+
+def test_jobs_keep_their_owner_in_the_list(tmp_path):
+    job = job_queue.add_job(_gcode(tmp_path), "a.gcode", {"owner": "anna"})
+    assert [j["owner"] for j in job_queue.list_jobs() if j["id"] == job["id"]] == ["anna"]
