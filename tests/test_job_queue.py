@@ -216,3 +216,18 @@ def test_confirm_plate_cleared_leaves_job_assigned_when_start_fails(tmp_path):
         run(job_queue.confirm_plate_cleared("p1"))
     job = job_queue.list_jobs()[0]
     assert job["status"] == "assigned" and job["error"]
+
+
+def test_queue_upload_route_takes_its_query():
+    """The app posts files to /api/queue/upload?name=...&printer_id=...: the route must match
+    with the query on, or every upload answers 404 Not found."""
+    import http_handler
+    h = http_handler.SPHandler.__new__(http_handler.SPHandler)
+    h.path = "/api/queue/upload?name=part.gcode&printer_id=abc&quantity=1"
+    calls = []
+    h._check_auth = lambda: True
+    h._require = lambda perm: calls.append(perm) or True
+    h._handle_queue_upload = lambda: calls.append("upload")
+    h._json = lambda body, code=200: calls.append((code, body))
+    h.do_POST()
+    assert calls == ["print.queue", "upload"]
