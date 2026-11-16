@@ -1,5 +1,13 @@
 [
   {
+    "version": "2.3.6",
+    "date": "2026-11-16",
+    "changes": [
+      "Spool picker: each spool shows its number (#id) and, when it isn't on a printer, where it is stored, so spools of the same colour are easy to tell apart. A spool whose location is the printer's name is now marked as the printer's spool (#50)",
+      "Centauri Carbon 1: firmware V1.4.49 (OpenCentauri) is on the tested list"
+    ]
+  },
+  {
     "version": "2.3.5",
     "date": "2026-11-13",
     "changes": [
