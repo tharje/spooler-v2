@@ -196,7 +196,7 @@ function renderPickerList(printerId) {
   // Classify each spool relative to the current context
   const currentLinked = isTray
     ? (trayMap[printerId] || {})[String(currentPickerTrayId)]
-    : spools.find(s => spoolAssignedTo(s) === printerId)?.id;
+    : spools.find(s => printerByLocation(spoolAssignedTo(s))?.id === printerId)?.id;
 
   function spoolRow(s, onClickFn, isSelected) {
     const loc          = spoolAssignedTo(s);
@@ -205,6 +205,9 @@ function renderPickerList(printerId) {
     const activePrinter = getSpoolActivePrinter(s.id);  // printer currently printing with this spool
     const inUse        = activePrinter != null;
     const pct          = spoolPct(s);
+    // Spool number, and where it is when that isn't a printer: tells same-colour spools apart.
+    const where        = loc && !locPrinter ? ` · <span class="spool-pick-loc">${escHtml(loc)}</span>` : "";
+    const ident        = `<span class="spool-reel-id">#${escHtml(s.id)}</span>${where}`;
     const badge        = inUse
       ? `<span class="spool-pick-badge in-use">Active · ${escHtml(activePrinter.name)}</span>`
       : otherPrinter
@@ -215,7 +218,7 @@ function renderPickerList(printerId) {
         <div class="spool-dot" style="background:${escAttr(spoolColorHex(s))};opacity:.4"></div>
         <div class="spool-pick-info">
           <div class="spool-pick-name" style="opacity:.5">${escHtml(spoolName(s))}</div>
-          <div class="spool-pick-meta">${escHtml(s.filament?.material || "")} · ${spoolRemaining(s)}g (${pct}%) ${badge}</div>
+          <div class="spool-pick-meta">${ident} · ${escHtml(s.filament?.material || "")} · ${spoolRemaining(s)}g (${pct}%) ${badge}</div>
         </div>
       </div>`;
     }
@@ -224,7 +227,7 @@ function renderPickerList(printerId) {
       <div class="spool-dot" style="background:${escAttr(spoolColorHex(s))}"></div>
       <div class="spool-pick-info">
         <div class="spool-pick-name">${escHtml(spoolName(s))}</div>
-        <div class="spool-pick-meta">${escHtml(s.filament?.material || "")} · ${spoolRemaining(s)}g (${pct}%) ${badge}</div>
+        <div class="spool-pick-meta">${ident} · ${escHtml(s.filament?.material || "")} · ${spoolRemaining(s)}g (${pct}%) ${badge}</div>
       </div>
       ${isSelected ? '<span class="spool-check">✓</span>' : ""}
     </div>`;
@@ -237,7 +240,7 @@ function renderPickerList(printerId) {
   const noneSelected = currentLinked == null;
 
   const rows = spools.map(s => {
-    const isSelected = s.id === currentLinked || (!isTray && spoolAssignedTo(s) === printerId);
+    const isSelected = s.id === currentLinked || (!isTray && printerByLocation(spoolAssignedTo(s))?.id === printerId);
     const click = isTray
       ? `linkTray('${escAttr(printerId)}', ${currentPickerTrayId}, ${s.id})`
       : `assignSpool('${escAttr(printerId)}', '${escAttr(s.id)}')`;
