@@ -61,10 +61,10 @@ function _jobAddedText(j) {
 // All text interpolated below is escaped with escHtml/escAttr (same helpers
 // used by app-service.js and app-stats.js for the same kind of user-entered
 // strings: filenames, free-text requirement fields).
-// place/count: where a waiting job is in line (0-based) and how many wait, for
-// the move buttons; left out for jobs that aren't waiting.
+// place/count: where a job is in the list of those still in the queue (0-based)
+// and how many there are, for the move buttons; left out for finished jobs.
 function _jobHtml(j, place, count) {
-  const canMove = j.status === "queued" && count > 1 && (window.SPOOLER_PERMS || []).includes("queue.manage");
+  const canMove = count > 1 && (window.SPOOLER_PERMS || []).includes("queue.manage");
   const canCancel = j.status === "queued" || j.status === "assigned";
   const canRemove = j.status === "done" || j.status === "cancelled";
   return `<div class="queue-job" data-job="${escAttr(j.id)}">
@@ -97,7 +97,6 @@ function renderQueue() {
   const host = document.getElementById("queue-body");
   // the server sends them next-first: jobs ready on a printer, then the waiting ones in order
   const active = _queueJobs.filter(j => j.status === "queued" || j.status === "assigned");
-  const waiting = active.filter(j => j.status === "queued");
   const finished = _queueJobs.filter(j => j.status === "done" || j.status === "cancelled");
   host.innerHTML = `
     <details class="queue-form" open>
@@ -121,7 +120,7 @@ function renderQueue() {
       </div>
     </details>
     <div class="service-h">In queue</div>
-    <div class="service-card">${active.length ? active.map(j => _jobHtml(j, waiting.indexOf(j), waiting.length)).join("")
+    <div class="service-card">${active.length ? active.map((j, n) => _jobHtml(j, n, active.length)).join("")
         : '<p class="service-empty">Nothing queued.</p>'}</div>
     ${finished.length ? `<div class="service-h">Finished</div>
       <div class="service-card">${finished.map(j => _jobHtml(j)).join("")}</div>` : ""}`;

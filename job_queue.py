@@ -222,15 +222,18 @@ def add_existing_job(printer_id: str, filename: str, requirements: dict) -> dict
 
 
 def update_job(job_id: str, changes: dict) -> dict:
-    """Priority and quantity can be edited any time; a queued job can also be
-    moved one place up or down ({"move": "up"|"down"}) or cancelled. Nothing
-    else is editable once a job exists (re-add instead)."""
-    with _lock:
-        jobs = _load()
-        if "move" in changes:
+    """Priority and quantity can be edited any time; a job still in the queue
+    can also be moved one place up or down ({"move": "up"|"down"}, see _move)
+    or cancelled. Nothing else is editable once a job exists (re-add instead)."""
+    if "move" in changes:
+        with _lock:
+            jobs = _load()
             job = _move(jobs, job_id, changes["move"])
             _save(jobs)
-            return job
+        assign_ready_jobs()     # a printer whose job was moved away gets the new first one
+        return get_job(job["id"]) or job
+    with _lock:
+        jobs = _load()
         for job in jobs:
             if job["id"] == job_id:
                 if job["status"] not in ("queued", "assigned") and changes.get("status") != "cancelled":
@@ -247,27 +250,47 @@ def update_job(job_id: str, changes: dict) -> dict:
     raise QueueError("Job not found.")
 
 
+def _active_order(jobs: list) -> list:
+    """The jobs still in the queue as the list shows them: the ones ready on a
+    printer first, then the waiting ones in queue order."""
+    return ([j for j in jobs if j["status"] == "assigned"]
+            + _queue_order(jobs))
+
+
 def _move(jobs: list, job_id: str, direction) -> dict:
-    """Swap a waiting job with the one before or after it in the queue. It takes
-    over its neighbour's priority, so a later job added with a priority still
-    lands where that priority says."""
+    """Swap a job with the one before or after it in the list. It takes over its
+    neighbour's priority, so a later job added with a priority still lands where
+    that priority says. A job that was ready on a printer and is part of the
+    swap goes back to waiting, so the printer is given whichever job is now
+    first (assign_ready_jobs, run by update_job right after)."""
     if direction not in ("up", "down"):
         raise QueueError("move must be up or down.")
-    order = _queue_order(jobs)
+    order = _active_order(jobs)
     i = next((n for n, j in enumerate(order) if j["id"] == job_id), None)
     if i is None:
         if any(j["id"] == job_id for j in jobs):
-            raise QueueError("Only jobs that are waiting can be moved.")
+            raise QueueError("That job is no longer in the queue.")
         raise QueueError("Job not found.")
     k = i - 1 if direction == "up" else i + 1
     if not 0 <= k < len(order):
         return order[i]
+    slots = [n for n, j in enumerate(jobs) if j["status"] in ("assigned", "queued")]
     order[i], order[k] = order[k], order[i]
     order[k]["priority"] = order[i].get("priority", 0)
-    # write the new order back into the queued records' slots in the file
-    slots = [n for n, j in enumerate(jobs) if j["status"] == "queued"]
+    for j in (order[i], order[k]):
+        if j["status"] == "assigned":
+            j["status"] = "queued"
+            j["assigned_printer_id"] = None
+    # write the new order back into the queue's slots in the file, and keep the
+    # waiting jobs' priorities falling along it so the file order is the queue order
     for n, j in zip(slots, order):
         jobs[n] = j
+    last = None
+    for j in jobs:
+        if j["status"] == "queued":
+            if last is not None and j.get("priority", 0) > last:
+                j["priority"] = last
+            last = j.get("priority", 0)
     return order[k]
 
 
@@ -379,7 +402,8 @@ def clean_print_opts(raw) -> dict | None:
     return opts
 
 
-async def confirm_plate_cleared(printer_id: str, print_opts: dict | None = None) -> dict:
+async def confirm_plate_cleared(printer_id: str, print_opts: dict | None = None,
+                                job_id: str | None = None) -> dict:
     """The user has cleared the plate and pressed the button on the card:
     actually upload this printer's assigned job and start it, with the options picked in
     the start dialog (filament slots, leveling, ...; None: the printer's defaults). On success,
@@ -395,6 +419,9 @@ async def confirm_plate_cleared(printer_id: str, print_opts: dict | None = None)
         job = next((j for j in jobs if j["status"] == "assigned" and j["assigned_printer_id"] == printer_id), None)
         if job is None:
             raise QueueError("No job is assigned to this printer.")
+        if job_id and job["id"] != job_id:
+            # the queue was reordered after the start dialog was opened
+            raise QueueError("The queue has changed: this printer now has a different job. Check it and press start again.")
     # Attribute the print to whoever queued it, for the history entry.
     printer._pending_owner = job.get("owner")
     try:

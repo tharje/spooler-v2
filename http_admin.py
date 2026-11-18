@@ -451,8 +451,9 @@ class AdminMixin:
 
     @requires_feature("job_queue")
     def _handle_queue_confirm(self):
-        """POST /api/queue/<printer id>/confirm {print_opts?} -- the user has cleared the
-        plate; upload and start this printer's assigned job now, with the start dialog's
+        """POST /api/queue/<printer id>/confirm {print_opts?, job_id?} -- the user has cleared
+        the plate; upload and start this printer's assigned job now (refused if job_id is
+        given and it isn't that job any more), with the start dialog's
         choices (filament slots, leveling, timelapse, plate)."""
         printer_id = urllib.parse.unquote(self.path[len("/api/queue/"):-len("/confirm")])
         if not self._can_see_printer(printer_id):
@@ -464,9 +465,10 @@ class AdminMixin:
             self._json({"error": "Bad request"}, 400)
             return
         print_opts = job_queue.clean_print_opts(body.get("print_opts") if isinstance(body, dict) else None)
+        job_id = body.get("job_id") if isinstance(body, dict) and isinstance(body.get("job_id"), str) else None
         try:
             fut = asyncio.run_coroutine_threadsafe(
-                job_queue.confirm_plate_cleared(printer_id, print_opts), http_common.ws_loop())
+                job_queue.confirm_plate_cleared(printer_id, print_opts, job_id), http_common.ws_loop())
             job = fut.result(timeout=120)
             self._json({"ok": True, "job": job})
         except job_queue.QueueError as e:

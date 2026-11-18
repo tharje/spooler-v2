@@ -480,7 +480,7 @@ document.getElementById("btn-print-opts-send").addEventListener("click", () => {
     const name = _printOptsName;
     const btn = document.getElementById("btn-print-opts-send");
     btn.disabled = true;
-    _queueCall("POST", `/api/queue/${encodeURIComponent(job.assigned_printer_id)}/confirm`, { print_opts: opts })
+    _queueCall("POST", `/api/queue/${encodeURIComponent(job.assigned_printer_id)}/confirm`, { print_opts: opts, job_id: job.id })
       .then(() => { toast(`Starting: ${name}`); closePrintOpts(); loadQueue(); })
       .catch(e => toast(e.message, true))
       .finally(() => { btn.disabled = false; });

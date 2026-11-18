@@ -139,7 +139,53 @@ def test_a_free_printer_gets_the_job_at_the_top(tmp_path):
     assert _queued_names() == ["a.gcode"]
 
 
-def test_only_waiting_jobs_can_be_moved(tmp_path):
+def test_moving_the_ready_job_down_gives_its_printer_the_next_one(tmp_path):
+    state.printers["p1"] = FakePrinter("p1")
+    a = job_queue.add_job(_gcode(tmp_path, "a.gcode"), "a.gcode", {})
+    b = job_queue.add_job(_gcode(tmp_path, "b.gcode"), "b.gcode", {})
+    job_queue.assign_ready_jobs()
+    assert job_queue.get_job(a["id"])["status"] == "assigned"
+    job_queue.update_job(a["id"], {"move": "down"})
+    assert job_queue.get_job(b["id"])["assigned_printer_id"] == "p1"
+    assert job_queue.get_job(a["id"])["status"] == "queued"
+    assert [j["filename"] for j in job_queue.list_jobs()] == ["b.gcode", "a.gcode"]
+
+
+def test_moving_a_job_up_past_the_ready_one_takes_its_printer(tmp_path):
+    state.printers["p1"] = FakePrinter("p1")
+    a = job_queue.add_job(_gcode(tmp_path, "a.gcode"), "a.gcode", {})
+    b = job_queue.add_job(_gcode(tmp_path, "b.gcode"), "b.gcode", {})
+    job_queue.assign_ready_jobs()
+    job_queue.update_job(b["id"], {"move": "up"})
+    assert job_queue.get_job(b["id"])["assigned_printer_id"] == "p1"
+    assert job_queue.get_job(a["id"])["status"] == "queued"
+
+
+def test_a_ready_job_moved_down_gets_its_printer_back_if_the_next_cant_use_it(tmp_path):
+    state.printers["p1"] = FakePrinter("p1", printer_type="cc1")
+    a = job_queue.add_job(_gcode(tmp_path, "a.gcode"), "a.gcode", {})
+    b = job_queue.add_job(_gcode(tmp_path, "b.gcode"), "b.gcode", {"printer_type": "cc2"})
+    job_queue.assign_ready_jobs()
+    job_queue.update_job(a["id"], {"move": "down"})
+    assert job_queue.get_job(a["id"])["assigned_printer_id"] == "p1"
+    assert job_queue.get_job(b["id"])["status"] == "queued"
+
+
+def test_confirm_refuses_when_the_printer_has_another_job_than_the_one_shown(tmp_path):
+    printer = FakePrinter("p1")
+    state.printers["p1"] = printer
+    a = job_queue.add_job(_gcode(tmp_path, "a.gcode"), "a.gcode", {})
+    b = job_queue.add_job(_gcode(tmp_path, "b.gcode"), "b.gcode", {})
+    job_queue.assign_ready_jobs()
+    job_queue.update_job(b["id"], {"move": "up"})      # someone reorders while the dialog is open
+    with pytest.raises(job_queue.QueueError):
+        run(job_queue.confirm_plate_cleared("p1", None, a["id"]))
+    assert not printer.uploaded
+    run(job_queue.confirm_plate_cleared("p1", None, b["id"]))
+    assert printer.uploaded
+
+
+def test_only_jobs_in_the_queue_can_be_moved(tmp_path):
     job = job_queue.add_job(_gcode(tmp_path), "a.gcode", {})
     job_queue.update_job(job["id"], {"status": "cancelled"})
     with pytest.raises(job_queue.QueueError):
@@ -334,7 +380,7 @@ def test_confirm_route_passes_the_dialog_choices(monkeypatch):
     got = []
     h._json = lambda body, code=200: got.append((code, body))
 
-    async def confirm(printer_id, print_opts=None):
+    async def confirm(printer_id, print_opts=None, job_id=None):
         return {"printer": printer_id, "opts": print_opts}
     monkeypatch.setattr(job_queue, "confirm_plate_cleared", confirm)
     loop = asyncio.new_event_loop()
