@@ -35,10 +35,14 @@ from uploads import UploadError, sanitize_filename
 
 QUEUE_DIR = DATA_DIR / "queue"
 QUEUE_FILE = QUEUE_DIR / "queue.json"
-STATUSES = ("queued", "assigned", "printing", "done", "cancelled")
+STATUSES = ("queued", "assigned", "printing", "done", "error", "stopped", "cancelled")
+# A print that ended on the printer: completed, failed, or stopped by someone.
+FINISHED = ("done", "error", "stopped", "cancelled")
 # How the list is shown: what's on a printer first, then the waiting jobs in
 # the order they'll go, then the finished ones.
-_LIST_RANK = {s: i for i, s in enumerate(("printing", "assigned", "queued", "done", "cancelled"))}
+_LIST_RANK = {"printing": 0, "assigned": 1, "queued": 2}
+# A job sent to a printer that hasn't started printing it after this long is given up on.
+START_TIMEOUT_S = 10 * 60
 _lock = threading.Lock()
 
 
@@ -114,7 +118,11 @@ def list_jobs() -> list:
         if missing:
             _save(jobs)
     queued = {j["id"]: i for i, j in enumerate(_queue_order(jobs))}
-    return sorted(jobs, key=lambda j: (_LIST_RANK.get(j["status"], 99), queued.get(j["id"], 0)))
+    finished = sorted((j for j in jobs if j["status"] not in _LIST_RANK),
+                      key=lambda j: j.get("finished_at") or "", reverse=True)    # newest first
+    active = sorted((j for j in jobs if j["status"] in _LIST_RANK),
+                    key=lambda j: (_LIST_RANK[j["status"]], queued.get(j["id"], 0)))
+    return active + finished
 
 
 def get_job(job_id: str) -> dict | None:
@@ -245,6 +253,7 @@ def update_job(job_id: str, changes: dict) -> dict:
                 if changes.get("status") == "cancelled":
                     job["status"] = "cancelled"
                     job["assigned_printer_id"] = None
+                    job["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
                 _save(jobs)
                 return job
     raise QueueError("Job not found.")
@@ -361,7 +370,9 @@ def assign_ready_jobs() -> None:
         return
     with _lock:
         jobs = _load()
-        assigned_printers = {j["assigned_printer_id"] for j in jobs if j["status"] == "assigned"}
+        # a printer that was just sent a job may not report printing yet
+        assigned_printers = {j["assigned_printer_id"] for j in jobs
+                             if j["status"] == "assigned" or (j["status"] == "printing" and not j.get("print_seen"))}
         available = [p for p in state.printers.values()
                      if p.id not in assigned_printers and p.connected
                      and p.to_dict().get("state") in ("idle", "complete", "cancelled")]
@@ -407,9 +418,9 @@ async def confirm_plate_cleared(printer_id: str, print_opts: dict | None = None,
     """The user has cleared the plate and pressed the button on the card:
     actually upload this printer's assigned job and start it, with the options picked in
     the start dialog (filament slots, leveling, ...; None: the printer's defaults). On success,
-    one unit is consumed -- if more are left, the job goes back to "queued"
-    for the next time this or another matching printer is free; otherwise
-    it's "done". On failure the job stays "assigned" so the button can be
+    the job is "printing" until the printer says the print is over (print_ended).
+    If more copies are left, the one started gets its own "printing" entry and the
+    job goes back to "queued" for the next time this or another matching printer is free. On failure the job stays "assigned" so the button can be
     pressed again."""
     printer = state.printers.get(printer_id)
     if printer is None:
@@ -445,18 +456,21 @@ async def confirm_plate_cleared(printer_id: str, print_opts: dict | None = None,
         raise QueueError(str(e))
     with _lock:
         jobs = _load()
-        for j in jobs:
+        for n, j in enumerate(jobs):
             if j["id"] == job["id"]:
                 if not ok:
                     j["error"] = fail_msg
                     break
-                j["quantity"] -= 1
-                if j["quantity"] > 0:
+                j["error"] = None
+                if j["quantity"] > 1:
+                    # more copies to go: the one now on the printer gets its own entry
+                    j["quantity"] -= 1
                     j["status"] = "queued"
                     j["assigned_printer_id"] = None
+                    run = _started(dict(j, id=uuid.uuid4().hex, quantity=1, run_of=j["id"]), printer_id)
+                    jobs.insert(n, run)
                 else:
-                    j["status"] = "done"
-                j["error"] = None
+                    _started(j, printer_id)
                 break
         _save(jobs)
     if not ok:
@@ -464,10 +478,62 @@ async def confirm_plate_cleared(printer_id: str, print_opts: dict | None = None,
     return job
 
 
+def _started(job: dict, printer_id: str) -> dict:
+    job.update(status="printing", assigned_printer_id=printer_id, print_seen=False,
+               started_at=time.strftime("%Y-%m-%dT%H:%M:%S"), sent_ts=time.time())
+    return job
+
+
+def _printing_job(jobs: list, printer_id: str) -> dict | None:
+    return next((j for j in jobs if j["status"] == "printing" and j["assigned_printer_id"] == printer_id), None)
+
+
+def print_started(printer_id: str) -> None:
+    """The printer reports a new print running: the job sent to it is really printing."""
+    with _lock:
+        jobs = _load()
+        job = _printing_job(jobs, printer_id)
+        if job is not None and not job.get("print_seen"):
+            job["print_seen"] = True
+            _save(jobs)
+
+
+def print_ended(printer_id: str, end_state: str, message: str | None = None) -> None:
+    """The print on this printer is over ("complete", "error" or "cancelled", as in the
+    history): the queue job that was printing there is done, failed or stopped."""
+    with _lock:
+        jobs = _load()
+        job = _printing_job(jobs, printer_id)
+        if job is None:
+            return
+        job["status"] = {"complete": "done", "error": "error"}.get(end_state, "stopped")
+        job["error"] = message if job["status"] == "error" else None
+        job["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+        _save(jobs)
+
+
+def expire_unstarted(now: float | None = None) -> None:
+    """A job sent to a printer that never began printing it isn't left "printing" forever."""
+    now = time.time() if now is None else now
+    with _lock:
+        jobs = _load()
+        changed = False
+        for j in jobs:
+            if (j["status"] == "printing" and not j.get("print_seen")
+                    and now - j.get("sent_ts", now) > START_TIMEOUT_S):
+                j["status"] = "error"
+                j["error"] = "The printer never started this print."
+                j["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+                changed = True
+        if changed:
+            _save(jobs)
+
+
 async def assign_loop() -> None:
     while True:
         await asyncio.sleep(15)
         try:
+            expire_unstarted()
             assign_ready_jobs()
         except Exception as e:
             print(f"[Queue] assign_ready_jobs failed: {type(e).__name__}: {e}")

@@ -34,8 +34,10 @@ function _setQueueBadge() {
 }
 
 const _STATUS_LABEL = {
-  queued: "In queue", assigned: "Ready", printing: "Printing", done: "Done", cancelled: "Cancelled",
+  queued: "In queue", assigned: "Ready", printing: "Printing", done: "Done", error: "Error",
+  stopped: "Stopped", cancelled: "Cancelled",
 };
+const _FINISHED = ["done", "error", "stopped", "cancelled"];
 
 function _printerName(id) { return (printers[id] || {}).name || id; }
 
@@ -66,11 +68,12 @@ function _jobAddedText(j) {
 function _jobHtml(j, place, count) {
   const canMove = count > 1 && (window.SPOOLER_PERMS || []).includes("queue.manage");
   const canCancel = j.status === "queued" || j.status === "assigned";
-  const canRemove = j.status === "done" || j.status === "cancelled";
+  const canRemove = _FINISHED.includes(j.status);
   return `<div class="queue-job" data-job="${escAttr(j.id)}">
     <div class="queue-job-main">
       <div class="queue-job-name">${escHtml(j.filename)}</div>
-      <div class="queue-job-reqs">${escHtml(_jobRequirementsText(j))}</div>
+      <div class="queue-job-reqs">${escHtml(j.status === "printing"
+        ? `On ${_printerName(j.assigned_printer_id)}` : _jobRequirementsText(j))}</div>
       ${_jobAddedText(j) ? `<div class="queue-job-added">${escHtml(_jobAddedText(j))}</div>` : ""}
       ${j.error ? `<div class="queue-job-error">${escHtml(j.error)}</div>` : ""}
     </div>
@@ -95,9 +98,10 @@ function _printerOptionsHtml() {
 
 function renderQueue() {
   const host = document.getElementById("queue-body");
-  // the server sends them next-first: jobs ready on a printer, then the waiting ones in order
+  // the server sends them next-first: what's printing, jobs ready on a printer, then the waiting ones in order
+  const printing = _queueJobs.filter(j => j.status === "printing");
   const active = _queueJobs.filter(j => j.status === "queued" || j.status === "assigned");
-  const finished = _queueJobs.filter(j => j.status === "done" || j.status === "cancelled");
+  const finished = _queueJobs.filter(j => _FINISHED.includes(j.status));
   host.innerHTML = `
     <details class="queue-form" open>
       <summary>Add to queue</summary>
@@ -119,6 +123,8 @@ function renderQueue() {
         <span id="queue-upload-status"></span>
       </div>
     </details>
+    ${printing.length ? `<div class="service-h">Printing</div>
+      <div class="service-card">${printing.map(j => _jobHtml(j)).join("")}</div>` : ""}
     <div class="service-h">In queue</div>
     <div class="service-card">${active.length ? active.map((j, n) => _jobHtml(j, n, active.length)).join("")
         : '<p class="service-empty">Nothing queued.</p>'}</div>

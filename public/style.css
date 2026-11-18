@@ -1818,6 +1818,8 @@ main {
 .queue-status-assigned { background: rgba(255,107,43,.14); color: var(--accent); }
 .queue-status-printing { background: rgba(59,130,246,.14); color: var(--blue); }
 .queue-status-done { background: rgba(34,197,94,.14); color: var(--green); }
+.queue-status-error { background: rgba(239,68,68,.14); color: var(--red); }
+.queue-status-stopped,
 .queue-status-cancelled { color: var(--text-dim-strong); }
 .queue-job-actions { display: flex; gap: 6px; flex: none; }
 

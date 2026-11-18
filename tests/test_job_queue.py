@@ -272,16 +272,91 @@ def test_confirm_plate_cleared_uploads_and_starts_then_consumes_one_unit(tmp_pat
     job_queue.assign_ready_jobs()
     run(job_queue.confirm_plate_cleared("p1"))
     assert printer.uploaded[2] is True  # start_after
-    job = job_queue.list_jobs()[0]
+    printing, job = job_queue.list_jobs()
     assert job["quantity"] == 1 and job["status"] == "queued" and job["assigned_printer_id"] is None
+    # the copy now on the printer has its own entry
+    assert printing["status"] == "printing" and printing["assigned_printer_id"] == "p1"
+    assert printing["quantity"] == 1 and printing["run_of"] == job["id"] and printing["id"] != job["id"]
 
 
-def test_confirm_plate_cleared_marks_done_when_quantity_reaches_zero(tmp_path):
+def test_confirm_plate_cleared_leaves_the_job_printing_not_done(tmp_path):
     state.printers["p1"] = FakePrinter("p1")
     job_queue.add_job(_gcode(tmp_path), "a.gcode", {"quantity": 1})
     job_queue.assign_ready_jobs()
     run(job_queue.confirm_plate_cleared("p1"))
-    assert job_queue.list_jobs()[0]["status"] == "done"
+    job = job_queue.list_jobs()[0]
+    assert job["status"] == "printing" and job["assigned_printer_id"] == "p1"
+
+
+def _printing_on_p1(tmp_path, quantity=1):
+    state.printers["p1"] = FakePrinter("p1")
+    job_queue.add_job(_gcode(tmp_path), "a.gcode", {"quantity": quantity})
+    job_queue.assign_ready_jobs()
+    run(job_queue.confirm_plate_cleared("p1"))
+
+
+@pytest.mark.parametrize("end_state, status", [("complete", "done"), ("error", "error"), ("cancelled", "stopped")])
+def test_the_printing_job_follows_how_the_print_ended(tmp_path, end_state, status):
+    _printing_on_p1(tmp_path)
+    job_queue.print_started("p1")
+    job_queue.print_ended("p1", end_state, "Nozzle clog" if end_state == "error" else None)
+    job = job_queue.list_jobs()[0]
+    assert job["status"] == status and job["finished_at"]
+    assert job["error"] == ("Nozzle clog" if status == "error" else None)
+
+
+def test_a_print_ending_on_another_printer_leaves_the_job_alone(tmp_path):
+    _printing_on_p1(tmp_path)
+    job_queue.print_ended("p2", "complete")
+    assert job_queue.list_jobs()[0]["status"] == "printing"
+
+
+def test_only_the_copy_that_printed_is_done(tmp_path):
+    _printing_on_p1(tmp_path, quantity=2)
+    job_queue.print_started("p1")
+    job_queue.print_ended("p1", "complete")
+    by_status = {j["status"]: j for j in job_queue.list_jobs()}
+    assert set(by_status) == {"done", "queued"} and by_status["queued"]["quantity"] == 1
+
+
+def test_a_printer_just_sent_a_job_gets_no_new_one_until_it_reports_printing(tmp_path):
+    _printing_on_p1(tmp_path, quantity=2)
+    job_queue.assign_ready_jobs()     # p1 still says idle: the start hasn't shown up yet
+    assert [j["status"] for j in job_queue.list_jobs()] == ["printing", "queued"]
+    job_queue.print_started("p1")
+    job_queue.print_ended("p1", "complete")
+    job_queue.assign_ready_jobs()
+    assert job_queue.list_jobs()[0]["status"] == "assigned"
+
+
+def test_a_job_the_printer_never_started_is_given_up_on(tmp_path):
+    import time
+    _printing_on_p1(tmp_path)
+    job_queue.expire_unstarted(time.time() + 60)
+    assert job_queue.list_jobs()[0]["status"] == "printing"
+    job_queue.expire_unstarted(time.time() + job_queue.START_TIMEOUT_S + 1)
+    job = job_queue.list_jobs()[0]
+    assert job["status"] == "error" and "never started" in job["error"]
+
+
+def test_a_job_that_did_start_is_not_given_up_on(tmp_path):
+    import time
+    _printing_on_p1(tmp_path)
+    job_queue.print_started("p1")
+    job_queue.expire_unstarted(time.time() + job_queue.START_TIMEOUT_S + 1)
+    assert job_queue.list_jobs()[0]["status"] == "printing"
+
+
+def test_finished_jobs_are_listed_newest_first(tmp_path):
+    a = job_queue.add_job(_gcode(tmp_path, "a.gcode"), "a.gcode", {})
+    b = job_queue.add_job(_gcode(tmp_path, "b.gcode"), "b.gcode", {})
+    job_queue.update_job(a["id"], {"status": "cancelled"})
+    jobs = job_queue._load()
+    for j in jobs:
+        j["finished_at"] = "2026-11-18T10:00:00" if j["id"] == a["id"] else "2026-11-18T11:00:00"
+        j["status"] = "done" if j["id"] == b["id"] else j["status"]
+    job_queue._save(jobs)
+    assert [j["id"] for j in job_queue.list_jobs()] == [b["id"], a["id"]]
 
 
 def test_confirm_plate_cleared_refuses_without_an_assigned_job(tmp_path):
@@ -317,7 +392,7 @@ def test_confirm_plate_cleared_starts_an_existing_printer_file_without_uploading
     run(job_queue.confirm_plate_cleared("p1"))
     assert printer.uploaded is None  # never uploaded, only started
     assert printer.started == "/local/benchy.gcode"
-    assert job_queue.list_jobs()[0]["status"] == "done"
+    assert job_queue.list_jobs()[0]["status"] == "printing"
 
 
 def test_confirm_plate_cleared_leaves_job_assigned_when_start_fails(tmp_path):
@@ -367,7 +442,7 @@ def test_confirm_plate_cleared_starts_with_the_dialog_choices(tmp_path):
     run(job_queue.confirm_plate_cleared("p1", opts))
     assert printer.uploaded[2] is False   # uploaded, then started with the options
     assert printer.started == "a.gcode" and printer.started_opts == opts
-    assert job_queue.list_jobs()[0]["status"] == "done"
+    assert job_queue.list_jobs()[0]["status"] == "printing"
 
 
 def test_confirm_route_passes_the_dialog_choices(monkeypatch):
