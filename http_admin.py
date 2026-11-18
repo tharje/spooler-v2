@@ -402,7 +402,7 @@ class AdminMixin:
 
     @requires_feature("job_queue")
     def _handle_queue_update(self):
-        """PATCH /api/queue/<job id> {priority?, quantity?, status: "cancelled"?}"""
+        """PATCH /api/queue/<job id> {priority?, quantity?, move: "up"|"down"?, status: "cancelled"?}"""
         job_id = urllib.parse.unquote(self.path[len("/api/queue/"):])
         try:
             changes = json.loads(self._read_body() or b"{}")

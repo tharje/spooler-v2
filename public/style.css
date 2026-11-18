@@ -1809,7 +1809,7 @@ main {
 .queue-form-grid select option { background: var(--surface2); color: var(--text); }
 .queue-job { display: flex; gap: 12px; align-items: center; padding: 10px 0; flex-wrap: wrap; }
 .queue-job + .queue-job { border-top: 1px solid var(--border); }
-.queue-job-main { flex: 1; min-width: 0; }
+.queue-job-main { flex: 1 1 200px; min-width: 0; }
 .queue-job-name { font-weight: 600; font-size: 14px; word-break: break-word; }
 .queue-job-reqs { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
 .queue-job-added { color: var(--text-muted); font-size: 12px; margin-top: 2px; }

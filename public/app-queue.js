@@ -61,7 +61,10 @@ function _jobAddedText(j) {
 // All text interpolated below is escaped with escHtml/escAttr (same helpers
 // used by app-service.js and app-stats.js for the same kind of user-entered
 // strings: filenames, free-text requirement fields).
-function _jobHtml(j) {
+// place/count: where a waiting job is in line (0-based) and how many wait, for
+// the move buttons; left out for jobs that aren't waiting.
+function _jobHtml(j, place, count) {
+  const canMove = j.status === "queued" && count > 1 && (window.SPOOLER_PERMS || []).includes("queue.manage");
   const canCancel = j.status === "queued" || j.status === "assigned";
   const canRemove = j.status === "done" || j.status === "cancelled";
   return `<div class="queue-job" data-job="${escAttr(j.id)}">
@@ -73,6 +76,10 @@ function _jobHtml(j) {
     </div>
     <div class="queue-job-status queue-status-${j.status}">${_STATUS_LABEL[j.status] || j.status}</div>
     <div class="queue-job-actions">
+      ${canMove ? `<button class="btn btn-secondary btn-sm" data-move="up" data-job-id="${escAttr(j.id)}"
+          title="Move up" aria-label="Move up"${place === 0 ? " disabled" : ""}>▲</button>
+        <button class="btn btn-secondary btn-sm" data-move="down" data-job-id="${escAttr(j.id)}"
+          title="Move down" aria-label="Move down"${place === count - 1 ? " disabled" : ""}>▼</button>` : ""}
       ${j.status === "assigned"
         ? `<button class="btn btn-primary btn-sm" data-start="${escAttr(j.id)}">Plate tømt – start</button>`
         : ""}
@@ -88,7 +95,9 @@ function _printerOptionsHtml() {
 
 function renderQueue() {
   const host = document.getElementById("queue-body");
+  // the server sends them next-first: jobs ready on a printer, then the waiting ones in order
   const active = _queueJobs.filter(j => j.status === "queued" || j.status === "assigned");
+  const waiting = active.filter(j => j.status === "queued");
   const finished = _queueJobs.filter(j => j.status === "done" || j.status === "cancelled");
   host.innerHTML = `
     <details class="queue-form" open>
@@ -105,7 +114,6 @@ function renderQueue() {
         <label>Material<input id="q-material" type="text" maxlength="40" placeholder="e.g. PLA" /></label>
         <label>Colour<input id="q-colour" type="text" maxlength="40" placeholder="e.g. Black" /></label>
         <label>Quantity<input id="q-quantity" type="number" min="1" value="1" /></label>
-        <label>Priority<input id="q-priority" type="number" value="0" title="Higher goes first" /></label>
       </div>
       <div id="queue-upload-progress" class="files-upload-progress" style="display:none">
         <div id="queue-upload-bar" class="files-upload-bar"></div>
@@ -113,10 +121,10 @@ function renderQueue() {
       </div>
     </details>
     <div class="service-h">In queue</div>
-    <div class="service-card">${active.length ? active.map(_jobHtml).join("")
+    <div class="service-card">${active.length ? active.map(j => _jobHtml(j, waiting.indexOf(j), waiting.length)).join("")
         : '<p class="service-empty">Nothing queued.</p>'}</div>
     ${finished.length ? `<div class="service-h">Finished</div>
-      <div class="service-card">${finished.map(_jobHtml).join("")}</div>` : ""}`;
+      <div class="service-card">${finished.map(j => _jobHtml(j)).join("")}</div>` : ""}`;
 }
 
 function _uploadToQueue(file) {
@@ -124,7 +132,7 @@ function _uploadToQueue(file) {
   const v = (id) => document.getElementById(id).value;
   const params = new URLSearchParams({
     name: file.name, printer_type: v("q-printer-type"), printer_id: v("q-printer-id"),
-    material: v("q-material"), colour: v("q-colour"), quantity: v("q-quantity"), priority: v("q-priority"),
+    material: v("q-material"), colour: v("q-colour"), quantity: v("q-quantity"),
   });
   const prog = document.getElementById("queue-upload-progress");
   const bar = document.getElementById("queue-upload-bar");
@@ -168,6 +176,9 @@ document.getElementById("queue-body").addEventListener("click", (ev) => {
     // the start dialog: filament slot per tool, leveling, timelapse, plate
     const job = _queueJobs.find(j => j.id === t.dataset.start);
     if (job) openQueueStartOpts(job);
+  } else if (t.dataset.move) {
+    _queueCall("PATCH", `/api/queue/${encodeURIComponent(t.dataset.jobId)}`, { move: t.dataset.move })
+      .then(loadQueue).catch(e => toast(e.message, true));
   } else if (t.dataset.cancel) {
     _queueCall("PATCH", `/api/queue/${encodeURIComponent(t.dataset.cancel)}`, { status: "cancelled" })
       .then(loadQueue).catch(e => toast(e.message, true));

@@ -85,6 +85,72 @@ def test_list_jobs_sorts_active_first_by_priority_then_age(tmp_path):
     assert [j["id"] for j in jobs] == [high["id"], low["id"]]
 
 
+def test_list_jobs_puts_the_job_ready_on_a_printer_first(tmp_path):
+    ready = job_queue.add_job(_gcode(tmp_path, "ready.gcode"), "ready.gcode", {})
+    waiting = job_queue.add_job(_gcode(tmp_path, "waiting.gcode"), "waiting.gcode", {})
+    jobs = job_queue._load()
+    jobs[0]["status"] = "assigned"
+    job_queue._save(jobs)
+    assert [j["id"] for j in job_queue.list_jobs()] == [ready["id"], waiting["id"]]
+
+
+def _queued_names():
+    return [j["filename"] for j in job_queue.list_jobs() if j["status"] == "queued"]
+
+
+def test_waiting_jobs_go_oldest_first_and_can_be_moved(tmp_path):
+    for n in ("a", "b", "c"):
+        job_queue.add_job(_gcode(tmp_path, f"{n}.gcode"), f"{n}.gcode", {})
+    ids = {j["filename"]: j["id"] for j in job_queue.list_jobs()}
+    assert _queued_names() == ["a.gcode", "b.gcode", "c.gcode"]
+    job_queue.update_job(ids["c.gcode"], {"move": "up"})
+    assert _queued_names() == ["a.gcode", "c.gcode", "b.gcode"]
+    job_queue.update_job(ids["a.gcode"], {"move": "down"})
+    assert _queued_names() == ["c.gcode", "a.gcode", "b.gcode"]
+    job_queue.update_job(ids["c.gcode"], {"move": "up"})       # already first: nothing changes
+    assert _queued_names() == ["c.gcode", "a.gcode", "b.gcode"]
+
+
+def test_moving_past_a_higher_priority_job_sticks(tmp_path):
+    job_queue.add_job(_gcode(tmp_path, "low.gcode"), "low.gcode", {})
+    high = job_queue.add_job(_gcode(tmp_path, "high.gcode"), "high.gcode", {"priority": 9})
+    assert _queued_names() == ["high.gcode", "low.gcode"]
+    job_queue.update_job(high["id"], {"move": "down"})
+    assert _queued_names() == ["low.gcode", "high.gcode"]
+    # a new job with no priority still goes last
+    job_queue.add_job(_gcode(tmp_path, "new.gcode"), "new.gcode", {})
+    assert _queued_names() == ["low.gcode", "high.gcode", "new.gcode"]
+
+
+def test_a_new_job_with_priority_goes_before_lower_ones(tmp_path):
+    job_queue.add_job(_gcode(tmp_path, "a.gcode"), "a.gcode", {})
+    job_queue.add_job(_gcode(tmp_path, "b.gcode"), "b.gcode", {})
+    job_queue.add_job(_gcode(tmp_path, "rush.gcode"), "rush.gcode", {"priority": 5})
+    assert _queued_names() == ["rush.gcode", "a.gcode", "b.gcode"]
+
+
+def test_a_free_printer_gets_the_job_at_the_top(tmp_path):
+    state.printers["p1"] = FakePrinter("p1")
+    job_queue.add_job(_gcode(tmp_path, "a.gcode"), "a.gcode", {})
+    b = job_queue.add_job(_gcode(tmp_path, "b.gcode"), "b.gcode", {})
+    job_queue.update_job(b["id"], {"move": "up"})
+    job_queue.assign_ready_jobs()
+    assert job_queue.get_job(b["id"])["status"] == "assigned"
+    assert _queued_names() == ["a.gcode"]
+
+
+def test_only_waiting_jobs_can_be_moved(tmp_path):
+    job = job_queue.add_job(_gcode(tmp_path), "a.gcode", {})
+    job_queue.update_job(job["id"], {"status": "cancelled"})
+    with pytest.raises(job_queue.QueueError):
+        job_queue.update_job(job["id"], {"move": "up"})
+    with pytest.raises(job_queue.QueueError):
+        job_queue.update_job("nope", {"move": "up"})
+    other = job_queue.add_job(_gcode(tmp_path, "b.gcode"), "b.gcode", {})
+    with pytest.raises(job_queue.QueueError):
+        job_queue.update_job(other["id"], {"move": "sideways"})
+
+
 def test_update_job_changes_priority_and_quantity(tmp_path):
     job = job_queue.add_job(_gcode(tmp_path), "a.gcode", {})
     updated = job_queue.update_job(job["id"], {"priority": 7, "quantity": 3})

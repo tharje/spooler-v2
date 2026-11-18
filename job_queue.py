@@ -36,6 +36,9 @@ from uploads import UploadError, sanitize_filename
 QUEUE_DIR = DATA_DIR / "queue"
 QUEUE_FILE = QUEUE_DIR / "queue.json"
 STATUSES = ("queued", "assigned", "printing", "done", "cancelled")
+# How the list is shown: what's on a printer first, then the waiting jobs in
+# the order they'll go, then the finished ones.
+_LIST_RANK = {s: i for i, s in enumerate(("printing", "assigned", "queued", "done", "cancelled"))}
 _lock = threading.Lock()
 
 
@@ -77,9 +80,28 @@ def _seconds(text) -> int | None:
     return sum(int(n) * unit[u] for n, u in parts)
 
 
+def _queue_order(jobs: list) -> list:
+    """The waiting jobs, next one first. The queue's order is the order of the
+    records in queue.json; priority only decides where a new job is put in
+    (see _insert). The sort is stable, so files from before manual ordering keep
+    their old priority-then-age order."""
+    return sorted((j for j in jobs if j["status"] == "queued"), key=lambda j: -j.get("priority", 0))
+
+
+def _insert(jobs: list, job: dict) -> None:
+    """Put a new job last among the waiting jobs with the same or higher
+    priority, i.e. before the first one with a lower priority."""
+    for i, other in enumerate(jobs):
+        if other["status"] == "queued" and other.get("priority", 0) < job["priority"]:
+            jobs.insert(i, job)
+            return
+    jobs.append(job)
+
+
 def list_jobs() -> list:
-    """Queued/assigned jobs first (by priority, then age), finished ones last. Uploaded
-    files queued before their print info was kept get it now."""
+    """Jobs on a printer first, then the waiting ones in queue order (next one
+    first), finished ones last. Uploaded files queued before their print info
+    was kept get it now."""
     with _lock:
         jobs = _load()
         missing = [j for j in jobs if j.get("source") == "upload" and "print_info" not in j]
@@ -91,8 +113,8 @@ def list_jobs() -> list:
                 j["print_info"] = {}
         if missing:
             _save(jobs)
-    rank = {s: i for i, s in enumerate(STATUSES)}
-    return sorted(jobs, key=lambda j: (rank.get(j["status"], 99), -j.get("priority", 0), j["added_at"]))
+    queued = {j["id"]: i for i, j in enumerate(_queue_order(jobs))}
+    return sorted(jobs, key=lambda j: (_LIST_RANK.get(j["status"], 99), queued.get(j["id"], 0)))
 
 
 def get_job(job_id: str) -> dict | None:
@@ -158,7 +180,7 @@ def add_job(local_path: Path, filename: str, requirements: dict) -> dict:
     }
     with _lock:
         jobs = _load()
-        jobs.append(job)
+        _insert(jobs, job)
         _save(jobs)
     return job
 
@@ -194,16 +216,21 @@ def add_existing_job(printer_id: str, filename: str, requirements: dict) -> dict
     }
     with _lock:
         jobs = _load()
-        jobs.append(job)
+        _insert(jobs, job)
         _save(jobs)
     return job
 
 
 def update_job(job_id: str, changes: dict) -> dict:
     """Priority and quantity can be edited any time; a queued job can also be
-    cancelled. Nothing else is editable once a job exists (re-add instead)."""
+    moved one place up or down ({"move": "up"|"down"}) or cancelled. Nothing
+    else is editable once a job exists (re-add instead)."""
     with _lock:
         jobs = _load()
+        if "move" in changes:
+            job = _move(jobs, job_id, changes["move"])
+            _save(jobs)
+            return job
         for job in jobs:
             if job["id"] == job_id:
                 if job["status"] not in ("queued", "assigned") and changes.get("status") != "cancelled":
@@ -218,6 +245,30 @@ def update_job(job_id: str, changes: dict) -> dict:
                 _save(jobs)
                 return job
     raise QueueError("Job not found.")
+
+
+def _move(jobs: list, job_id: str, direction) -> dict:
+    """Swap a waiting job with the one before or after it in the queue. It takes
+    over its neighbour's priority, so a later job added with a priority still
+    lands where that priority says."""
+    if direction not in ("up", "down"):
+        raise QueueError("move must be up or down.")
+    order = _queue_order(jobs)
+    i = next((n for n, j in enumerate(order) if j["id"] == job_id), None)
+    if i is None:
+        if any(j["id"] == job_id for j in jobs):
+            raise QueueError("Only jobs that are waiting can be moved.")
+        raise QueueError("Job not found.")
+    k = i - 1 if direction == "up" else i + 1
+    if not 0 <= k < len(order):
+        return order[i]
+    order[i], order[k] = order[k], order[i]
+    order[k]["priority"] = order[i].get("priority", 0)
+    # write the new order back into the queued records' slots in the file
+    slots = [n for n, j in enumerate(jobs) if j["status"] == "queued"]
+    for n, j in zip(slots, order):
+        jobs[n] = j
+    return order[k]
 
 
 def delete_job(job_id: str) -> None:
@@ -277,7 +328,7 @@ def _best_printer_for(job: dict, available: list) -> object | None:
 
 
 def assign_ready_jobs() -> None:
-    """Called periodically: give each queued job, in priority order, the
+    """Called periodically: give each queued job, in queue order, the
     best idle printer that's not already holding a different job -- a
     printer whose linked spool matches the job's material is preferred over
     one that doesn't (or can't be checked). Never uploads or starts
@@ -293,10 +344,8 @@ def assign_ready_jobs() -> None:
                      and p.to_dict().get("state") in ("idle", "complete", "cancelled")]
         if not available:
             return
-        queued = sorted((j for j in jobs if j["status"] == "queued"),
-                         key=lambda j: (-j["priority"], j["added_at"]))
         changed = False
-        for job in queued:
+        for job in _queue_order(jobs):
             printer = _best_printer_for(job, available)
             if printer is not None:
                 job["status"] = "assigned"
