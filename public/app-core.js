@@ -505,6 +505,11 @@ function renderReasonBox(printer) {
 function getProgress(printer) {
   const pi = printer.status?.PrintInfo;
   if (!pi) return null;
+  // TotalTicks 100 means CurrentTicks is a percentage (CC2, Moonraker, PrusaLink): the
+  // printer's own figure, the one on its screen and in the slicer. It goes first; layers
+  // understate it, as the first layers take longest (issue #56). CC1 ticks are seconds.
+  if (pi.TotalTicks === 100)
+    return Math.max(0, Math.min(100, Math.round(pi.CurrentTicks ?? 0)));
   if ((pi.TotalLayer ?? 0) > 0)
     return Math.min(100, Math.round((pi.CurrentLayer / pi.TotalLayer) * 100));
   if ((pi.TotalTicks ?? 0) > 0)
