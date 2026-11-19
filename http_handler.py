@@ -783,7 +783,7 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
         elif self.path.startswith("/api/upload/"):
             if self._require("print.start"):
                 self._handle_upload()
-        elif self.path == "/api/queue/upload":
+        elif self.path.split("?")[0] == "/api/queue/upload":     # the file's name and requirements come in the query
             if self._require("print.queue"):
                 self._handle_queue_upload()
         elif self.path == "/api/queue/from-printer":

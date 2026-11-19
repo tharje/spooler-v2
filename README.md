@@ -49,6 +49,7 @@ Open **`http://<server-ip>:8080`** in your browser. On first visit you will be p
 - **Print speed control** – adjust speed while printing or paused (CC1 and CC2)
 - **Print options** – preview thumbnail, build plate, time-lapse and bed levelling before starting a print
 - **File browser and upload** – list, upload, start and delete files stored on the printer
+- **Print queue** – queue G-code files for a printer type or one printer, with the next job at the top and ▲▼ to change the order; a job waits for a free printer and starts only when you tap **Plate tømt – start**, which opens the start dialog to pick the filament slot for each tool and bed levelling, time-lapse and build plate; the job then shows **Printing** until the print is over, and **Done**, **Error** or **Stopped** after
 - **Canvas / AMS multi-material** – shows filament slots; link each slot to a Spoolman spool for per-tray deduction
 - **Filament tracking** – live mm/g per print; deducts from the correct spool on tray changes
 - **Stats & history** – statistics per period and printer, every past print with the picture taken when it ended, its details and a reference number you can put on it; CSV export
@@ -168,7 +169,7 @@ Built-in roles:
 - **Operator** – print, start prints and control the printer (pause, resume, stop, light, speed)
 - **Viewer** – look only
 
-You can edit Operator and Viewer or make your own roles by ticking permissions, for example who may add, rename and remove printers or change their address, who may change settings, and who may set up their own notification channels.
+You can edit Operator and Viewer or make your own roles by ticking permissions, for example who may add, rename and remove printers or change their address, who may change settings, who may change the order of the print queue (*Change the order of the print queue*, for a shift lead), and who may set up their own notification channels.
 
 Tap your own name at the bottom of the side menu for your **Me** page: your role and what you may do, your prints with records and milestones (counted for prints started from Spooler, from 2.3.5 on), the devices that get push notifications for you, your queue jobs and recent commands, and your account (password, light/dark, sign out on other devices).
 

@@ -24,6 +24,7 @@ import firmware
 import ledger
 import service
 import dataset
+import job_queue
 import spaghetti
 from printaccount import PrintAccounting, clear_active, load_active, save_active
 from spoolman import get_spool_density, last_spool_info
@@ -455,6 +456,17 @@ class PrinterConnection:
         if info.get("status") == "found" and self._acct is acct:
             acct.start_spool = info.get("spool_id")
             self._save_accounting(force=True)
+
+    def _queue_print_ended(self, cur_status: int) -> None:
+        """Tell the print queue the print here is over, before the history entry
+        goes out (the browsers reload the queue when it does)."""
+        end_state = "complete" if cur_status == 9 else ("error" if cur_status == 14 else "cancelled")
+        reason = self.state_reason
+        message = reason["message"] if reason and reason["kind"] == "error" and reason.get("message") else None
+        try:
+            job_queue.print_ended(self.id, end_state, message)
+        except Exception as e:
+            print(f"[Printer {self.name}] Could not update the print queue: {type(e).__name__}: {e}")
 
     async def _flush_orphaned_accounting(self, saved: PrintAccounting) -> None:
         """Spooler was down when a print ended. Deduct what it had seen so far,
@@ -952,6 +964,7 @@ class PrinterConnection:
             if cur_status == 9 and pi.get("Filename") == saved.filename:
                 saved.observe(pi.get("TotalExtrusion", 0) or 0)
             await self._flush_orphaned_accounting(saved)
+            self._queue_print_ended(cur_status)
             asyncio.create_task(self._auto_light(False))      # the print is over; the light it turned on may still be on
         elif first_status and now_active:
             # First thing seen after (re)start is a print in progress: carry on
@@ -988,6 +1001,10 @@ class PrinterConnection:
             self._save_accounting(force=True)
             asyncio.create_task(self._capture_start_spool(self._acct))
             asyncio.create_task(dataset.capture_before_print(self, pi))
+            try:
+                job_queue.print_started(self.id)
+            except Exception as e:
+                print(f"[Printer {self.name}] Could not update the print queue: {type(e).__name__}: {e}")
         elif self._acct is not None and now_active:
             self._observe_extrusion()
 
@@ -996,6 +1013,7 @@ class PrinterConnection:
             filename    = pi.get("Filename", "")
             print_time  = pi.get("PrintTime", 0) or 0
             completed   = cur_status == 9
+            self._queue_print_ended(cur_status)
             # The print may have ended while still paused (rare — most
             # protocols resume before stopping — but cheap to guard against
             # leaving a pause segment with no "until").

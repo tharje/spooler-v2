@@ -21,6 +21,7 @@ queue.json (the job list, in the same shape list_jobs() returns).
 
 import asyncio
 import json
+import re
 import threading
 import time
 import uuid
@@ -34,7 +35,14 @@ from uploads import UploadError, sanitize_filename
 
 QUEUE_DIR = DATA_DIR / "queue"
 QUEUE_FILE = QUEUE_DIR / "queue.json"
-STATUSES = ("queued", "assigned", "printing", "done", "cancelled")
+STATUSES = ("queued", "assigned", "printing", "done", "error", "stopped", "cancelled")
+# A print that ended on the printer: completed, failed, or stopped by someone.
+FINISHED = ("done", "error", "stopped", "cancelled")
+# How the list is shown: what's on a printer first, then the waiting jobs in
+# the order they'll go, then the finished ones.
+_LIST_RANK = {"printing": 0, "assigned": 1, "queued": 2}
+# A job sent to a printer that hasn't started printing it after this long is given up on.
+START_TIMEOUT_S = 10 * 60
 _lock = threading.Lock()
 
 
@@ -54,11 +62,67 @@ def _save(jobs: list) -> None:
     _atomic_write(QUEUE_FILE, json.dumps(jobs, indent=1))
 
 
+def print_info(meta: dict) -> dict:
+    """What the start dialog shows for a queued file: time, weight and the filament of each
+    tool in the slice ("color_map" as the CC2 reports it for its own files)."""
+    colours = [c.strip() for c in (meta.get("filament_colour") or "").split(";")]
+    types = [t.strip() for t in (meta.get("filament_type") or "").split(";")]
+    tools = [{"t": i, "color": c if re.fullmatch(r"#[0-9A-Fa-f]{6}", c) else "",
+              "name": types[i] if i < len(types) else ""}
+             for i, c in enumerate(colours) if c or (i < len(types) and types[i])]
+    return {"print_time": _seconds(meta.get("estimated_time")),
+            "filament_g": meta.get("filament_used_g"),
+            "color_map": tools}
+
+
+def _seconds(text) -> int | None:
+    """ "1h 8m 44s" (or "2d 3h 1m 0s") -> seconds, None if there is none."""
+    parts = re.findall(r"(\d+)\s*([dhms])", text or "")
+    if not parts:
+        return None
+    unit = {"d": 86400, "h": 3600, "m": 60, "s": 1}
+    return sum(int(n) * unit[u] for n, u in parts)
+
+
+def _queue_order(jobs: list) -> list:
+    """The waiting jobs, next one first. The queue's order is the order of the
+    records in queue.json; priority only decides where a new job is put in
+    (see _insert). The sort is stable, so files from before manual ordering keep
+    their old priority-then-age order."""
+    return sorted((j for j in jobs if j["status"] == "queued"), key=lambda j: -j.get("priority", 0))
+
+
+def _insert(jobs: list, job: dict) -> None:
+    """Put a new job last among the waiting jobs with the same or higher
+    priority, i.e. before the first one with a lower priority."""
+    for i, other in enumerate(jobs):
+        if other["status"] == "queued" and other.get("priority", 0) < job["priority"]:
+            jobs.insert(i, job)
+            return
+    jobs.append(job)
+
+
 def list_jobs() -> list:
-    """Queued/assigned jobs first (by priority, then age), finished ones last."""
-    jobs = _load()
-    rank = {s: i for i, s in enumerate(STATUSES)}
-    return sorted(jobs, key=lambda j: (rank.get(j["status"], 99), -j.get("priority", 0), j["added_at"]))
+    """Jobs on a printer first, then the waiting ones in queue order (next one
+    first), finished ones last. Uploaded files queued before their print info
+    was kept get it now."""
+    with _lock:
+        jobs = _load()
+        missing = [j for j in jobs if j.get("source") == "upload" and "print_info" not in j]
+        for j in missing:
+            path = QUEUE_DIR / f"{j['id']}.gcode"
+            try:
+                j["print_info"] = print_info(meta_for_file(path, j["filename"])) if path.exists() else {}
+            except Exception:
+                j["print_info"] = {}
+        if missing:
+            _save(jobs)
+    queued = {j["id"]: i for i, j in enumerate(_queue_order(jobs))}
+    finished = sorted((j for j in jobs if j["status"] not in _LIST_RANK),
+                      key=lambda j: j.get("finished_at") or "", reverse=True)    # newest first
+    active = sorted((j for j in jobs if j["status"] in _LIST_RANK),
+                    key=lambda j: (_LIST_RANK[j["status"]], queued.get(j["id"], 0)))
+    return active + finished
 
 
 def get_job(job_id: str) -> dict | None:
@@ -118,12 +182,13 @@ def add_job(local_path: Path, filename: str, requirements: dict) -> dict:
         "assigned_printer_id": None,
         "gcode_printer_model": gcode_model,
         "gcode_filament_type": first_value(meta, "filament_type"),
+        "print_info": print_info(meta),
         "owner": (requirements.get("owner") or "").strip() or None,
         "error": None,
     }
     with _lock:
         jobs = _load()
-        jobs.append(job)
+        _insert(jobs, job)
         _save(jobs)
     return job
 
@@ -159,14 +224,22 @@ def add_existing_job(printer_id: str, filename: str, requirements: dict) -> dict
     }
     with _lock:
         jobs = _load()
-        jobs.append(job)
+        _insert(jobs, job)
         _save(jobs)
     return job
 
 
 def update_job(job_id: str, changes: dict) -> dict:
-    """Priority and quantity can be edited any time; a queued job can also be
-    cancelled. Nothing else is editable once a job exists (re-add instead)."""
+    """Priority and quantity can be edited any time; a job still in the queue
+    can also be moved one place up or down ({"move": "up"|"down"}, see _move)
+    or cancelled. Nothing else is editable once a job exists (re-add instead)."""
+    if "move" in changes:
+        with _lock:
+            jobs = _load()
+            job = _move(jobs, job_id, changes["move"])
+            _save(jobs)
+        assign_ready_jobs()     # a printer whose job was moved away gets the new first one
+        return get_job(job["id"]) or job
     with _lock:
         jobs = _load()
         for job in jobs:
@@ -180,9 +253,54 @@ def update_job(job_id: str, changes: dict) -> dict:
                 if changes.get("status") == "cancelled":
                     job["status"] = "cancelled"
                     job["assigned_printer_id"] = None
+                    job["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
                 _save(jobs)
                 return job
     raise QueueError("Job not found.")
+
+
+def _active_order(jobs: list) -> list:
+    """The jobs still in the queue as the list shows them: the ones ready on a
+    printer first, then the waiting ones in queue order."""
+    return ([j for j in jobs if j["status"] == "assigned"]
+            + _queue_order(jobs))
+
+
+def _move(jobs: list, job_id: str, direction) -> dict:
+    """Swap a job with the one before or after it in the list. It takes over its
+    neighbour's priority, so a later job added with a priority still lands where
+    that priority says. A job that was ready on a printer and is part of the
+    swap goes back to waiting, so the printer is given whichever job is now
+    first (assign_ready_jobs, run by update_job right after)."""
+    if direction not in ("up", "down"):
+        raise QueueError("move must be up or down.")
+    order = _active_order(jobs)
+    i = next((n for n, j in enumerate(order) if j["id"] == job_id), None)
+    if i is None:
+        if any(j["id"] == job_id for j in jobs):
+            raise QueueError("That job is no longer in the queue.")
+        raise QueueError("Job not found.")
+    k = i - 1 if direction == "up" else i + 1
+    if not 0 <= k < len(order):
+        return order[i]
+    slots = [n for n, j in enumerate(jobs) if j["status"] in ("assigned", "queued")]
+    order[i], order[k] = order[k], order[i]
+    order[k]["priority"] = order[i].get("priority", 0)
+    for j in (order[i], order[k]):
+        if j["status"] == "assigned":
+            j["status"] = "queued"
+            j["assigned_printer_id"] = None
+    # write the new order back into the queue's slots in the file, and keep the
+    # waiting jobs' priorities falling along it so the file order is the queue order
+    for n, j in zip(slots, order):
+        jobs[n] = j
+    last = None
+    for j in jobs:
+        if j["status"] == "queued":
+            if last is not None and j.get("priority", 0) > last:
+                j["priority"] = last
+            last = j.get("priority", 0)
+    return order[k]
 
 
 def delete_job(job_id: str) -> None:
@@ -242,7 +360,7 @@ def _best_printer_for(job: dict, available: list) -> object | None:
 
 
 def assign_ready_jobs() -> None:
-    """Called periodically: give each queued job, in priority order, the
+    """Called periodically: give each queued job, in queue order, the
     best idle printer that's not already holding a different job -- a
     printer whose linked spool matches the job's material is preferred over
     one that doesn't (or can't be checked). Never uploads or starts
@@ -252,16 +370,16 @@ def assign_ready_jobs() -> None:
         return
     with _lock:
         jobs = _load()
-        assigned_printers = {j["assigned_printer_id"] for j in jobs if j["status"] == "assigned"}
+        # a printer that was just sent a job may not report printing yet
+        assigned_printers = {j["assigned_printer_id"] for j in jobs
+                             if j["status"] == "assigned" or (j["status"] == "printing" and not j.get("print_seen"))}
         available = [p for p in state.printers.values()
                      if p.id not in assigned_printers and p.connected
                      and p.to_dict().get("state") in ("idle", "complete", "cancelled")]
         if not available:
             return
-        queued = sorted((j for j in jobs if j["status"] == "queued"),
-                         key=lambda j: (-j["priority"], j["added_at"]))
         changed = False
-        for job in queued:
+        for job in _queue_order(jobs):
             printer = _best_printer_for(job, available)
             if printer is not None:
                 job["status"] = "assigned"
@@ -281,12 +399,28 @@ def assigned_job_for(printer_id: str) -> dict | None:
     return None
 
 
-async def confirm_plate_cleared(printer_id: str) -> dict:
+PRINT_OPTS = ("leveling", "timelapse", "smooth_plate")
+
+
+def clean_print_opts(raw) -> dict | None:
+    """The start dialog's choices, as start_print_file() takes them: the yes/no options and
+    the filament slot per tool (slot_map, checked against the printer by the printer)."""
+    if not isinstance(raw, dict):
+        return None
+    opts = {k: bool(raw.get(k)) for k in PRINT_OPTS}
+    if isinstance(raw.get("slot_map"), list):
+        opts["slot_map"] = raw["slot_map"]
+    return opts
+
+
+async def confirm_plate_cleared(printer_id: str, print_opts: dict | None = None,
+                                job_id: str | None = None) -> dict:
     """The user has cleared the plate and pressed the button on the card:
-    actually upload this printer's assigned job and start it. On success,
-    one unit is consumed -- if more are left, the job goes back to "queued"
-    for the next time this or another matching printer is free; otherwise
-    it's "done". On failure the job stays "assigned" so the button can be
+    actually upload this printer's assigned job and start it, with the options picked in
+    the start dialog (filament slots, leveling, ...; None: the printer's defaults). On success,
+    the job is "printing" until the printer says the print is over (print_ended).
+    If more copies are left, the one started gets its own "printing" entry and the
+    job goes back to "queued" for the next time this or another matching printer is free. On failure the job stays "assigned" so the button can be
     pressed again."""
     printer = state.printers.get(printer_id)
     if printer is None:
@@ -296,12 +430,15 @@ async def confirm_plate_cleared(printer_id: str) -> dict:
         job = next((j for j in jobs if j["status"] == "assigned" and j["assigned_printer_id"] == printer_id), None)
         if job is None:
             raise QueueError("No job is assigned to this printer.")
+        if job_id and job["id"] != job_id:
+            # the queue was reordered after the start dialog was opened
+            raise QueueError("The queue has changed: this printer now has a different job. Check it and press start again.")
     # Attribute the print to whoever queued it, for the history entry.
     printer._pending_owner = job.get("owner")
     try:
         if job.get("source") == "printer_file":
             # Already on this printer's own storage -- just start it, nothing to upload.
-            ok = await printer.start_print_file(job["filename"])
+            ok = await printer.start_print_file(job["filename"], print_opts=print_opts)
             fail_msg = "Could not start the print."
         else:
             if not _model_matches(job["gcode_printer_model"], printer.printer_type):
@@ -309,24 +446,31 @@ async def confirm_plate_cleared(printer_id: str) -> dict:
             path = QUEUE_DIR / f"{job['id']}.gcode"
             if not path.exists():
                 raise QueueError("The queued file is missing.")
-            ok = await printer.upload_file(path, job["filename"], start_after=True)
+            if print_opts is None:
+                ok = await printer.upload_file(path, job["filename"], start_after=True)
+            else:
+                ok = await printer.upload_file(path, job["filename"])
+                ok = ok and await printer.start_print_file(job["filename"], print_opts=print_opts)
             fail_msg = "Upload succeeded but starting the print failed."
     except UploadError as e:
         raise QueueError(str(e))
     with _lock:
         jobs = _load()
-        for j in jobs:
+        for n, j in enumerate(jobs):
             if j["id"] == job["id"]:
                 if not ok:
                     j["error"] = fail_msg
                     break
-                j["quantity"] -= 1
-                if j["quantity"] > 0:
+                j["error"] = None
+                if j["quantity"] > 1:
+                    # more copies to go: the one now on the printer gets its own entry
+                    j["quantity"] -= 1
                     j["status"] = "queued"
                     j["assigned_printer_id"] = None
+                    run = _started(dict(j, id=uuid.uuid4().hex, quantity=1, run_of=j["id"]), printer_id)
+                    jobs.insert(n, run)
                 else:
-                    j["status"] = "done"
-                j["error"] = None
+                    _started(j, printer_id)
                 break
         _save(jobs)
     if not ok:
@@ -334,10 +478,62 @@ async def confirm_plate_cleared(printer_id: str) -> dict:
     return job
 
 
+def _started(job: dict, printer_id: str) -> dict:
+    job.update(status="printing", assigned_printer_id=printer_id, print_seen=False,
+               started_at=time.strftime("%Y-%m-%dT%H:%M:%S"), sent_ts=time.time())
+    return job
+
+
+def _printing_job(jobs: list, printer_id: str) -> dict | None:
+    return next((j for j in jobs if j["status"] == "printing" and j["assigned_printer_id"] == printer_id), None)
+
+
+def print_started(printer_id: str) -> None:
+    """The printer reports a new print running: the job sent to it is really printing."""
+    with _lock:
+        jobs = _load()
+        job = _printing_job(jobs, printer_id)
+        if job is not None and not job.get("print_seen"):
+            job["print_seen"] = True
+            _save(jobs)
+
+
+def print_ended(printer_id: str, end_state: str, message: str | None = None) -> None:
+    """The print on this printer is over ("complete", "error" or "cancelled", as in the
+    history): the queue job that was printing there is done, failed or stopped."""
+    with _lock:
+        jobs = _load()
+        job = _printing_job(jobs, printer_id)
+        if job is None:
+            return
+        job["status"] = {"complete": "done", "error": "error"}.get(end_state, "stopped")
+        job["error"] = message if job["status"] == "error" else None
+        job["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+        _save(jobs)
+
+
+def expire_unstarted(now: float | None = None) -> None:
+    """A job sent to a printer that never began printing it isn't left "printing" forever."""
+    now = time.time() if now is None else now
+    with _lock:
+        jobs = _load()
+        changed = False
+        for j in jobs:
+            if (j["status"] == "printing" and not j.get("print_seen")
+                    and now - j.get("sent_ts", now) > START_TIMEOUT_S):
+                j["status"] = "error"
+                j["error"] = "The printer never started this print."
+                j["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+                changed = True
+        if changed:
+            _save(jobs)
+
+
 async def assign_loop() -> None:
     while True:
         await asyncio.sleep(15)
         try:
+            expire_unstarted()
             assign_ready_jobs()
         except Exception as e:
             print(f"[Queue] assign_ready_jobs failed: {type(e).__name__}: {e}")

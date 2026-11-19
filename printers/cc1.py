@@ -49,6 +49,10 @@ _ACK_MESSAGES = {
     5: "the file's format or resolution doesn't match the printer",
     6: "the file is for a different printer model",
 }
+# Starting a just-uploaded file: retries while the printer still says "file not found".
+START_RETRIES     = 5
+START_RETRY_DELAY = 2.0
+START_ACK_TIMEOUT = 5.0
 _CMD_NAMES = {128: "Start print", 129: "Pause", 130: "Stop", 131: "Resume"}
 
 _TIME_RE = re.compile(r'_(?:(\d+)h)?(\d+)m(?:(\d+)s)?\.[^.]+$')
@@ -96,6 +100,7 @@ class CC1Connection(PrinterConnection):
         self._prev_active_tray_id = -2   # sentinel: not yet seen
         self._canvas_poll_task    = None
         self._warned_slots        = False
+        self._start_ack           = None   # Future for the Ack of the pending start command
 
     async def connect(self) -> None:
         self._prev_active_tray_id = -2
@@ -261,7 +266,7 @@ class CC1Connection(PrinterConnection):
         self._cached_filename = bare
         opts = print_opts or {}
         print(f"[Printer {self.name}] CC1 start print: prefix={prefix!r} file={bare!r} opts={opts}")
-        return await self.send_cmd(CMD_START, {
+        data = {
             "Filename":           bare,
             "StartLayer":         0,
             "Calibration_switch": 1 if opts.get("leveling")     else 0,
@@ -269,7 +274,39 @@ class CC1Connection(PrinterConnection):
             "Tlp_Switch":         1 if opts.get("timelapse")    else 0,
             "slot_map":           [],
             "path_prefix":        prefix,
+        }
+        # Right after an upload the printer answers "file not found" (Ack 2) for a
+        # moment while it registers the new file, so wait for the Ack and retry that one.
+        for attempt in range(START_RETRIES + 1):
+            ack = await self._send_start(data)
+            if ack != 2 or attempt == START_RETRIES:
+                break
+            await asyncio.sleep(START_RETRY_DELAY)
+        if ack is False:
+            return False
+        if ack in (0, None):     # accepted, or no answer in time (older behaviour: assume sent)
+            return True
+        why = _ACK_MESSAGES.get(ack, f"error code {ack}")
+        print(f"[Printer {self.name}] CC1 command {CMD_START} rejected, Ack={ack}")
+        await state.broadcast_to_browsers({
+            "type": "error",
+            "message": f"{self.name}: {_CMD_NAMES[CMD_START]} was rejected — {why}.",
         })
+        return False
+
+    async def _send_start(self, data: dict):
+        """Send a start command and return its Ack: a number, None if none came in
+        time, or False if the command could not be sent at all."""
+        self._start_ack = asyncio.get_running_loop().create_future()
+        try:
+            if not await self.send_cmd(CMD_START, data):
+                return False
+            try:
+                return await asyncio.wait_for(asyncio.shield(self._start_ack), START_ACK_TIMEOUT)
+            except asyncio.TimeoutError:
+                return None
+        finally:
+            self._start_ack = None
 
     async def send_cmd(self, cmd: int, data: dict) -> bool:
         if not self.ws or not self.connected:
@@ -357,7 +394,9 @@ class CC1Connection(PrinterConnection):
                 await self._check_print_transition()
         elif cmd in (CMD_START, CMD_PAUSE, CMD_STOP, CMD_RESUME):
             ack = payload.get("Ack") if isinstance(payload, dict) else None
-            if ack not in (0, None):
+            if cmd == CMD_START and self._start_ack is not None and not self._start_ack.done():
+                self._start_ack.set_result(ack)     # start_print_file reports (and retries) it
+            elif ack not in (0, None):
                 why = _ACK_MESSAGES.get(ack, f"error code {ack}")
                 print(f"[Printer {self.name}] CC1 command {cmd} rejected, Ack={ack}")
                 await state.broadcast_to_browsers({

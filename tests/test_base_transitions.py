@@ -408,3 +408,41 @@ async def test_broadcast_state_never_touches_last_seen(printer):
 def test_to_dict_exposes_last_seen(printer):
     printer.last_seen = 12345.0
     assert printer.to_dict()["last_seen"] == 12345.0
+
+
+# ── the print queue follows the print ────────────────────────────────────────
+
+def _queue_job_printing_on(printer_id):
+    import job_queue
+    job = {"id": "q1", "status": "printing", "assigned_printer_id": printer_id, "print_seen": False,
+           "sent_ts": time.time(), "quantity": 1, "priority": 0, "filename": "a.gcode"}
+    job_queue._save([job])
+    return job_queue
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("end_code, status", [(9, "done"), (14, "error"), (8, "stopped")])
+async def test_the_queue_job_on_the_printer_follows_the_print(printer, end_code, status):
+    job_queue = _queue_job_printing_on("pid1")
+    _set_status(printer, 2, TotalExtrusion=0, Filename="a.gcode")
+    await printer._check_print_transition()
+    assert job_queue._load()[0]["print_seen"] is True and job_queue._load()[0]["status"] == "printing"
+    if end_code == 14:
+        printer.state_reason = {"kind": "error", "initiated_by": "printer", "code": "42", "category": "unknown",
+                                "message": "Nozzle thermal runaway", "raw": {}, "since": "2026-01-01T10:00:00"}
+    _set_status(printer, end_code, TotalExtrusion=400, Filename="a.gcode", PrintTime=90)
+    await printer._check_print_transition()
+    job = job_queue._load()[0]
+    assert job["status"] == status
+    assert job["error"] == ("Nozzle thermal runaway" if status == "error" else None)
+
+
+@pytest.mark.asyncio
+async def test_a_print_that_ended_while_spooler_was_off_still_finishes_the_queue_job(printer):
+    from printaccount import save_active
+    job_queue = _queue_job_printing_on("pid1")
+    save_active("pid1", PrintAccounting(filename="a.gcode", started_at=time.time() - 600))
+    printer._last_print_status = None        # Spooler just started
+    _set_status(printer, 9, TotalExtrusion=400, Filename="a.gcode")
+    await printer._check_print_transition()
+    assert job_queue._load()[0]["status"] == "done"

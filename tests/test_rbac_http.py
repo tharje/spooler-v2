@@ -177,6 +177,30 @@ def test_admin_can_cancel_anyones_job(people, monkeypatch):
     assert status == 200 and deleted == ["job1"]
 
 
+def test_moving_a_job_in_the_queue_needs_queue_manage(people, monkeypatch):
+    import features
+    monkeypatch.setattr(features, "is_enabled", lambda *_: True)
+    moved = []
+    monkeypatch.setattr(job_queue, "get_job", lambda jid: _fake_job("kid"))
+    monkeypatch.setattr(job_queue, "update_job", lambda jid, ch: moved.append((jid, ch)) or _fake_job("kid"))
+
+    status, data = _call("PATCH", "/api/queue/job1", people["kid"], {"move": "up"})
+    assert status == 403 and data["need"] == "queue.manage" and moved == []
+    status, _ = _call("PATCH", "/api/queue/job1", people["boss"], {"move": "up"})
+    assert status == 200 and moved == [("job1", {"move": "up"})]
+
+
+def test_a_role_given_queue_manage_can_move_jobs(people, monkeypatch):
+    import features
+    monkeypatch.setattr(features, "is_enabled", lambda *_: True)
+    monkeypatch.setattr(job_queue, "get_job", lambda jid: _fake_job("kid"))
+    monkeypatch.setattr(job_queue, "update_job", lambda jid, ch: _fake_job("kid"))
+    users.create_role("lead", ["view", "queue.manage"], "Lead")
+    users.create_user("lead1", "secret1", "lead")
+    status, _ = _call("PATCH", "/api/queue/job1", _session("lead1"), {"move": "down"})
+    assert status == 200
+
+
 # ── printer visibility ───────────────────────────────────────────────────────
 
 class _FakePrinter:
