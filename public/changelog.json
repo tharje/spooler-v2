@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.3.7",
+    "date": "2026-11-19",
+    "changes": [
+      "Print queue: adding a file to the queue works. The upload always answered 404 before.",
+      "Print queue: \"Plate tømt – start\" opens the same start dialog as the file browser: the filament slot for each tool on a CC2 Canvas (pre-picked by colour and material), bed leveling, time-lapse and the build plate.",
+      "Print queue: each job shows who added it and when. The next job is at the top, and jobs can be moved up and down, also the one ready on a printer.",
+      "Print queue: a started job shows Printing until the print is over, then Done, Error or Stopped. It used to say Done as soon as it was sent.",
+      "The card's percentage is the printer's own when it sends one (Centauri Carbon 2, Klipper, PrusaLink), the same as on its screen and in the slicer. It was worked out from layers, which runs well behind early in a print (#56)",
+      "Centauri Carbon 1: starting a print right after uploading it waits for the printer's answer, and tries again while the printer hasn't found the new file yet.",
+      "Centauri Carbon 2: firmware 02.01.01.13 is on the tested list.",
+      "README and web page: the print queue and its start dialog are described."
+    ]
+  },
+  {
     "version": "2.3.6",
     "date": "2026-11-16",
     "changes": [
