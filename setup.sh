@@ -15,7 +15,10 @@ if [ ! -d "$VENV" ]; then
 fi
 
 echo "Installing dependencies…"
-"$VENV/bin/pip" install --quiet websockets bcrypt
+# requirements.txt, not a hand-picked list: a hand-picked list silently loses
+# imports the code actually needs (aiomqtt for CC2, pywebpush for browser
+# push), so those features quietly don't work without Docker.
+"$VENV/bin/pip" install --quiet -r "$DIR/requirements.txt"
 
 echo ""
 echo "=== Starting Spooler ==="
