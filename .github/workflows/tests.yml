@@ -15,6 +15,13 @@ jobs:
         with:
           python-version: "3.12"
 
+      # test_frontend_split.py parses every app-*.js with `node --check` and
+      # skips silently when node is missing -- without this step the checks
+      # that keep the no-build-step frontend honest never run in CI.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 
