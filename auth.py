@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 try:
-    import bcrypt as _bcrypt
+    import bcrypt as _bcrypt  # noqa: F401 — availability probe; the import itself is the test
     BCRYPT_AVAILABLE = True
 except ImportError:
     BCRYPT_AVAILABLE = False

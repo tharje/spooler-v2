@@ -363,7 +363,7 @@ async def test_error_end_state_sets_history_fields(printer):
     assert entry["error_code"] == "42"
     assert entry["error_message"] == "Nozzle thermal runaway"
     assert entry["initiated_by"] == "printer"
-    assert "id" in entry and entry["id"]
+    assert entry.get("id")
 
 
 @pytest.mark.asyncio

@@ -539,7 +539,7 @@ class CC2Connection(PrinterConnection):
                                return_exceptions=True),
                 timeout=10,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             results = [None, {}]
         finally:
             self._pending_thumb_fut = None
@@ -744,7 +744,7 @@ class CC2Connection(PrinterConnection):
         key = {"nozzle": "extruder", "bed": "heater_bed"}.get(heater)
         if key is None:
             return False
-        return await self.send_cmd(1028, {key: int(round(target))})
+        return await self.send_cmd(1028, {key: round(target)})
 
     async def set_fan(self, fan: str, percent: int) -> bool:
         # Method 1030 takes PWM 0-255 per fan: "fan" (part cooling), "aux_fan",
@@ -921,11 +921,11 @@ class CC2Connection(PrinterConnection):
             status_code = 12
         elif status_code == 0 and ms_status in _MS_PREPARING:
             status_code = _MS_PREPARING[ms_status]
-        elif status_code == 0 and ms_status is not None and ms_status not in _MS_KNOWN_IDLE_OR_HANDLED:
-            if ms_status not in _logged_ms_status:
-                _logged_ms_status.add(ms_status)
-                print(f"[Printer {self.name}] CC2 machine_status.status {ms_status!r} not mapped -- "
-                      f"showing idle. Please report this on GitHub.")
+        elif status_code == 0 and ms_status is not None and ms_status not in _MS_KNOWN_IDLE_OR_HANDLED \
+                and ms_status not in _logged_ms_status:
+            _logged_ms_status.add(ms_status)
+            print(f"[Printer {self.name}] CC2 machine_status.status {ms_status!r} not mapped -- "
+                  f"showing idle. Please report this on GitHub.")
 
         self.phase = _cc2_phase(ms_status, sub_status, status_code)
 

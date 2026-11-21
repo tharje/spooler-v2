@@ -8,13 +8,11 @@ Subclasses (CC1Connection, CC2Connection, …) must implement:
 
 import asyncio
 import time
-import uuid
 
 import state
 from features import is_enabled
 from persistence import (
-    FILAMENT_DENSITY, append_history, filament_mm_to_grams, save_printers,
-    save_snapshot, update_history_entry,
+    FILAMENT_DENSITY, append_history, filament_mm_to_grams, save_snapshot, update_history_entry,
 )
 from printers.protocol import decode_printinfo
 import notify as notifylib
@@ -514,7 +512,7 @@ class PrinterConnection:
         await loop.run_in_executor(None, write)
         if any(r[3] == "pending" for r in rows):
             ledger.kick()
-        for spool_id, grams, mm, st, reason in rows:
+        for spool_id, grams, mm, st, _reason in rows:
             print(f"[Ledger] {self.name}: {mm:.0f} mm / {grams} g -> "
                   f"{('spool ' + str(spool_id)) if spool_id is not None else 'unknown spool'} ({st})")
         return used
@@ -738,7 +736,6 @@ class PrinterConnection:
         is_idle     = status == 0
         is_printing = status in PRINTING_STATUSES or status == 6
         is_done     = status in (9, 8)
-        last        = ns["last_status"]
 
         # CC2 typically goes 3→0 on completion (no 9/8 reported).
         # Fire "finished" on any transition away from an active print state.

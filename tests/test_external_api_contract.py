@@ -8,7 +8,6 @@ field instead, or introduce /api/external/v2.
 
 import io
 import json
-import re
 from pathlib import Path
 
 import pytest

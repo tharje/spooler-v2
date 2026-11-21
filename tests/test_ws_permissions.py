@@ -117,7 +117,6 @@ async def test_printers_manage_is_separate_from_settings(setup):
 
 
 def test_roles_with_settings_manage_get_printers_manage_once(tmp_path):
-    import persistence
     data = users._load()
     data.pop("printers_manage_split", None)
     data["roles"]["helper"] = {"permissions": ["view", "settings.manage"], "printers": "*"}

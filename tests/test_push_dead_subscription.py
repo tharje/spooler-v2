@@ -2,7 +2,6 @@
 
 import pytest
 
-import features
 import push
 
 

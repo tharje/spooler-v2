@@ -12,7 +12,7 @@ import threading
 import uuid
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 import notifiers
 import push
@@ -63,7 +63,7 @@ class Notification:
     time: str = field(default_factory=lambda: time.strftime("%Y-%m-%dT%H:%M:%S%z"))
     # One id per event (not per channel), so a receiver can spot the same event twice.
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"))
 
 
 def event_settings(event: str) -> dict:

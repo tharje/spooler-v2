@@ -296,7 +296,7 @@ def list_users() -> list[dict]:
 def _valid_username(name: str) -> str:
     name = (name or "").strip()
     if not name or len(name) > MAX_USERNAME_LEN:
-        raise ValueError("Username must be 1–%d characters." % MAX_USERNAME_LEN)
+        raise ValueError(f"Username must be 1–{MAX_USERNAME_LEN} characters.")
     if not all(c.isalnum() or c in "._-" for c in name):
         raise ValueError("Username may use letters, digits and . _ - only.")
     return name
@@ -392,7 +392,7 @@ def list_roles() -> list[dict]:
 def _valid_role_name(name: str) -> str:
     name = (name or "").strip().lower()
     if not name or len(name) > MAX_ROLE_LEN:
-        raise ValueError("Role name must be 1–%d characters." % MAX_ROLE_LEN)
+        raise ValueError(f"Role name must be 1–{MAX_ROLE_LEN} characters.")
     if not all(c.isalnum() or c in "._-" for c in name):
         raise ValueError("Role name may use letters, digits and . _ - only.")
     return name
@@ -453,7 +453,7 @@ def delete_role(name: str) -> None:
             raise ValueError("Built-in roles cannot be deleted.")
         in_use = [u for u, r in data["users"].items() if r.get("role") == name]
         if in_use:
-            raise ValueError("Role is assigned to %d user(s); reassign them first." % len(in_use))
+            raise ValueError(f"Role is assigned to {len(in_use)} user(s); reassign them first.")
         del data["roles"][name]
         _save(data)
 

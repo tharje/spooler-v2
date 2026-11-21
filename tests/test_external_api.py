@@ -2,7 +2,6 @@
 
 import io
 import json
-import uuid
 
 import pytest
 
