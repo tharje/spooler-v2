@@ -979,7 +979,11 @@ class CC2Connection(PrinterConnection):
             expected_mm = self._expected_filament_g * 10.0 / (math.pi * 0.0875 ** 2 * density)
             just_finished = state_str in ("complete", "standby") and self._prev_state_str in ("printing", "paused")
             if state_str == "printing" and (print_duration + remaining) > 0:
-                filament_mm = print_duration / (print_duration + remaining) * expected_mm
+                # The share of time drops when the printer raises its time-left
+                # estimate mid-print (#62: 71503 -> 59153 mm). Filament already
+                # extruded can't come back, so the figure only ever goes up.
+                filament_mm = max(self._last_active_filament_mm,
+                                  print_duration / (print_duration + remaining) * expected_mm)
                 self._last_active_filament_mm = filament_mm
             elif just_finished:
                 filament_mm = expected_mm
