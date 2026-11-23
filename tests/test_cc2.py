@@ -569,3 +569,23 @@ def test_fan_speeds_are_reported_as_percent():
     assert _fan_percents({"fan": {"speed": 255}, "aux_fan": {"speed": 0.5}, "box_fan": {"speed": 0}}) == \
         {"part": 100, "aux": 50, "chamber": 0}
     assert _fan_percents({"fan": {"speed": 128}, "box_fan": {}}) == {"part": 50}
+
+
+def test_filament_estimate_never_goes_back_when_time_left_is_raised(printer):
+    # #62: CC2 sends no filament figure; Spooler estimates it from the share of
+    # time done. When the printer raised its time-left estimate the figure fell
+    # (71503 -> 59153 mm) and was read as a counter reset, nearly doubling the
+    # deduction.
+    printer._expected_filament_g = 100.0
+    printer._prev_state_str = "printing"
+    printer._cc2_state["machine_status"] = {"sub_status": 0}
+
+    def at(duration, remaining):
+        printer._cc2_state["print_status"] = {"state": "printing", "print_duration": duration,
+                                              "remaining_time_sec": remaining}
+        printer._apply_cc2_status()
+        return printer.status["PrintInfo"]["TotalExtrusion"]
+
+    before = at(6000, 4000)                         # 60 % of the time
+    assert at(6060, 6000) == before                 # time left raised: 50 %, the figure holds
+    assert at(9000, 3000) > before                  # 75 %: it climbs again

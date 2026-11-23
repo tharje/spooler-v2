@@ -20,6 +20,11 @@ jobs:
         with:
           python-version: "3.12"
 
+      # Same as tests.yml: without node, test_frontend_split.py skips silently.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 

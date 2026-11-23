@@ -1,5 +1,14 @@
 [
   {
+    "version": "2.3.8",
+    "date": "2026-11-23",
+    "changes": [
+      "Centauri Carbon 2: filament is no longer deducted nearly twice in Spoolman. The CC2 sends no filament figure, so Spooler estimates it from the print time; when the printer raised its time-left estimate mid-print, the estimate fell and was taken for a counter reset. The estimate now never goes down during a print, and only a fall to near zero counts as a reset (#61, #62)",
+      "Python setup without Docker (setup.sh): installs everything in requirements.txt, so CC2 support and browser push work there too. It used to install only websockets and bcrypt (#59, thanks foobarth)",
+      "Tests: the frontend checks now run in GitHub's CI as well (#60, thanks foobarth)"
+    ]
+  },
+  {
     "version": "2.3.7",
     "date": "2026-11-19",
     "changes": [
