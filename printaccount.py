@@ -20,10 +20,12 @@ import uuid
 
 import persistence
 
-# A drop in the reported total smaller than this (or 5 %) is noise (CC2's
-# figure is an estimate that can wobble), not a counter reset.
+# A counter reset starts again from (near) zero: the figure falls below half of
+# what it was, and by more than NOISE_MM. A smaller drop is an estimate being
+# corrected (CC2's figure is computed from the time left, which the printer
+# revises), not a new segment, so the higher figure is kept (#61, #62).
 NOISE_MM = 5.0
-NOISE_FRACTION = 0.05
+RESET_FRACTION = 0.5
 
 _lock = threading.Lock()
 
@@ -57,12 +59,12 @@ class PrintAccounting:
         reset = False
         if raw >= self.last_raw_mm:
             self.last_raw_mm = raw
-        elif self.last_raw_mm - raw > max(NOISE_MM, NOISE_FRACTION * self.last_raw_mm):
+        elif raw < RESET_FRACTION * self.last_raw_mm and self.last_raw_mm - raw > NOISE_MM:
             self.carry_mm += self.last_raw_mm       # new segment; what came before still counts
             self.last_raw_mm = raw
             self.resets += 1
             reset = True
-        # else: a small dip -- keep the higher value
+        # else: a dip, not a reset -- keep the higher value
         return reset
 
     def switch_spool(self, new_spool, from_idle: bool = False) -> None:

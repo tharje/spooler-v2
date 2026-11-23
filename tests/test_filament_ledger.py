@@ -209,6 +209,19 @@ def test_small_dips_in_an_estimated_figure_are_noise():
     assert a.finish() == {1: 1200.0}
 
 
+@pytest.mark.parametrize("before,dip,after,end", [
+    (71503.0, 59153.0, 59708.0, 0.0),   # #62: CC2 raised its time-left estimate mid-print
+    (51816.0, 48711.0, 49233.0, 0.0),   # #61
+])
+def test_an_estimate_corrected_downwards_is_not_counted_twice(before, dip, after, end):
+    a = PrintAccounting(current_spool=1)
+    a.observe(before)
+    assert a.observe(dip) is False                  # not a reset: the first part must not be carried
+    a.observe(after)
+    assert a.observe(end) is True                   # the printer's zero after the print is a reset
+    assert a.finish() == {1: before}                # used to be before + after, nearly double
+
+
 def test_spool_change_splits_usage_at_the_moment_of_the_change():
     a = PrintAccounting(current_spool=1)
     a.observe(100.0); a.switch_spool(2)
