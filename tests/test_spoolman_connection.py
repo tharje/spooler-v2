@@ -17,6 +17,41 @@ def test_auth_header_empty_when_no_user_configured():
     assert spoolman.spoolman_auth_header() == {}
 
 
+# ── spoolman_ui_url(): what the browser's "Open Spoolman UI" button points at ──
+
+def test_ui_url_is_proxied_path_by_default():
+    config.set("spoolman.proxy", True)
+    assert spoolman.spoolman_ui_url() == "/spoolman/"
+
+
+def test_ui_url_is_internal_url_when_proxy_off_and_no_external():
+    config.set("spoolman.url", "http://10.0.0.5:7912")
+    config.set("spoolman.proxy", False)
+    assert spoolman.spoolman_ui_url() == "http://10.0.0.5:7912/"
+
+
+def test_ui_url_external_wins_when_set():
+    config.set("spoolman.url", "http://10.0.0.5:7912")
+    config.set("spoolman.proxy", False)
+    config.set("spoolman.external_url", "https://spoolman.example.com")
+    assert spoolman.spoolman_ui_url() == "https://spoolman.example.com/"
+
+
+def test_ui_url_external_overrides_proxy_too():
+    # an explicit external URL says "send the browser there directly",
+    # proxy or not -- the server keeps talking to the internal URL regardless.
+    config.set("spoolman.external_url", "https://spoolman.example.com")
+    config.set("spoolman.proxy", True)
+    assert spoolman.spoolman_ui_url() == "https://spoolman.example.com/"
+
+
+def test_external_url_field_is_registered_with_env_fallback():
+    field = config.FIELDS.get("spoolman.external_url")
+    assert field is not None
+    assert field.env == "SPOOLMAN_EXTERNAL_URL"
+    assert field.schemes == ("http", "https")
+
+
 def test_auth_header_set_when_user_configured():
     config.set("spoolman.auth_user", "admin")
     config.set("spoolman.auth_pass", "secret")

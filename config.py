@@ -75,6 +75,10 @@ FIELDS: dict = {
     "spoolman.auth_pass": Field(
         key="spoolman.auth_pass", label="Basic auth password (optional)", type="secret", default="",
     ),
+    "spoolman.external_url": Field(
+        key="spoolman.external_url", label="Spoolman URL for the browser (optional)", type="url", default="",
+        schemes=("http", "https"), env="SPOOLMAN_EXTERNAL_URL",
+    ),
     "slicer.url": Field(
         key="slicer.url", label="Slicer URL", type="url", default="", schemes=("http", "https"),
     ),

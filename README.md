@@ -287,6 +287,8 @@ Spooler integrates with **[Spoolman](https://github.com/Donkie/Spoolman)**, an o
 
 By default, Spooler proxies the Spoolman UI through itself (so one port covers everything). To redirect the browser directly to Spoolman instead — useful if you run a separate reverse proxy or need better WebSocket support — set `PROXY_SPOOLMAN=false` in your `.env` file.
 
+If the Spoolman address is only reachable from the same network/cluster as Spooler itself (a container-internal hostname, for example), set `SPOOLMAN_EXTERNAL_URL` to the address the *browser* should use: the Spoolman button opens that, while the Spooler server keeps talking to `SPOOLMAN_URL`. The same field is in Settings → Services and data.
+
 ### Configuring the connection
 
 Settings → **Services and data** lets you change the Spoolman URL, the proxy toggle, and an optional basic-auth username/password (for a Spoolman sitting behind a reverse proxy that requires it) — all without touching `.env` or restarting. **Test connection** checks it immediately. Values set via `.env` still work as the default if nothing's been changed in the UI; set `SPOOLER_LOCK_CONFIG=1` to make environment variables win unconditionally and the fields read-only (for someone hosting Spooler for other people).
