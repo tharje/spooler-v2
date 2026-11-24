@@ -19,7 +19,8 @@ import os
 import state
 from auth import (
     AUTH_ENABLED, BCRYPT_AVAILABLE, SECURE_COOKIES, SESSION_COOKIE,
-    _auth_ok, _check_rate_limit, _create_session, _invalidate_session, _parse_sid, _reset_rate_limit, current_user, has_permission,
+    _auth_ok, _check_rate_limit, _create_session, _invalidate_session,
+    _parse_sid, _reset_rate_limit, current_user, has_permission,
 )
 import users
 from backup import list_auto_backups
