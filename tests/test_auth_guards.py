@@ -10,7 +10,6 @@ import api_tokens
 import auth
 import features
 import http_handler
-import persistence
 import state
 from features import Feature, FeatureError
 

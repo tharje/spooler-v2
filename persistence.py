@@ -51,9 +51,8 @@ def dump_raw_message(printer_id: str, source: str, raw) -> None:
         text = raw.decode("utf-8", errors="replace") if isinstance(raw, (bytes, bytearray)) else str(raw)
         line = json.dumps({"ts": time.time(), "source": source, "raw": text})
         path = RAW_DIR / f"{printer_id}.ndjson"
-        with _RAW_LOCK:
-            with open(path, "a") as f:
-                f.write(line + "\n")
+        with _RAW_LOCK, open(path, "a") as f:
+            f.write(line + "\n")
     except Exception:
         pass
 

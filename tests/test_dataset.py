@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-from types import SimpleNamespace
 
 import dataset
 

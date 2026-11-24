@@ -242,7 +242,9 @@ def process_due(use_fn, find_spool_fn, on_sent=None, now: float | None = None) -
                             min_wait_s=3600, now=now)
                 continue
             spool_id = found
-            _update(claimed["id"], lambda x: x.update(spool_id=spool_id))
+            # Bind via default arg: ruff B023 — the lambda runs synchronously in
+            # _update, but binding _sid makes the capture independent of the loop.
+            _update(claimed["id"], lambda x, _sid=spool_id: x.update(spool_id=_sid))
         res = use_fn(spool_id, claimed["grams"])
         kind = res.get("outcome")
         if kind == "ok":
@@ -311,6 +313,6 @@ async def sender_loop(enabled_fn, use_fn, find_spool_fn, on_sent=None, on_change
             print(f"[Ledger] sender error: {type(e).__name__}: {e}")
         try:
             await asyncio.wait_for(wake.wait(), tick_s)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
         wake.clear()

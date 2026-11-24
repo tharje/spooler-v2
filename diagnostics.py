@@ -77,9 +77,8 @@ def _known_secrets() -> list:
             if v and len(str(v)) >= 3:
                 secrets.add(str(v))
         for k, v in (p.attrs or {}).items():
-            if isinstance(v, str) and v and any(s in k.lower() for s in _SENSITIVE_ATTR_KEYS):
-                if len(v) >= 3:
-                    secrets.add(v)
+            if isinstance(v, str) and v and len(v) >= 3 and any(s in k.lower() for s in _SENSITIVE_ATTR_KEYS):
+                secrets.add(v)
     return sorted(secrets, key=len, reverse=True)
 
 

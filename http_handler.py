@@ -19,9 +19,8 @@ import os
 import state
 from auth import (
     AUTH_ENABLED, BCRYPT_AVAILABLE, SECURE_COOKIES, SESSION_COOKIE,
-    _auth_ok, _check_rate_limit, _create_session, _get_pw_hash, _get_username,
-    _has_password, _invalidate_session, _parse_sid, _reset_rate_limit, _save_auth,
-    current_user, has_permission,
+    _auth_ok, _check_rate_limit, _create_session, _invalidate_session,
+    _parse_sid, _reset_rate_limit, current_user, has_permission,
 )
 import users
 from backup import list_auto_backups
@@ -859,7 +858,7 @@ def _looks_like_ws_upgrade(sock, timeout: float = 1.0) -> bool:
         while time.time() < deadline:
             try:
                 data = sock.recv(4096, socket.MSG_PEEK)
-            except socket.timeout:
+            except TimeoutError:
                 continue
             except OSError:
                 break

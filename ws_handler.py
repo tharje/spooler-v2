@@ -53,7 +53,7 @@ DEFAULT_ACTION_PERMISSION = "printer.control"
 from discovery import discover_cc2_printers, discover_printers
 from persistence import save_printers, save_tray_map
 from printers import PRINTER_TYPES, make_printer
-from spoolman import spoolman_assign, spoolman_set_location
+from spoolman import spoolman_set_location
 
 MAX_WS_MSG = 1 * 1024 * 1024  # 1 MB
 

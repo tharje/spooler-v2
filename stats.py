@@ -55,7 +55,7 @@ def filter_entries(history: list, from_ts=None, to_ts=None, printer_id=None) -> 
         t = _parse_ts(e.get("timestamp"))
         if t is None:
             continue
-        if lo and t < lo or hi and t > hi:
+        if (lo and t < lo) or (hi and t > hi):
             continue
         if printer_id and e.get("printer_id") != printer_id:
             continue

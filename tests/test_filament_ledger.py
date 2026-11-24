@@ -2,7 +2,6 @@
 messages, restarts, counters that go backwards and spool changes."""
 
 import asyncio
-import json
 
 import pytest
 

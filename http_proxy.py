@@ -65,8 +65,6 @@ class ProxyMixin:
             self._json({"error": "Printer not found"}, 404)
             return
 
-        token = p.access_code or "123456"
-
         # CC2 has no accessible thumbnail endpoint — caller should not request one
         if p.printer_type == "cc2":
             self._json({"error": "Thumbnail unavailable"}, 404)

@@ -6,7 +6,6 @@ import asyncio
 import base64
 import http.client
 import json
-import socket
 import time
 import urllib.error
 import urllib.parse
@@ -283,7 +282,7 @@ def spoolman_use(spool_id: int, grams: float) -> dict:
     except urllib.error.URLError as e:
         # Never connected (refused, no route, DNS): nothing was sent, safe to retry.
         return {"outcome": "error", "message": f"Could not reach Spoolman ({type(e.reason).__name__})"}
-    except (TimeoutError, socket.timeout, http.client.HTTPException, ConnectionError) as e:
+    except (TimeoutError, http.client.HTTPException, ConnectionError) as e:
         # The request may have been sent and applied before the connection died.
         return {"outcome": "uncertain",
                 "message": ("Spoolman did not answer after the request was sent, so it may or may not have been "
