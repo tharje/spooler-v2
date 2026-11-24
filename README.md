@@ -328,10 +328,11 @@ Run the test suite locally:
 
 ```
 pip install -r requirements-dev.txt
+ruff check .
 pytest
 ```
 
-Tests run offline against fixtures — no real printer or Spoolman instance needed. CI runs the same suite on every pull request and on pushes to `dev`/`main`; the Docker image is only built and published once tests pass.
+`ruff check .` lints the code with the rules in [`ruff.toml`](ruff.toml). Tests run offline against fixtures — no real printer or Spoolman instance needed. CI runs the same lint and suite on every pull request and on pushes to `dev`/`main`; the Docker image is only built and published once tests pass.
 
 `GET /api/health` reports version, uptime, and per-printer connection status (name/type/connected, no IPs or access codes). No login required — it's what the Docker `HEALTHCHECK` and any external uptime monitoring hit.
 
@@ -355,6 +356,7 @@ Bug reports, test results from your own printer and pull requests are welcome. T
 ## Contributors
 
 - [snazy2000](https://github.com/snazy2000) — modular backend refactor (auth, discovery, spoolman, printers modules), AMS/Canvas multi-material hub support
+- [foobarth](https://github.com/foobarth) — ruff linting in CI and the cleanup it found, `setup.sh` installing the full requirements (CC2 and push without Docker), frontend checks in CI, and test reports from Kubernetes and CC2 firmware 02.01.01.13
 
 ---
 
