@@ -873,10 +873,8 @@ class CC2Connection(PrinterConnection):
         # Terminal states win over transient sub_status: the firmware sets
         # sub_status 2077 (task completed) / 2504 (error) in the same step as
         # the state string (elegoo_printer DeviceStatus::update_base_status),
-        # and a transient from a neighbouring frame must not mask a terminal
-        # state that arrived with it (elegoo-homeassistant CC2_PROTOCOL.md
-        # documents the printer silently printing from tray 0 on doubtful
-        # data, so doubtful states are not a corner we can leave to luck).
+        # so a transient from a neighbouring frame must not mask a terminal
+        # state that arrived with it.
         if state_str in ("complete", "cancelled", "error"):
             status_code = _STATE_STR[state_str]
         elif sub_status in _SUB_TRANSIENT:
