@@ -868,9 +868,18 @@ class CC2Connection(PrinterConnection):
         }
 
         if state_str not in ("printing", "paused"):
-            was_extruding = self._extruded_this_print
             self._extruded_this_print = False
-        if sub_status in _SUB_TRANSIENT:
+
+        # Terminal states win over transient sub_status: the firmware sets
+        # sub_status 2077 (task completed) / 2504 (error) in the same step as
+        # the state string (elegoo_printer DeviceStatus::update_base_status),
+        # and a transient from a neighbouring frame must not mask a terminal
+        # state that arrived with it (elegoo-homeassistant CC2_PROTOCOL.md
+        # documents the printer silently printing from tray 0 on doubtful
+        # data, so doubtful states are not a corner we can leave to luck).
+        if state_str in ("complete", "cancelled", "error"):
+            status_code = _STATE_STR[state_str]
+        elif sub_status in _SUB_TRANSIENT:
             status_code = _SUB_TRANSIENT[sub_status]
         elif state_str in _STATE_STR:
             status_code = _STATE_STR[state_str]
@@ -900,19 +909,6 @@ class CC2Connection(PrinterConnection):
                               f"isn't mapped -- shown as Preparing.")
         elif sub_status in _SUB_STABLE:
             status_code = _SUB_STABLE[sub_status]
-        elif state_str == "" and was_extruding and print_duration and not remaining:
-            # Verified live (2026-11-24, firmware 02.01.01.13, full-print raw
-            # capture): at the end of a print the printer signals completion
-            # with a single partial frame carrying state "complete", and every
-            # following frame carries state "" (duration frozen, remaining 0).
-            # The "" used to overwrite "complete" in the accumulated state, so
-            # the end looked like plain idle — a finished print was then
-            # recorded as cancelled with print_time 0 (seen in real history).
-            # "" right after actual extrusion is the end of a successful print,
-            # not idle. Unverified edge (no capture of it): a print aborted
-            # from paused WITHOUT the printer sending "cancelled" would land
-            # here too — every observed abort so far went through "cancelled".
-            status_code = 9
         elif remaining > 0:
             status_code = 3
         else:
