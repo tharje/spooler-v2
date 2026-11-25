@@ -356,7 +356,7 @@ Bug reports, test results from your own printer and pull requests are welcome. T
 ## Contributors
 
 - [snazy2000](https://github.com/snazy2000) — modular backend refactor (auth, discovery, spoolman, printers modules), AMS/Canvas multi-material hub support
-- [foobarth](https://github.com/foobarth) — ruff linting in CI and the cleanup it found, `setup.sh` installing the full requirements (CC2 and push without Docker), frontend checks in CI, and test reports from Kubernetes and CC2 firmware 02.01.01.13
+- [foobarth](https://github.com/foobarth) — ruff linting in CI and the cleanup it found, `setup.sh` installing the full requirements (CC2 and push without Docker), frontend checks in CI, a full raw MQTT capture of a CC2 print that settled how a print ends (a finished print now always wins over a passing pause or stop code), and test reports from Kubernetes and CC2 firmware 02.01.01.13
 
 ---
 
