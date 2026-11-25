@@ -84,7 +84,7 @@ function _jobHtml(j, place, count) {
         <button class="btn btn-secondary btn-sm" data-move="down" data-job-id="${escAttr(j.id)}"
           title="Move down" aria-label="Move down"${place === count - 1 ? " disabled" : ""}>▼</button>` : ""}
       ${j.status === "assigned"
-        ? `<button class="btn btn-primary btn-sm" data-start="${escAttr(j.id)}">Plate tømt – start</button>`
+        ? `<button class="btn btn-primary btn-sm" data-start="${escAttr(j.id)}">Plate clear – start</button>`
         : ""}
       ${canCancel ? `<button class="btn btn-secondary btn-sm" data-cancel="${escAttr(j.id)}">Cancel</button>` : ""}
       ${canRemove ? `<button class="btn btn-secondary btn-sm" data-remove="${escAttr(j.id)}">Remove</button>` : ""}
