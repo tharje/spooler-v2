@@ -15,8 +15,9 @@ select = [
     "RUF", # ruff-specific: real-world gotchas
 ]
 ignore = [
-    # Norwegian UI strings ("Plate tømt") and box-drawing comment rules (──) trip
-    # the ambiguous-unicode checks; intentional content, not homoglyph bugs.
+    # Non-ASCII UI strings (en dashes, æøå in file names) and box-drawing
+    # comment rules (──) trip the ambiguous-unicode checks; intentional
+    # content, not homoglyph bugs.
     "RUF001", "RUF002", "RUF003",
     # Fire-and-forget asyncio tasks are the established pattern for background
     # loops here (RUF006 = dangling task reference). Fixing means threading

@@ -11,7 +11,7 @@ jobs to idle printers, preferring a printer whose currently linked spool
 (persistence.load_tray_map(), via Spoolman) matches the job's material, but
 it never uploads or starts anything by itself -- a job only moves past
 "assigned" when confirm_plate_cleared() is called for that printer, which is
-the UI's "Plate tømt - start neste" button. There is no automatic retry and
+the UI's "Plate clear – start" button. There is no automatic retry and
 no automatic pause/cancel handling here: a failed upload/start just leaves
 the job assigned so the button can be pressed again.
 
