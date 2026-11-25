@@ -645,3 +645,61 @@ def test_empty_state_before_any_extrusion_is_plain_idle(printer):
     assert _merge_frame(printer, ps={"state": "", "print_duration": 0,
                                      "remaining_time_sec": 0},
                         ms={"status": 1, "sub_status": 0}) == 0
+# ── Pre-heat-aborted start must not debit the previous print's filament ──────
+
+@pytest.mark.asyncio
+async def test_preheat_aborted_start_does_not_debit_the_previous_print(printer, monkeypatch):
+    """Regression: a start whose pre-heat phase is cancelled before extrusion
+    classifies as a print start (machine_status 2 with a preheating sub_status
+    while print_status.state stays "" gives status code 15, which is active).
+    The fresh accounting then picks up the CC2 adapter's _last_active_filament_mm
+    — the PREVIOUS print's leftover figure, whose reset only fires on a
+    state:"printing" transition the pre-heat window never reaches — and the
+    cancelled end debits that stale figure to the print's spool."""
+    import persistence
+    import printers.base as base_mod
+    monkeypatch.setattr(base_mod, "get_spool_density", lambda printer_id: 1.24)
+
+    def frame(ps, ms):
+        printer._cc2_state["print_status"] = ps
+        printer._cc2_state["machine_status"] = ms
+        printer._apply_cc2_status()
+
+    # Print A: a real print, method-1046 metadata arrives so the time-share
+    # estimate is live, and it accumulates a figure.
+    printer._current_filename = "a.gcode"
+    frame({"state": "printing", "print_duration": 600, "remaining_time_sec": 400},
+          {"status": 2, "sub_status": 0})
+    await printer._check_print_transition()          # start: fresh accounting
+    printer._expected_filament_g = 100.0             # metadata arrives mid-print
+    frame({"state": "printing", "print_duration": 900, "remaining_time_sec": 100},
+          {"status": 2, "sub_status": 0})
+    await printer._check_print_transition()          # 90 %: the snapshot fills
+    assert printer._last_active_filament_mm > 0
+
+    # Print A is cancelled before finishing.
+    frame({"state": "", "print_duration": 0, "remaining_time_sec": 0},
+          {"status": 1, "sub_status": 0})
+    await printer._check_print_transition()
+    history = persistence.load_history()
+    assert len(history) == 1                         # only print A so far
+
+    # Print B: pre-heat only. print_status.state stays "" the whole time —
+    # no state:"printing" transition, so no counter reset happens — and the
+    # pre-heat is cancelled before anything is extruded.
+    printer._current_filename = "b.gcode"
+    frame({"state": "", "print_duration": 0, "remaining_time_sec": 900},
+          {"status": 2, "sub_status": 1045})         # heating nozzle
+    await printer._check_print_transition()          # classified as a print start
+    frame({"state": "", "print_duration": 0, "remaining_time_sec": 890},
+          {"status": 2, "sub_status": 1045})
+    await printer._check_print_transition()          # accounting sees the stale figure
+    frame({"state": "", "print_duration": 0, "remaining_time_sec": 0},
+          {"status": 1, "sub_status": 0})            # pre-heat cancelled
+    await printer._check_print_transition()
+
+    phantom = [e for e in persistence.load_history() if e["filename"] == "b.gcode"]
+    assert len(phantom) == 1, "the cancelled pre-heat must not write a second history entry twice or not at all"
+    assert phantom[0]["filament_mm"] == 0.0, \
+        f"nothing was extruded, but the entry debits {phantom[0]['filament_mm']} mm — the previous print's figure"
+    assert phantom[0]["end_state"] == "cancelled"
