@@ -27,6 +27,7 @@ import users
 import urllib.error
 import urllib.parse
 import urllib.request
+import auth
 from auth import current_user
 from backup import (
     BACKUP_DIR, RestoreError, create_backup_zip, list_auto_backups, restore_from_zip,
@@ -738,6 +739,8 @@ class AdminMixin:
             body = json.loads(self._read_body() or b"{}")
             if body.get("password"):
                 users.set_password(username, body["password"])
+                # The old password's sessions end (the admin's own, if it's their own account, stays).
+                auth.sign_out_other_sessions(username, auth._parse_sid(self.headers.get("Cookie", "")))
             if body.get("role"):
                 users.set_role(username, body["role"])
             if "printers" in body:
@@ -749,6 +752,7 @@ class AdminMixin:
     def _handle_users_delete(self, username: str):
         try:
             users.delete_user(username)
+            auth.sign_out_other_sessions(username, "")     # a deleted user's cookie stops working at once
             push.remove_owner(username)
             user_channels.remove_user(username)
             self._json({"ok": True})
