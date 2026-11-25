@@ -173,3 +173,41 @@ def test_external_printer_list_exposes_state_only(monkeypatch):
     item = json.loads(body)["items"][0]
     assert status == 200 and set(item) == {"id", "name", "type", "connected", "state"}
     assert b"s3cret" not in body and b"10.9.9.9" not in body
+
+
+# ── Spoolman through the proxy is only as private as Spooler ─────────────────
+
+@pytest.mark.parametrize("path, status", [
+    ("/api/v1/spool", 401), ("/api/v1/filament?limit=5", 401),
+    ("/spoolman/", 302), ("/spoolman/spool", 302), ("/spoolman", 302),
+])
+def test_the_spoolman_proxy_needs_login(path, status, monkeypatch):
+    monkeypatch.setattr(auth, "AUTH_ENABLED", True)
+    monkeypatch.setattr(http_handler, "proxy_spoolman_enabled", lambda: True)
+    proxied = []
+    monkeypatch.setattr(http_handler.SPHandler, "_proxy_spoolman_ui",
+                        lambda self, *a, **k: proxied.append(a))
+    got, _ = _call("GET", path)
+    assert got == status and proxied == []
+
+
+def test_the_spoolman_proxy_still_works_when_signed_in(monkeypatch):
+    monkeypatch.setattr(auth, "AUTH_ENABLED", True)
+    monkeypatch.setattr(http_handler, "proxy_spoolman_enabled", lambda: True)
+    monkeypatch.setattr(http_handler, "_auth_ok", lambda h: True)
+    proxied = []
+    monkeypatch.setattr(http_handler.SPHandler, "_proxy_spoolman_ui",
+                        lambda self, *a, **k: proxied.append(a))
+    _call("GET", "/api/v1/spool")
+    _call("GET", "/spoolman/")
+    assert proxied == [("GET", "/api/v1/spool"), ("GET", "/")]
+
+
+def test_posting_to_spoolman_needs_the_proxy_switched_on(monkeypatch):
+    monkeypatch.setattr(http_handler, "_auth_ok", lambda h: True)
+    monkeypatch.setattr(http_handler, "proxy_spoolman_enabled", lambda: False)
+    proxied = []
+    monkeypatch.setattr(http_handler.SPHandler, "_proxy_spoolman_ui",
+                        lambda self, *a, **k: proxied.append(a))
+    status, _ = _call("POST", "/api/v1/spool", body={"filament_id": 1})
+    assert status == 404 and proxied == []

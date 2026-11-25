@@ -372,28 +372,6 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
             self.end_headers()
             self.wfile.write(body)
             return
-        # Spoolman — either proxy through our server or redirect directly to it
-        if self.path in ("/spoolman", "/spoolman/"):
-            if proxy_spoolman_enabled():
-                if self.path == "/spoolman":
-                    self.send_response(302)
-                    self.send_header("Location", "/spoolman/")
-                    self.end_headers()
-                else:
-                    self._proxy_spoolman_ui("GET", "/")
-            else:
-                self.send_response(302)
-                self.send_header("Location", get_spoolman_url() + "/")
-                self.end_headers()
-            return
-        if proxy_spoolman_enabled() and self.path.startswith("/spoolman/"):
-            sm_path = self.path[len("/spoolman"):]
-            self._proxy_spoolman_ui("GET", sm_path or "/")
-            return
-        # Spoolman's own JS calls /api/v1/ directly — only proxy when enabled
-        if proxy_spoolman_enabled() and self.path.startswith("/api/v1/"):
-            self._proxy_spoolman_ui("GET", self.path)
-            return
         if self.path == "/api/auth-status":
             resp = {"setup_required": not users.any_users()}
             if _auth_ok(self):
@@ -466,6 +444,31 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
             return
 
         if not self._check_auth():
+            return
+
+        # Spoolman — either proxy through our server or redirect directly to it.
+        # After the login check: Spoolman has no login of its own, so through the
+        # proxy it is only as private as Spooler is.
+        if self.path in ("/spoolman", "/spoolman/"):
+            if proxy_spoolman_enabled():
+                if self.path == "/spoolman":
+                    self.send_response(302)
+                    self.send_header("Location", "/spoolman/")
+                    self.end_headers()
+                else:
+                    self._proxy_spoolman_ui("GET", "/")
+            else:
+                self.send_response(302)
+                self.send_header("Location", get_spoolman_url() + "/")
+                self.end_headers()
+            return
+        if proxy_spoolman_enabled() and self.path.startswith("/spoolman/"):
+            sm_path = self.path[len("/spoolman"):]
+            self._proxy_spoolman_ui("GET", sm_path or "/")
+            return
+        # Spoolman's own JS calls /api/v1/ directly — only proxy when enabled
+        if proxy_spoolman_enabled() and self.path.startswith("/api/v1/"):
+            self._proxy_spoolman_ui("GET", self.path)
             return
 
         if self.path == "/api/my-notifications":
@@ -775,7 +778,7 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
         elif self.path == "/api/restore":
             if self._require("backup.manage"):
                 self._handle_restore()
-        elif self.path.startswith("/api/v1/"):
+        elif proxy_spoolman_enabled() and self.path.startswith("/api/v1/"):
             self._proxy_spoolman_ui("POST", self.path, self._read_body())
         elif self.path.startswith("/api/spoolman"):
             self._proxy_spoolman("POST", self.path[len("/api/spoolman"):], self._read_body())
