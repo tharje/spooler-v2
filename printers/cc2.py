@@ -869,7 +869,15 @@ class CC2Connection(PrinterConnection):
 
         if state_str not in ("printing", "paused"):
             self._extruded_this_print = False
-        if sub_status in _SUB_TRANSIENT:
+
+        # Terminal states win over transient sub_status: the firmware sets
+        # sub_status 2077 (task completed) / 2504 (error) in the same step as
+        # the state string (elegoo_printer DeviceStatus::update_base_status),
+        # so a transient from a neighbouring frame must not mask a terminal
+        # state that arrived with it.
+        if state_str in ("complete", "cancelled", "error"):
+            status_code = _STATE_STR[state_str]
+        elif sub_status in _SUB_TRANSIENT:
             status_code = _SUB_TRANSIENT[sub_status]
         elif state_str in _STATE_STR:
             status_code = _STATE_STR[state_str]

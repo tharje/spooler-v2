@@ -589,3 +589,59 @@ def test_filament_estimate_never_goes_back_when_time_left_is_raised(printer):
     before = at(6000, 4000)                         # 60 % of the time
     assert at(6060, 6000) == before                 # time left raised: 50 %, the figure holds
     assert at(9000, 3000) > before                  # 75 %: it climbs again
+
+
+def _merge_frame(printer, ps=None, ms=None):
+    """Emulate one MQTT frame the way _handle_message does: deep-merge the
+    frame's dicts into the accumulated state, then apply. Tests must not
+    replace the dicts — a partial frame leaves the other keys in place."""
+    if ps is not None:
+        printer._cc2_state.setdefault("print_status", {}).update(ps)
+    if ms is not None:
+        printer._cc2_state.setdefault("machine_status", {}).update(ms)
+    printer._apply_cc2_status()
+    return printer.status["PrintInfo"]["Status"]
+
+
+def test_terminal_state_wins_over_a_transient_sub_status(printer):
+    # If a transient sub_status (2501 pausing / 2503 stopping) lingers in the
+    # accumulated state when the completion frame arrives, it must not mask
+    # the terminal state: a completed print would otherwise show as pausing.
+    assert _merge_frame(printer, ps={"state": "printing", "print_duration": 1700,
+                                     "remaining_time_sec": 180},
+                        ms={"status": 2, "sub_status": 2075}) == 3
+    printer._cc2_state["machine_status"]["sub_status"] = 2501   # a pausing transient lingers
+    assert _merge_frame(printer, ps={"state": "complete", "print_duration": 1784,
+                                     "remaining_time_sec": 0,
+                                     "total_duration": 1859},
+                        ms={"status": 1}) == 9
+    assert printer.status["PrintInfo"]["PrintTime"] == 1784     # duration kept
+
+
+def test_end_burst_completes_then_the_idle_reset_is_plain_idle(printer):
+    # The captured burst (one second, four partial frames): sub_status 2077
+    # (task saved as completed, per the firmware's update_base_status) →
+    # a reset frame (durations zeroed, state key absent) → top-level idle →
+    # state "complete" → then "" idle frames (the printer's own idle value;
+    # a stopped print reaches it the same way).
+    assert _merge_frame(printer, ps={"state": "printing", "print_duration": 1700,
+                                     "remaining_time_sec": 180},
+                        ms={"status": 2, "sub_status": 2075}) == 3
+    assert _merge_frame(printer, ms={"sub_status": 2077}) == 3          # state still "printing"
+    assert _merge_frame(printer, ps={"print_duration": 0, "remaining_time_sec": 0,
+                                     "current_layer": 0}) == 3         # the printer's own reset
+    assert _merge_frame(printer, ms={"status": 1, "sub_status": 0}) == 3
+    assert _merge_frame(printer, ps={"state": "complete", "print_duration": 1784,
+                                     "remaining_time_sec": 0,
+                                     "current_layer": 10}) == 9        # the completion frame
+    assert _merge_frame(printer, ps={"state": "", "print_duration": 1784,
+                                     "remaining_time_sec": 0},
+                        ms={"status": 1, "sub_status": 0}) == 0        # idle; 9→0 is a no-op
+
+
+def test_empty_state_before_any_extrusion_is_plain_idle(printer):
+    # A fresh connect (Spooler restarted, printer idle) also reports state "":
+    # without a print having run, that must stay idle — not complete.
+    assert _merge_frame(printer, ps={"state": "", "print_duration": 0,
+                                     "remaining_time_sec": 0},
+                        ms={"status": 1, "sub_status": 0}) == 0
