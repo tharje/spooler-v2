@@ -589,3 +589,37 @@ def test_filament_estimate_never_goes_back_when_time_left_is_raised(printer):
     before = at(6000, 4000)                         # 60 % of the time
     assert at(6060, 6000) == before                 # time left raised: 50 %, the figure holds
     assert at(9000, 3000) > before                  # 75 %: it climbs again
+
+
+# ── end of print: the completion signal is brief, "" frames follow ──────────
+
+def test_end_of_print_empty_state_maps_to_complete_not_idle(printer):
+    # Verified live (2026-11-24, firmware 02.01.01.13, full-print raw capture):
+    # at the end the printer signals completion with a single partial frame
+    # carrying state "complete" (print_duration 1784, its own total_duration
+    # 1859), and every following frame carries state "" (duration frozen,
+    # remaining 0). The "" used to overwrite "complete" in the accumulated
+    # state, so the end looked like plain idle — a finished print was then
+    # recorded as cancelled with print_time 0 (seen in real history).
+    printer._cc2_state["print_status"] = {"state": "printing", "print_duration": 1700,
+                                          "remaining_time_sec": 180}
+    printer._cc2_state["machine_status"] = {"status": 2, "sub_status": 2075}
+    printer._apply_cc2_status()
+    assert printer.status["PrintInfo"]["Status"] == 3          # mid-print
+
+    printer._cc2_state["print_status"] = {"state": "", "print_duration": 1784,
+                                          "remaining_time_sec": 0, "total_duration": 1859}
+    printer._cc2_state["machine_status"] = {"status": 1, "sub_status": 0}
+    printer._apply_cc2_status()
+    assert printer.status["PrintInfo"]["Status"] == 9          # complete, not idle
+    assert printer.status["PrintInfo"]["PrintTime"] == 1784    # duration kept
+
+
+def test_empty_state_before_any_extrusion_is_plain_idle(printer):
+    # A fresh connect (Spooler restarted, printer idle) also reports state "":
+    # without a print having run, that must stay idle — not complete.
+    printer._cc2_state["print_status"] = {"state": "", "print_duration": 0,
+                                          "remaining_time_sec": 0}
+    printer._cc2_state["machine_status"] = {"status": 1, "sub_status": 0}
+    printer._apply_cc2_status()
+    assert printer.status["PrintInfo"]["Status"] == 0

@@ -868,6 +868,7 @@ class CC2Connection(PrinterConnection):
         }
 
         if state_str not in ("printing", "paused"):
+            was_extruding = self._extruded_this_print
             self._extruded_this_print = False
         if sub_status in _SUB_TRANSIENT:
             status_code = _SUB_TRANSIENT[sub_status]
@@ -899,6 +900,19 @@ class CC2Connection(PrinterConnection):
                               f"isn't mapped -- shown as Preparing.")
         elif sub_status in _SUB_STABLE:
             status_code = _SUB_STABLE[sub_status]
+        elif state_str == "" and was_extruding and print_duration and not remaining:
+            # Verified live (2026-11-24, firmware 02.01.01.13, full-print raw
+            # capture): at the end of a print the printer signals completion
+            # with a single partial frame carrying state "complete", and every
+            # following frame carries state "" (duration frozen, remaining 0).
+            # The "" used to overwrite "complete" in the accumulated state, so
+            # the end looked like plain idle — a finished print was then
+            # recorded as cancelled with print_time 0 (seen in real history).
+            # "" right after actual extrusion is the end of a successful print,
+            # not idle. Unverified edge (no capture of it): a print aborted
+            # from paused WITHOUT the printer sending "cancelled" would land
+            # here too — every observed abort so far went through "cancelled".
+            status_code = 9
         elif remaining > 0:
             status_code = 3
         else:
