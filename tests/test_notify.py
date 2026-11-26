@@ -345,7 +345,6 @@ async def test_offline_notice_comes_after_delay_and_online_after_return(printer,
 
 @pytest.mark.asyncio
 async def test_quick_reconnect_cancels_offline_notice(printer, monkeypatch):
-    import printers.base as base
     monkeypatch.setattr(notify, "event_settings", lambda event: {"minutes": 5})
     printer.connected = False
     printer._track_connection_for_notifications()

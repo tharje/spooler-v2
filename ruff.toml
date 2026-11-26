@@ -1,0 +1,41 @@
+# Ruff config — the project's linting layer.
+#
+# Principle: every rule in `ignore` is a documented decision about this
+# codebase's style, not an oversight. Rules are chosen for bug-finding value;
+# style rules that would churn the whole tree (E, import sorting) stay off.
+target-version = "py312"
+line-length = 100
+
+[lint]
+select = [
+    "F",   # pyflakes: unused imports/variables, f-string bugs, real mistakes
+    "B",   # bugbear: likely bugs and bad patterns
+    "UP",  # pyupgrade: modernize to py312 idioms
+    "SIM", # simplify: redundant code patterns
+    "RUF", # ruff-specific: real-world gotchas
+]
+ignore = [
+    # Non-ASCII UI strings (en dashes, æøå in file names) and box-drawing
+    # comment rules (──) trip the ambiguous-unicode checks; intentional
+    # content, not homoglyph bugs.
+    "RUF001", "RUF002", "RUF003",
+    # Fire-and-forget asyncio tasks are the established pattern for background
+    # loops here (RUF006 = dangling task reference). Fixing means threading
+    # task refs through modules for GC safety — revisit deliberately, not by lint.
+    "RUF006",
+    # SIM105 wants contextlib.suppress for try/except-pass; the codebase's
+    # broad excepts are an established tradeoff (network edges, notification
+    # channels where one bug must not hide the others). Batch-converting them
+    # is churn without a bug to point at.
+    "SIM105",
+    # B904 (raise ... from) and B905 (zip strict=) are real but need manual
+    # semantic decisions per site; batch-fixing them blind is worse than leaving.
+    "B904", "B905",
+    # RUF012 wants ClassVar annotations on mutable class defaults; the classes
+    # here are simple singletons where the annotation is ceremony.
+    "RUF012",
+]
+
+[lint.per-file-ignores]
+# Tests use broad fixtures and short helper locals by design.
+"tests/*" = ["RUF059", "F841"]

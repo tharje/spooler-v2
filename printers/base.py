@@ -8,13 +8,11 @@ Subclasses (CC1Connection, CC2Connection, …) must implement:
 
 import asyncio
 import time
-import uuid
 
 import state
 from features import is_enabled
 from persistence import (
-    FILAMENT_DENSITY, append_history, filament_mm_to_grams, save_printers,
-    save_snapshot, update_history_entry,
+    FILAMENT_DENSITY, append_history, filament_mm_to_grams, save_snapshot, update_history_entry,
 )
 from printers.protocol import decode_printinfo
 import notify as notifylib
@@ -127,6 +125,39 @@ _KIND_BY_DISPLAY_STATE = {
 }
 
 _logged_unknown_display_codes: set = set()
+
+
+def _first_num(d: dict, *keys, default=None):
+    """First key in `keys` that holds a number — the frontend's fallback
+    chains (CC1 SDCP names vs CC2/Prusa/Moonraker names), server-side."""
+    for k in keys:
+        v = d.get(k)
+        if isinstance(v, (int, float)):
+            return v
+    return default
+
+
+def _progress_percent(pi: dict):
+    """Port of the frontend's getProgress(): TotalTicks == 100 means
+    CurrentTicks IS the percentage (CC2/Moonraker/PrusaLink); layers come
+    next, raw tick fractions last (layers understate, issue #56). Layers
+    apply as soon as TotalLayer > 0 — layer 0 of 200 is 0 %, like the card."""
+    if pi.get("TotalTicks") == 100:
+        return max(0, min(100, round(pi.get("CurrentTicks") or 0)))
+    if (pi.get("TotalLayer") or 0) > 0:
+        return min(100, round((pi.get("CurrentLayer") or 0) / pi["TotalLayer"] * 100))
+    if (pi.get("TotalTicks") or 0) > 0 and pi.get("CurrentTicks") is not None:
+        return min(100, round((pi["CurrentTicks"] / pi["TotalTicks"]) * 100))
+    return None
+
+
+def _speed_factor(status: dict, pi: dict):
+    """SpeedFactor belongs to CC2/Moonraker/PrusaLink; CC1 (SDCP) only has
+    PrintSpeedPct inside PrintInfo — the same pair the card reads."""
+    sf = _first_num(status, "SpeedFactor")
+    if sf is None:
+        sf = _first_num(pi, "PrintSpeedPct")
+    return 100 if sf is None else sf
 
 
 def classify_display_state(connected: bool, status_code, busy_between_prints: bool = False) -> str:
@@ -332,6 +363,9 @@ class PrinterConnection:
         # Replace raw PrintInfo (may have hex-encoded SDCP keys) with decoded version
         # so the browser can read plain field names like Filename directly.
         status = {**self.status, "PrintInfo": pi} if "PrintInfo" in self.status else self.status
+        # An offline printer's status dict is its last reading — history, not
+        # a measurement. The canonical temps zero out like the card does.
+        temps = status if self.connected else {}
         return {
             "id":              self.id,
             "ip":              self.ip,
@@ -367,6 +401,23 @@ class PrinterConnection:
             "dataset":         dataset.status_for(self.id),
             "filament_mm":     round(filament_mm, 1),
             "filament_g":      filament_mm_to_grams(filament_mm, self.filament_density),
+            # Canonical numeric state: protocol key differences end here.
+            # Consumers (bridge now, future channels) read these keys and
+            # own no per-protocol logic; the browser still reads the raw
+            # keys and can migrate when convenient. An offline printer's
+            # last readings are history, not a measurement — the card shows
+            # "--", so the canonical temps read 0 too.
+            "nozzle_temp":     _first_num(temps, "TempOfNozzle", "NozzleTemp", default=0),
+            "nozzle_target":   _first_num(temps, "TempTargetNozzle", "NozzleTempTarget", default=0),
+            "bed_temp":        _first_num(temps, "TempOfHotbed", "BedTemp", default=0),
+            "bed_target":      _first_num(temps, "TempTargetHotbed", "BedTempTarget", default=0),
+            "chamber_temp":    _first_num(temps, "TempOfBox", "ChamberTemp", default=0),
+            "chamber_target":  _first_num(temps, "TempTargetBox", default=0),
+            "progress":        _progress_percent(pi),
+            "layer":           pi.get("CurrentLayer") or 0,
+            "total_layer":     pi.get("TotalLayer") or 0,
+            "time_remaining":  pi.get("RemainTime") or 0,
+            "speed_factor":    _speed_factor(status, pi),
         }
 
     def save_accounting_now(self) -> None:
@@ -433,6 +484,13 @@ class PrinterConnection:
             print(f"[Printer {self.name}] Extrusion counter went back (to {float(total):.0f} mm); "
                   f"adding the earlier {self._acct.carry_mm:.0f} mm to this print's total")
         self._save_accounting()
+
+    def _reset_per_print_extrusion(self) -> None:
+        """Called when a genuinely new print starts (the moment the accounting
+        is created). Protocols that keep per-print filament bookkeeping on the
+        adapter reset it here; the default is nothing, because protocols whose
+        filament figure comes straight from the printer's status have no
+        per-print state to leak."""
 
     def _save_accounting(self, force: bool = False) -> None:
         a = self._acct
@@ -514,7 +572,7 @@ class PrinterConnection:
         await loop.run_in_executor(None, write)
         if any(r[3] == "pending" for r in rows):
             ledger.kick()
-        for spool_id, grams, mm, st, reason in rows:
+        for spool_id, grams, mm, st, _reason in rows:
             print(f"[Ledger] {self.name}: {mm:.0f} mm / {grams} g -> "
                   f"{('spool ' + str(spool_id)) if spool_id is not None else 'unknown spool'} ({st})")
         return used
@@ -738,7 +796,6 @@ class PrinterConnection:
         is_idle     = status == 0
         is_printing = status in PRINTING_STATUSES or status == 6
         is_done     = status in (9, 8)
-        last        = ns["last_status"]
 
         # CC2 typically goes 3→0 on completion (no 9/8 reported).
         # Fire "finished" on any transition away from an active print state.
@@ -940,8 +997,12 @@ class PrinterConnection:
 
         # Safety net: a print that had been extruding but whose last status was some other
         # "busy" one (preparing, stopping, ...) still ended when the printer goes idle/complete.
+        # Also covers a start whose pre-heat was cancelled before anything printed: the start
+        # fired (accounting, queue, notifications), so the end must fire too — with a zero
+        # total, the "total_mm() > 0" guard alone would leak the open print.
         if (event is None and cur_status in _END_STATUSES and self._acct is not None
-                and self._acct.total_mm() > 0 and self._last_print_status in ACTIVE_STATUSES):
+                and self._last_print_status in ACTIVE_STATUSES
+                and (self._acct.total_mm() > 0 or self._print_start_time is not None)):
             event = "end"
 
         display_state = classify_display_state(self.connected, cur_status, self._is_busy_between_prints())
@@ -993,6 +1054,12 @@ class PrinterConnection:
             self._print_start_time = time.time()
             self._max_total_layer   = pi.get("TotalLayer", 0) or 0
             self._max_current_layer = pi.get("CurrentLayer", 0) or 0
+            # A genuinely new print: per-print bookkeeping that survived on the
+            # adapter must not leak into the fresh accounting. A print whose
+            # pre-heat phase is cancelled never reaches a state:"printing"
+            # transition, so adapters whose counters reset there would otherwise
+            # debit the previous print's figure to this one.
+            self._reset_per_print_extrusion()
             self._emit("print_started", f"{self.name} — Print started",
                        pi.get("Filename") or "A print has started.")
             asyncio.create_task(self._auto_light(True))

@@ -241,7 +241,7 @@ def set_enabled(key: str, value: bool) -> list:
 
         _atomic_write(FEATURES_FILE, json.dumps(overrides, indent=2))
 
-    for changed_key in [key] + cascaded:
+    for changed_key in [key, *cascaded]:
         for cb in _on_change_callbacks.get(changed_key, []):
             try:
                 cb(is_enabled(changed_key))

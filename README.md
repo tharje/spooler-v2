@@ -49,7 +49,7 @@ Open **`http://<server-ip>:8080`** in your browser. On first visit you will be p
 - **Print speed control** – adjust speed while printing or paused (CC1 and CC2)
 - **Print options** – preview thumbnail, build plate, time-lapse and bed levelling before starting a print
 - **File browser and upload** – list, upload, start and delete files stored on the printer
-- **Print queue** – queue G-code files for a printer type or one printer, with the next job at the top and ▲▼ to change the order; a job waits for a free printer and starts only when you tap **Plate tømt – start**, which opens the start dialog to pick the filament slot for each tool and bed levelling, time-lapse and build plate; the job then shows **Printing** until the print is over, and **Done**, **Error** or **Stopped** after
+- **Print queue** – queue G-code files for a printer type or one printer, with the next job at the top and ▲▼ to change the order; a job waits for a free printer and starts only when you tap **Plate clear – start**, which opens the start dialog to pick the filament slot for each tool and bed levelling, time-lapse and build plate; the job then shows **Printing** until the print is over, and **Done**, **Error** or **Stopped** after
 - **Canvas / AMS multi-material** – shows filament slots; link each slot to a Spoolman spool for per-tray deduction
 - **Filament tracking** – live mm/g per print; deducts from the correct spool on tray changes
 - **Stats & history** – statistics per period and printer, every past print with the picture taken when it ended, its details and a reference number you can put on it; CSV export
@@ -328,10 +328,11 @@ Run the test suite locally:
 
 ```
 pip install -r requirements-dev.txt
+ruff check .
 pytest
 ```
 
-Tests run offline against fixtures — no real printer or Spoolman instance needed. CI runs the same suite on every pull request and on pushes to `dev`/`main`; the Docker image is only built and published once tests pass.
+`ruff check .` lints the code with the rules in [`ruff.toml`](ruff.toml). Tests run offline against fixtures — no real printer or Spoolman instance needed. CI runs the same lint and suite on every pull request and on pushes to `dev`/`main`; the Docker image is only built and published once tests pass.
 
 `GET /api/health` reports version, uptime, and per-printer connection status (name/type/connected, no IPs or access codes). No login required — it's what the Docker `HEALTHCHECK` and any external uptime monitoring hit.
 
@@ -355,6 +356,7 @@ Bug reports, test results from your own printer and pull requests are welcome. T
 ## Contributors
 
 - [snazy2000](https://github.com/snazy2000) — modular backend refactor (auth, discovery, spoolman, printers modules), AMS/Canvas multi-material hub support
+- [foobarth](https://github.com/foobarth) — ruff linting in CI and the cleanup it found, `setup.sh` installing the full requirements (CC2 and push without Docker), frontend checks in CI, a full raw MQTT capture of a CC2 print that settled how a print ends (a finished print now always wins over a passing pause or stop code), the fix for a CC2 print being charged the previous print's filament when it starts with a pre-heat (#73), normalised temperature, progress, layer and speed values in the printer status for every printer type (#70), a verified list of the CC2's status fields in [CC2_INTEGRATION.md](CC2_INTEGRATION.md) (#71), and test reports from Kubernetes and CC2 firmware 02.01.01.13
 
 ---
 

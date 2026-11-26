@@ -205,7 +205,7 @@ class CC1Connection(PrinterConnection):
         key = {"nozzle": "TempTargetNozzle", "bed": "TempTargetHotbed"}.get(heater)
         if key is None:
             return False
-        return await self.send_cmd(CMD_SET_STATUS, {key: int(round(target))})
+        return await self.send_cmd(CMD_SET_STATUS, {key: round(target)})
 
     async def heaters_off(self, heaters: list) -> bool:
         return await self.send_cmd(CMD_SET_STATUS, {"TempTargetNozzle": 0, "TempTargetHotbed": 0})
@@ -303,7 +303,7 @@ class CC1Connection(PrinterConnection):
                 return False
             try:
                 return await asyncio.wait_for(asyncio.shield(self._start_ack), START_ACK_TIMEOUT)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 return None
         finally:
             self._start_ack = None

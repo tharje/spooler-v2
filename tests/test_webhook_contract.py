@@ -4,7 +4,7 @@ Fields may be added within a schema_version, never removed, renamed or retyped."
 import json
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 import pytest
 
@@ -61,8 +61,8 @@ def test_same_event_keeps_its_id_across_sends(sent):
 def test_timestamp_is_utc_iso8601():
     n = Notification("x", "p", "T")
     assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", n.timestamp)
-    parsed = datetime.strptime(n.timestamp, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-    assert abs((datetime.now(timezone.utc) - parsed).total_seconds()) < 5
+    parsed = datetime.strptime(n.timestamp, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+    assert abs((datetime.now(UTC) - parsed).total_seconds()) < 5
 
 
 def test_old_fields_still_there(sent):

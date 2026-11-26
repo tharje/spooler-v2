@@ -203,7 +203,7 @@ async def auto_level(printer) -> str | None:
 
 async def pid_calibrate(printer, target) -> str | None:
     return await _advanced(printer, "pid_calibrate", {"target": target},
-                           lambda: printer.pid_calibrate(int(round(float(target)))))
+                           lambda: printer.pid_calibrate(round(float(target))))
 
 
 async def shaper_calibrate(printer) -> str | None:

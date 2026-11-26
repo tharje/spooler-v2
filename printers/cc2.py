@@ -539,7 +539,7 @@ class CC2Connection(PrinterConnection):
                                return_exceptions=True),
                 timeout=10,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             results = [None, {}]
         finally:
             self._pending_thumb_fut = None
@@ -744,7 +744,7 @@ class CC2Connection(PrinterConnection):
         key = {"nozzle": "extruder", "bed": "heater_bed"}.get(heater)
         if key is None:
             return False
-        return await self.send_cmd(1028, {key: int(round(target))})
+        return await self.send_cmd(1028, {key: round(target)})
 
     async def set_fan(self, fan: str, percent: int) -> bool:
         # Method 1030 takes PWM 0-255 per fan: "fan" (part cooling), "aux_fan",
@@ -792,6 +792,18 @@ class CC2Connection(PrinterConnection):
             "storage_media": "local",
             "config":        config,
         })
+
+    def _reset_per_print_extrusion(self) -> None:
+        """A new print starts at the base level (the accounting is created).
+        Mirror the reset _apply_cc2_status does on a state:"printing"
+        transition — a print whose pre-heat is cancelled never gets there,
+        and the previous print's figure would otherwise be debited to it."""
+        self._filament_mm_max         = 0.0
+        self._extruder_offset         = 0.0
+        self._last_extruder           = 0.0
+        self._expected_filament_g     = 0.0
+        self._expected_print_time_s   = 0
+        self._last_active_filament_mm = 0.0
 
     def _apply_cc2_status(self) -> None:
         s     = self._cc2_state
@@ -869,7 +881,15 @@ class CC2Connection(PrinterConnection):
 
         if state_str not in ("printing", "paused"):
             self._extruded_this_print = False
-        if sub_status in _SUB_TRANSIENT:
+
+        # Terminal states win over transient sub_status: the firmware sets
+        # sub_status 2077 (task completed) / 2504 (error) in the same step as
+        # the state string (elegoo_printer DeviceStatus::update_base_status),
+        # so a transient from a neighbouring frame must not mask a terminal
+        # state that arrived with it.
+        if state_str in ("complete", "cancelled", "error"):
+            status_code = _STATE_STR[state_str]
+        elif sub_status in _SUB_TRANSIENT:
             status_code = _SUB_TRANSIENT[sub_status]
         elif state_str in _STATE_STR:
             status_code = _STATE_STR[state_str]
@@ -921,11 +941,11 @@ class CC2Connection(PrinterConnection):
             status_code = 12
         elif status_code == 0 and ms_status in _MS_PREPARING:
             status_code = _MS_PREPARING[ms_status]
-        elif status_code == 0 and ms_status is not None and ms_status not in _MS_KNOWN_IDLE_OR_HANDLED:
-            if ms_status not in _logged_ms_status:
-                _logged_ms_status.add(ms_status)
-                print(f"[Printer {self.name}] CC2 machine_status.status {ms_status!r} not mapped -- "
-                      f"showing idle. Please report this on GitHub.")
+        elif status_code == 0 and ms_status is not None and ms_status not in _MS_KNOWN_IDLE_OR_HANDLED \
+                and ms_status not in _logged_ms_status:
+            _logged_ms_status.add(ms_status)
+            print(f"[Printer {self.name}] CC2 machine_status.status {ms_status!r} not mapped -- "
+                  f"showing idle. Please report this on GitHub.")
 
         self.phase = _cc2_phase(ms_status, sub_status, status_code)
 

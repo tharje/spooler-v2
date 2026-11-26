@@ -83,7 +83,7 @@ def discover_printers(timeout: float = 3.0) -> list:
                     found.append(info)
                 except Exception:
                     pass
-            except socket.timeout:
+            except TimeoutError:
                 break
     except Exception as e:
         print(f"[Discovery] Error: {e}")

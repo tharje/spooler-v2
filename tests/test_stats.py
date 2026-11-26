@@ -1,6 +1,5 @@
 """stats.py: every number is checked against a hand count of a tiny history."""
 
-import io
 
 import pytest
 

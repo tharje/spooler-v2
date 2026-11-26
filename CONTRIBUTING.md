@@ -16,6 +16,7 @@ cd spooler-v2
 git checkout dev
 python3 -m venv venv
 venv/bin/pip install -r requirements-dev.txt
+venv/bin/ruff check .
 venv/bin/pytest
 ```
 
@@ -25,7 +26,7 @@ To run Spooler itself without Docker, use `./setup.sh` (see the README). The tes
 
 1. Branch from **`dev`** and open the pull request against `dev`. `main` only holds released versions.
 2. Keep a pull request to one change. A small, focused change is reviewed and merged faster.
-3. Add or update tests for what you change (`tests/`), and make sure `pytest` passes.
+3. Add or update tests for what you change (`tests/`), and make sure `ruff check .` and `pytest` pass.
 4. Write the commit message as a short sentence about what changes for the user, for example *Layer notification: once per print*.
 5. Say in the pull request how you tested it, and on which printer and firmware if it touches the printer code.
 6. Do not put personal data in the repository: use `example.com` and `192.0.2.x` as example addresses, never real IP addresses, serial numbers, e-mail addresses or tokens.

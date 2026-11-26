@@ -10,7 +10,6 @@ import api_tokens
 import auth
 import features
 import http_handler
-import persistence
 import state
 from features import Feature, FeatureError
 
@@ -174,3 +173,103 @@ def test_external_printer_list_exposes_state_only(monkeypatch):
     item = json.loads(body)["items"][0]
     assert status == 200 and set(item) == {"id", "name", "type", "connected", "state"}
     assert b"s3cret" not in body and b"10.9.9.9" not in body
+
+
+# ── Spoolman through the proxy is only as private as Spooler ─────────────────
+
+@pytest.mark.parametrize("path, status", [
+    ("/api/v1/spool", 401), ("/api/v1/filament?limit=5", 401),
+    ("/spoolman/", 302), ("/spoolman/spool", 302), ("/spoolman", 302),
+])
+def test_the_spoolman_proxy_needs_login(path, status, monkeypatch):
+    monkeypatch.setattr(auth, "AUTH_ENABLED", True)
+    monkeypatch.setattr(http_handler, "proxy_spoolman_enabled", lambda: True)
+    proxied = []
+    monkeypatch.setattr(http_handler.SPHandler, "_proxy_spoolman_ui",
+                        lambda self, *a, **k: proxied.append(a))
+    got, _ = _call("GET", path)
+    assert got == status and proxied == []
+
+
+def test_the_spoolman_proxy_still_works_when_signed_in(monkeypatch):
+    monkeypatch.setattr(auth, "AUTH_ENABLED", True)
+    monkeypatch.setattr(http_handler, "proxy_spoolman_enabled", lambda: True)
+    monkeypatch.setattr(http_handler, "_auth_ok", lambda h: True)
+    proxied = []
+    monkeypatch.setattr(http_handler.SPHandler, "_proxy_spoolman_ui",
+                        lambda self, *a, **k: proxied.append(a))
+    _call("GET", "/api/v1/spool")
+    _call("GET", "/spoolman/")
+    assert proxied == [("GET", "/api/v1/spool"), ("GET", "/")]
+
+
+def test_posting_to_spoolman_needs_the_proxy_switched_on(monkeypatch):
+    monkeypatch.setattr(http_handler, "_auth_ok", lambda h: True)
+    monkeypatch.setattr(http_handler, "proxy_spoolman_enabled", lambda: False)
+    proxied = []
+    monkeypatch.setattr(http_handler.SPHandler, "_proxy_spoolman_ui",
+                        lambda self, *a, **k: proxied.append(a))
+    status, _ = _call("POST", "/api/v1/spool", body={"filament_id": 1})
+    assert status == 404 and proxied == []
+
+
+# ── backups need backup.manage; old sessions end with the account or password ──
+
+def _call_as(method, path, token, body=None):
+    h = object.__new__(http_handler.SPHandler)
+    h.command, h.path, h.request_version, h.requestline = method, path, "HTTP/1.1", f"{method} {path} HTTP/1.1"
+    raw = json.dumps(body).encode() if body is not None else b""
+    hdrs = {"Cookie": f"{auth.SESSION_COOKIE}={token}" if token else "", "Content-Length": str(len(raw))}
+    h.headers = type("H", (dict,), {"get": lambda self, k, d=None: dict.get(self, k, d)})(hdrs)
+    h.client_address = ("10.0.0.9", 1234)
+    h.rfile, h.wfile = io.BytesIO(raw), io.BytesIO()
+    h.server = type("S", (), {})()
+    getattr(h, f"do_{method}")()
+    out = h.wfile.getvalue()
+    return int(out.split(b" ")[1]), out.partition(b"\r\n\r\n")[2]
+
+
+@pytest.fixture
+def accounts(monkeypatch):
+    import users
+    monkeypatch.setattr(auth, "AUTH_ENABLED", True)
+    monkeypatch.setattr(http_handler, "AUTH_ENABLED", True)
+    users.ensure_initialised()
+    users.create_user("boss", "secret12", "admin")
+    users.create_user("grandma", "secret12", "viewer")
+    features.set_enabled("backup", True)
+    return users
+
+
+@pytest.mark.parametrize("path", ["/api/backup", "/api/backup?include_secrets=1", "/api/backups",
+                                  "/api/backups/daily-20260101T000000Z.zip"])
+def test_a_viewer_cannot_download_backups(accounts, path):
+    status, body = _call_as("GET", path, auth._create_session("grandma"))
+    assert status == 403 and json.loads(body)["need"] == "backup.manage"
+
+
+def test_an_admin_can_still_download_a_backup(accounts):
+    status, _ = _call_as("GET", "/api/backups", auth._create_session("boss"))
+    assert status == 200
+
+
+def test_deleting_a_user_ends_their_sessions(accounts):
+    gone = auth._create_session("grandma")
+    assert _call_as("GET", "/api/printers", gone)[0] == 200
+    assert _call_as("DELETE", "/api/users/grandma", auth._create_session("boss"))[0] == 200
+    assert _call_as("GET", "/api/printers", gone)[0] == 401
+
+
+def test_an_admin_password_reset_ends_the_users_sessions(accounts):
+    boss = auth._create_session("boss")
+    old = auth._create_session("grandma")
+    assert _call_as("PATCH", "/api/users/grandma", boss, {"password": "newsecret1"})[0] == 200
+    assert _call_as("GET", "/api/printers", old)[0] == 401
+    assert _call_as("GET", "/api/printers", boss)[0] == 200
+
+
+def test_changing_your_own_password_keeps_this_session_and_ends_the_others(accounts):
+    here, elsewhere = auth._create_session("grandma"), auth._create_session("grandma")
+    assert _call_as("POST", "/api/change-password", here, {"password": "newsecret1"})[0] == 200
+    assert _call_as("GET", "/api/printers", here)[0] == 200
+    assert _call_as("GET", "/api/printers", elsewhere)[0] == 401
