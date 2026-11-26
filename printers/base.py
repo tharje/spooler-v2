@@ -127,6 +127,39 @@ _KIND_BY_DISPLAY_STATE = {
 _logged_unknown_display_codes: set = set()
 
 
+def _first_num(d: dict, *keys, default=None):
+    """First key in `keys` that holds a number — the frontend's fallback
+    chains (CC1 SDCP names vs CC2/Prusa/Moonraker names), server-side."""
+    for k in keys:
+        v = d.get(k)
+        if isinstance(v, (int, float)):
+            return v
+    return default
+
+
+def _progress_percent(pi: dict):
+    """Port of the frontend's getProgress(): TotalTicks == 100 means
+    CurrentTicks IS the percentage (CC2/Moonraker/PrusaLink); layers come
+    next, raw tick fractions last (layers understate, issue #56). Layers
+    apply as soon as TotalLayer > 0 — layer 0 of 200 is 0 %, like the card."""
+    if pi.get("TotalTicks") == 100:
+        return max(0, min(100, round(pi.get("CurrentTicks") or 0)))
+    if (pi.get("TotalLayer") or 0) > 0:
+        return min(100, round((pi.get("CurrentLayer") or 0) / pi["TotalLayer"] * 100))
+    if (pi.get("TotalTicks") or 0) > 0 and pi.get("CurrentTicks") is not None:
+        return min(100, round((pi["CurrentTicks"] / pi["TotalTicks"]) * 100))
+    return None
+
+
+def _speed_factor(status: dict, pi: dict):
+    """SpeedFactor belongs to CC2/Moonraker/PrusaLink; CC1 (SDCP) only has
+    PrintSpeedPct inside PrintInfo — the same pair the card reads."""
+    sf = _first_num(status, "SpeedFactor")
+    if sf is None:
+        sf = _first_num(pi, "PrintSpeedPct")
+    return 100 if sf is None else sf
+
+
 def classify_display_state(connected: bool, status_code, busy_between_prints: bool = False) -> str:
     """Map (connected, raw status code) to one of: offline, idle, preparing,
     printing, pausing, paused, stopping, complete, cancelled, error, unknown.
@@ -330,6 +363,9 @@ class PrinterConnection:
         # Replace raw PrintInfo (may have hex-encoded SDCP keys) with decoded version
         # so the browser can read plain field names like Filename directly.
         status = {**self.status, "PrintInfo": pi} if "PrintInfo" in self.status else self.status
+        # An offline printer's status dict is its last reading — history, not
+        # a measurement. The canonical temps zero out like the card does.
+        temps = status if self.connected else {}
         return {
             "id":              self.id,
             "ip":              self.ip,
@@ -365,6 +401,23 @@ class PrinterConnection:
             "dataset":         dataset.status_for(self.id),
             "filament_mm":     round(filament_mm, 1),
             "filament_g":      filament_mm_to_grams(filament_mm, self.filament_density),
+            # Canonical numeric state: protocol key differences end here.
+            # Consumers (bridge now, future channels) read these keys and
+            # own no per-protocol logic; the browser still reads the raw
+            # keys and can migrate when convenient. An offline printer's
+            # last readings are history, not a measurement — the card shows
+            # "--", so the canonical temps read 0 too.
+            "nozzle_temp":     _first_num(temps, "TempOfNozzle", "NozzleTemp", default=0),
+            "nozzle_target":   _first_num(temps, "TempTargetNozzle", "NozzleTempTarget", default=0),
+            "bed_temp":        _first_num(temps, "TempOfHotbed", "BedTemp", default=0),
+            "bed_target":      _first_num(temps, "TempTargetHotbed", "BedTempTarget", default=0),
+            "chamber_temp":    _first_num(temps, "TempOfBox", "ChamberTemp", default=0),
+            "chamber_target":  _first_num(temps, "TempTargetBox", default=0),
+            "progress":        _progress_percent(pi),
+            "layer":           pi.get("CurrentLayer") or 0,
+            "total_layer":     pi.get("TotalLayer") or 0,
+            "time_remaining":  pi.get("RemainTime") or 0,
+            "speed_factor":    _speed_factor(status, pi),
         }
 
     def save_accounting_now(self) -> None:
