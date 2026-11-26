@@ -119,7 +119,11 @@ in progress:
 ```
 result.print_status.state            → 'printing' observed mid-print        ✅
 result.print_status.print_duration   → seconds elapsed                      ✅
-result.print_status.total_duration   → the printer's OWN total (unused by Spooler; it computes duration+remaining) ✅
+result.print_status.total_duration   → elapsed since job start including warmup
+                                       (grows with wall time) — NOT the file's
+                                       total (that is method 1046's `print_time`);
+                                       unused by Spooler, which computes
+                                       duration+remaining ✅
 result.print_status.remaining_time_sec / current_layer / total_layer / filename / uuid ✅
 result.print_status.bed_mesh_detect / enable / filament_detect → booleans, unused so far ✅
 result.machine_status.status / sub_status / progress / exception_status → as in §4 ✅
@@ -162,6 +166,10 @@ select a tray, then the file's embedded spool assignment overrides it (observed:
 `active_tray_id` is authoritative for what the printer actually feeds, and
 `color_map.t` agrees with it. Spooler's Spoolman auto-assign already follows
 `active_tray_id` transitions, so this behaves correctly without extra logic.
+Provenance of the observation: the file came from OrcaSlicer and the print was
+started through Spooler's UI — whether a Spooler-sent `slot_map` can also be
+overridden this way is **not verified** ⚠️; if it can, the start dialog's slot
+choice would not always hold.
 
 ---
 
