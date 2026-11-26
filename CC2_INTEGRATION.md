@@ -109,6 +109,70 @@ def deep_merge(base: dict, incoming: dict, max_keys: int = 500) -> dict:
 
 ---
 
+## 4b. Full status frame (method 1002) & Canvas (method 2005) — verified from a live mid-print capture (2026-11-24)
+
+The periodic `api_status` (method 6000) pushes are partial (see the quirk above).
+The **complete** frame arrives as method 1002 on `api_response`, and Canvas as
+method 2005 responses (polled roughly every 30 s). Verified fields from a print
+in progress:
+
+```
+result.print_status.state            → 'printing' observed mid-print        ✅
+result.print_status.print_duration   → seconds elapsed                      ✅
+result.print_status.total_duration   → elapsed since job start including warmup
+                                       (grows with wall time) — NOT the file's
+                                       total (that is method 1046's `print_time`);
+                                       unused by Spooler, which computes
+                                       duration+remaining ✅
+result.print_status.remaining_time_sec / current_layer / total_layer / filename / uuid ✅
+result.print_status.bed_mesh_detect / enable / filament_detect → booleans, unused so far ✅
+result.machine_status.status / sub_status / progress / exception_status → as in §4 ✅
+result.machine_status.sub_status_reason_code → observed 0 mid-print, unused ✅
+result.extruder.temperature / .target ✅
+result.extruder.filament_detect_enable / .filament_detected → the physical runout sensor state; unused so far — a runout-transition capture is needed before relying on it ⚠️
+result.heater_bed.temperature / .target ✅
+result.ztemperature_sensor.temperature / .measured_max_temperature / .measured_min_temperature ✅
+result.gcode_move.extruder / .speed / .speed_mode / .x / .y / .z → live position (phase-2 control material) ✅
+result.fans.{aux_fan, box_fan, controller_fan, fan, heater_fan}.speed → 0–255 raw (Spooler renders %) ✅
+result.led.status ✅
+result.tool_head.homed_axes → 'xyz' ✅
+result.external_device.camera / .type / .u_disk ✅
+result.software_version.ota_version (user-facing FW; mcu/soc versions exist) / machine_model / sn / hostname / protocol_version ✅
+```
+
+**Canvas (method 2005 `result.canvas_info`)** — every per-tray field the printer
+reports (exactly nine; **no remaining-material field exists per tray** — filament
+stock comes from Spoolman, not the printer):
+
+```
+active_canvas_id / active_tray_id / auto_refill → active_tray_id -1 = no active tray (transient between prints and at start)
+canvas_list[].canvas_id / .connected
+canvas_list[].tray_list[]:
+    tray_id           ✅
+    status            → 0 = empty, 1 = loaded/idle, 2 = active — dynamic state, not
+                        static config: the previously active tray moves 2→1 when the
+                        active tray changes ✅
+    brand             ✅
+    filament_code     ✅ (e.g. '0x0001')
+    filament_color    → '#RRGGBB' ✅
+    filament_name     ✅
+    filament_type     ✅
+    min_nozzle_temp / max_nozzle_temp ✅
+```
+
+**Spool selection is gcode-authoritative:** at print start the printer may first
+select a tray, then the file's embedded spool assignment overrides it (observed:
+`-1 → 1 → 2`, where method 1046's `color_map: [{color, name, t: 2}]` names `t: 2`).
+`active_tray_id` is authoritative for what the printer actually feeds, and
+`color_map.t` agrees with it. Spooler's Spoolman auto-assign already follows
+`active_tray_id` transitions, so this behaves correctly without extra logic.
+Provenance of the observation: the file came from OrcaSlicer and the print was
+started through Spooler's UI — whether a Spooler-sent `slot_map` can also be
+overridden this way is **not verified** ⚠️; if it can, the start dialog's slot
+choice would not always hold.
+
+---
+
 ## 5. Commands
 
 Publish to `elegoo/<serial>/<client_id>/api_request`:
