@@ -171,6 +171,30 @@ started through Spooler's UI — whether a Spooler-sent `slot_map` can also be
 overridden this way is **not verified** ⚠️; if it can, the start dialog's slot
 choice would not always hold.
 
+Settling the `slot_map` question needs four captures, all with
+`SPOOLER_DEBUG_RAW=1` so the record contains the **outgoing start command**
+(proof of what Spooler actually sent) alongside the incoming canvas / method
+1002 / method 1046 frames. Settled = where `active_tray_id` ends once
+printing, cross-checked against 1046's `color_map`:
+
+1. **Conflict case (the one that matters):** file with an embedded assignment
+   naming tray Y, started from Spooler's dialog with an explicit `slot_map`
+   selecting tray X ≠ Y. Ends on X → `slot_map` is authoritative and this
+   note softens to "gcode only overrides the printer's own default". Ends on
+   Y → gcode wins and the start dialog's slot choice is not guaranteed —
+   that is its own issue (warn in the dialog, strip the embedded assignment
+   before start if a command exists, or reconcile Spoolman's assignment with
+   what actually feeds).
+2. **No-assignment control:** the same dialog flow with a file carrying no
+   embedded assignment → `slot_map` must hold; establishes that `slot_map`
+   works when nothing overrides it. First establish what "no assignment"
+   looks like in 1046's `color_map` (absent? `t: 0`?) — from an existing
+   capture, not an assumption.
+3. **No-slot_map control:** the already-captured case (no explicit slot
+   choice, embedded assignment present) → the gcode assignment is followed.
+4. **Optional:** a two-tool file with a two-entry `slot_map`, for per-tool
+   behavior once case 1 has a verdict.
+
 ---
 
 ## 5. Commands
