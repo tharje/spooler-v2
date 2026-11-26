@@ -432,6 +432,13 @@ class PrinterConnection:
                   f"adding the earlier {self._acct.carry_mm:.0f} mm to this print's total")
         self._save_accounting()
 
+    def _reset_per_print_extrusion(self) -> None:
+        """Called when a genuinely new print starts (the moment the accounting
+        is created). Protocols that keep per-print filament bookkeeping on the
+        adapter reset it here; the default is nothing, because protocols whose
+        filament figure comes straight from the printer's status have no
+        per-print state to leak."""
+
     def _save_accounting(self, force: bool = False) -> None:
         a = self._acct
         if a is None:
@@ -937,8 +944,12 @@ class PrinterConnection:
 
         # Safety net: a print that had been extruding but whose last status was some other
         # "busy" one (preparing, stopping, ...) still ended when the printer goes idle/complete.
+        # Also covers a start whose pre-heat was cancelled before anything printed: the start
+        # fired (accounting, queue, notifications), so the end must fire too — with a zero
+        # total, the "total_mm() > 0" guard alone would leak the open print.
         if (event is None and cur_status in _END_STATUSES and self._acct is not None
-                and self._acct.total_mm() > 0 and self._last_print_status in ACTIVE_STATUSES):
+                and self._last_print_status in ACTIVE_STATUSES
+                and (self._acct.total_mm() > 0 or self._print_start_time is not None)):
             event = "end"
 
         display_state = classify_display_state(self.connected, cur_status, self._is_busy_between_prints())
@@ -990,6 +1001,12 @@ class PrinterConnection:
             self._print_start_time = time.time()
             self._max_total_layer   = pi.get("TotalLayer", 0) or 0
             self._max_current_layer = pi.get("CurrentLayer", 0) or 0
+            # A genuinely new print: per-print bookkeeping that survived on the
+            # adapter must not leak into the fresh accounting. A print whose
+            # pre-heat phase is cancelled never reaches a state:"printing"
+            # transition, so adapters whose counters reset there would otherwise
+            # debit the previous print's figure to this one.
+            self._reset_per_print_extrusion()
             self._emit("print_started", f"{self.name} — Print started",
                        pi.get("Filename") or "A print has started.")
             asyncio.create_task(self._auto_light(True))
