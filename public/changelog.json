@@ -1,5 +1,18 @@
 [
   {
+    "version": "2.3.9",
+    "date": "2026-11-26",
+    "changes": [
+      "Centauri Carbon 2: a print is no longer charged the previous print's filament. The CC2 starts each print with a pre-heat, and Spooler began counting during it while still holding the last print's figure, so that figure was added on top (#62). A pre-heat that is cancelled now books 0 g (#73, thanks foobarth)",
+      "Centauri Carbon: a print stopped while it is still preparing (leveling or heating) now ends properly: the queue job no longer stays on Printing, and the light Spooler turned on goes off again (#73)",
+      "Centauri Carbon 2: a finished print always shows as complete, even if a pause or stop code from the printer is still around (#66, thanks foobarth)",
+      "Print queue: the start button is in English, \"Plate clear – start\" (#67)",
+      "Security: Spoolman pages and data reached through Spooler need a login (#69). Backups need the \"Create and restore backups\" permission (#72). Changing a password, or deleting a user, signs that user out everywhere else (#72)",
+      "Printer status: every printer type now also reports its nozzle, bed and chamber temperatures, progress, layers and speed under the same names, for anything that reads Spooler's status (#70, thanks foobarth)",
+      "For developers: ruff checks the code in CI (#65), and CC2_INTEGRATION.md lists every CC2 status field, checked against a live printer (#71), both thanks to foobarth"
+    ]
+  },
+  {
     "version": "2.3.8",
     "date": "2026-11-23",
     "changes": [
