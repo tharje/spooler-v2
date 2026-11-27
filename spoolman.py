@@ -34,6 +34,23 @@ def get_spoolman_url() -> str:
     return config.get("spoolman.url")
 
 
+def spoolman_ui_url() -> str:
+    """What the browser's "Open Spoolman UI" button points at.
+
+    Server-side Spoolman calls always use the internal spoolman.url; this is
+    only the link the browser follows. When Spooler runs where the browser
+    can't reach (e.g. Spoolman on a cluster-internal address), the optional
+    spoolman.external_url is the address the browser should use instead —
+    set it and it wins over both the proxy path and the internal URL.
+    """
+    external = config.get("spoolman.external_url")
+    if external:
+        return external.rstrip("/") + "/"
+    if config.get("spoolman.proxy"):
+        return "/spoolman/"
+    return get_spoolman_url().rstrip("/") + "/"
+
+
 def spoolman_auth_header() -> dict:
     """Basic-auth header for Spoolman, if configured (e.g. Spoolman sitting
     behind a reverse proxy that requires it) -- empty dict otherwise."""

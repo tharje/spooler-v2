@@ -27,7 +27,7 @@ from backup import list_auto_backups
 from features import describe_all as describe_all_features, is_enabled
 from persistence import DATA_DIR, current_version, load_history
 from push import WEBPUSH_AVAILABLE, get_public_key, load_notif_settings
-from spoolman import get_spoolman_db, get_spoolman_url
+from spoolman import get_spoolman_db, get_spoolman_url, spoolman_ui_url
 import http_common
 from http_external import ExternalRoutesMixin
 from http_proxy import ProxyMixin
@@ -377,7 +377,7 @@ class SPHandler(ExternalRoutesMixin, ProxyMixin, AdminMixin, SimpleHTTPRequestHa
         if self.path == "/api/auth-status":
             resp = {"setup_required": not users.any_users()}
             if _auth_ok(self):
-                resp["spoolman_url"] = "/spoolman/" if proxy_spoolman_enabled() else get_spoolman_url() + "/"
+                resp["spoolman_url"] = spoolman_ui_url()
                 user = current_user(self)
                 resp["user"] = user
                 if AUTH_ENABLED and user:
